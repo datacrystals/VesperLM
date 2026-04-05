@@ -299,7 +299,7 @@ def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=128, device=
             next_logits = next_logits / temperature
 
             # Convert to probabilities
-            probs = F.softmax(next_logits, dim=-1)
+            probs = torch.softmax(next_logits, dim=-1)
 
             # Top-p (nucleus) sampling
             sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)
