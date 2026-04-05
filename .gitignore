@@ -1,0 +1,23 @@
+# 1. Ignore absolutely everything by default
+*
+
+# 2. Un-ignore all directories so Git can actually traverse your project
+!*/
+
+# 3. Explicitly BLACKLIST heavy/unwanted directories 
+# (This stops Git from finding and tracking .py or .txt files hidden inside these)
+venv/
+data/
+bitsandbytes/
+*checkpoints*/
+jp*/
+__pycache__/
+.*
+
+# 4. Whitelist the specific file extensions you actually want to track
+!*.py
+!*.sh
+!*.txt
+
+# 5. Make sure the gitignore itself is tracked
+!.gitignore
