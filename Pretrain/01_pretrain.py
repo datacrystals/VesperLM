@@ -302,7 +302,7 @@ def train():
     if latest_ckpt_path and os.path.exists(latest_ckpt_path):
         if is_main:  
             print(f"\n[!] Resuming from: {latest_ckpt_path}")
-        checkpoint = torch.load(latest_ckpt_path, map_location=device, weights_only=False)
+        checkpoint = torch.load(latest_ckpt_path, map_location="cpu", weights_only=False)
         model_config = checkpoint.get('model_config', MODEL_CONFIGS[ACTIVE_CONFIG_NAME])
         if is_main:
             start_step = checkpoint['step'] + 1
