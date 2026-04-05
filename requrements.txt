@@ -1,0 +1,9 @@
+# --- Data Engine & Tokenization ---
+transformers>=4.45.1
+tokenizers>=0.15.0
+datasets>=2.18.0
+
+# --- Training Utilities ---
+numpy<2.0.0
+tqdm>=4.66.0
+matplotlib>=3.8.0

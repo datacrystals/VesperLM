@@ -3,6 +3,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
+# --- 1. RoPE Helper Functions ---
+def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
+    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+    t = torch.arange(end, device=freqs.device, dtype=torch.float32)
+    freqs = torch.outer(t, freqs).float()
+    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
+    return freqs_cis
+
+def apply_rotary_emb(xq, xk, freqs_cis):
+    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
+    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
+    freqs_cis = freqs_cis.unsqueeze(0).unsqueeze(2) # (1, T, 1, head_dim/2)
+    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
+    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
+    return xq_out.type_as(xq), xk_out.type_as(xk)
+
 class RMSNorm(nn.Module):
     def __init__(self, dim, eps=1e-6):
         super().__init__()
@@ -27,18 +43,24 @@ class GroupedQueryAttention(nn.Module):
         self.wv = nn.Linear(dim, n_kv_heads * self.head_dim, bias=False)
         self.wo = nn.Linear(dim, dim, bias=False)
 
-    def forward(self, x):
+    def forward(self, x, freqs_cis):
         B, T, C = x.size()
         
-        q = self.wq(x).view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
-        k = self.wk(x).view(B, T, self.n_kv_heads, self.head_dim).transpose(1, 2)
-        v = self.wv(x).view(B, T, self.n_kv_heads, self.head_dim).transpose(1, 2)
+        q = self.wq(x).view(B, T, self.n_heads, self.head_dim)
+        k = self.wk(x).view(B, T, self.n_kv_heads, self.head_dim)
+        v = self.wv(x).view(B, T, self.n_kv_heads, self.head_dim)
+        
+        # --- 2. Apply RoPE to Queries and Keys ---
+        q, k = apply_rotary_emb(q, k, freqs_cis[:T])
+        
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
         
         # Expand K and V to match Q's head count for GQA
         k = k[:, :, None, :, :].expand(B, self.n_kv_heads, self.n_rep, T, self.head_dim).reshape(B, self.n_heads, T, self.head_dim)
         v = v[:, :, None, :, :].expand(B, self.n_kv_heads, self.n_rep, T, self.head_dim).reshape(B, self.n_heads, T, self.head_dim)
         
-        # PyTorch 2.0 native Flash Attention
         y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
             
         y = y.transpose(1, 2).contiguous().view(B, T, C)
@@ -57,6 +79,7 @@ class FeedForward(nn.Module):
 class TopKRouter(nn.Module):
     def __init__(self, dim, num_experts, top_k=2):
         super().__init__()
+        self.num_experts = num_experts
         self.gate = nn.Linear(dim, num_experts, bias=False)
         self.top_k = top_k
 
@@ -64,8 +87,20 @@ class TopKRouter(nn.Module):
         logits = self.gate(x)
         routing_weights = F.softmax(logits, dim=-1)
         top_weights, top_indices = torch.topk(routing_weights, self.top_k, dim=-1)
+        
+        # --- 3. Calculate Aux Loss for Load Balancing ---
+        # Mean routing probability per expert
+        mean_router_probs = routing_weights.mean(dim=0)
+        
+        # Fraction of tokens actually routed to each expert
+        expert_mask = torch.zeros_like(routing_weights).scatter_(1, top_indices, 1.0)
+        mean_expert_usage = expert_mask.mean(dim=0)
+        
+        # Switch Transformer style aux loss
+        aux_loss = self.num_experts * torch.sum(mean_router_probs * mean_expert_usage)
+        
         top_weights = top_weights / top_weights.sum(dim=-1, keepdim=True)
-        return top_weights, top_indices
+        return top_weights, top_indices, aux_loss
 
 class MoEFeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, num_experts=8, top_k=2):
@@ -77,15 +112,14 @@ class MoEFeedForward(nn.Module):
         B, T, C = x.size()
         x_flat = x.view(-1, C)
         
-        routing_weights, selected_experts = self.router(x_flat)
+        routing_weights, selected_experts, aux_loss = self.router(x_flat)
         final_output = torch.zeros_like(x_flat)
         
         for i, expert in enumerate(self.experts):
             expert_mask = (selected_experts == i)
             token_indices = expert_mask.any(dim=-1)
             
-            if not token_indices.any():
-                continue
+            if not token_indices.any(): continue
                 
             weight_indices = expert_mask[token_indices].nonzero(as_tuple=True)[1]
             expert_weights = routing_weights[token_indices, weight_indices].unsqueeze(-1)
@@ -93,7 +127,7 @@ class MoEFeedForward(nn.Module):
             expert_out = expert(x_flat[token_indices])
             final_output[token_indices] += expert_out * expert_weights
             
-        return final_output.view(B, T, C)
+        return final_output.view(B, T, C), aux_loss
 
 class JesperLLM(nn.Module):
     def __init__(self, vocab_size=32000, dim=1536, n_layers=16, n_heads=12, n_kv_heads=4,
@@ -102,7 +136,10 @@ class JesperLLM(nn.Module):
         self.pad_id = pad_id
         self.max_seq_len = max_seq_len
         self.tok_embeddings = nn.Embedding(vocab_size, dim)
-        self.pos_embeddings = nn.Embedding(max_seq_len, dim)
+        
+        # --- 4. Removed Absolute pos_embeddings, precompute RoPE freqs ---
+        self.register_buffer("freqs_cis", precompute_freqs_cis(dim // n_heads, max_seq_len * 2))
+        
         self.dropout = nn.Dropout(dropout)
         
         self.layers = nn.ModuleList([
@@ -121,7 +158,7 @@ class JesperLLM(nn.Module):
             if pn.endswith('wo.weight') or pn.endswith('w2.weight'):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * n_layers))
         
-        self.tok_embeddings.weight = self.output.weight 
+        self.tok_embeddings.weight = self.output.weight  
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -138,18 +175,24 @@ class JesperLLM(nn.Module):
             if targets is not None:
                 targets = targets[:, :self.max_seq_len]
         
-        positions = torch.arange(0, T, device=tokens.device).unsqueeze(0)
-        x = self.tok_embeddings(tokens) + self.pos_embeddings(positions)
+        x = self.tok_embeddings(tokens)
         x = self.dropout(x)
 
+        total_aux_loss = 0.0
+
         for layer in self.layers:
-            x = x + layer['attn'](layer['attn_norm'](x))
-            x = x + layer['ffn'](layer['ffn_norm'](x))
+            x = x + layer['attn'](layer['attn_norm'](x), self.freqs_cis)
+            
+            ffn_out, aux_loss = layer['ffn'](layer['ffn_norm'](x))
+            x = x + ffn_out
+            total_aux_loss += aux_loss
             
         x = self.norm(x)
         logits = self.output(x)
         
-        loss = None
+        ce_loss = None
         if targets is not None:
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=self.pad_id)
-        return logits, loss
+            ce_loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=self.pad_id)
+            
+        # --- 5. Return both Cross Entropy Loss and the Total Aux Loss ---
+        return logits, ce_loss, total_aux_loss
