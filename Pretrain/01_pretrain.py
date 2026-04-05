@@ -47,37 +47,54 @@ import matplotlib.pyplot as plt
 # ==========================================
 # MODEL CONFIGURATIONS
 # ==========================================
-# SCALING GUIDE for your 8x MI50 (256GB VRAM total, ~32GB per card):
-#
-#   small_v2  — 408M total / 172M active  — fits on 1 card, good for testing
-#   big       — ~1.5B total / ~600M active — fits on 1-2 MI50s, good mid-scale run
-#
-# When you're ready for your cluster, create a new config, e.g.:
-#   "xl": { "dim": 2048, "n_layers": 24, "n_heads": 16, "n_kv_heads": 4,
-#            "hidden_dim": 6144, "num_experts": 8, "top_k": 2, "max_seq_len": 2048 }
-# Then launch with: torchrun --nproc_per_node=8 jesper_train.py
-# With 8x MI50 you can realistically train a ~3-7B active-param MoE.
-#
-# MI50 notes:
-#   - MI50s do NOT support bfloat16 — stick with float16 (already correct here)
-#   - NCCL on ROCm can be flaky; RCCL is the AMD equivalent (installed with ROCm)
-#   - Set NCCL_IB_DISABLE=1 if you're on InfiniBand and seeing hangs
-#   - Consider MASTER_ADDR / MASTER_PORT env vars when launching multi-node
-
 MODEL_CONFIGS = {
     "small_v2": {
+        # Architecture
         "dim": 1024, "n_layers": 10, "n_heads": 8, "n_kv_heads": 2,
-        "hidden_dim": 1280, "num_experts": 8, "top_k": 2, "max_seq_len": 1024
+        "hidden_dim": 1280, "num_experts": 8, "top_k": 2, "max_seq_len": 1024,
+        
+        # Training & Batching
+        "micro_batch_size": 1,
+        "target_accumulation_steps": 128,  # Global target for effective batch size
+        
+        # Optimizer Dynamics
+        "beta1": 0.9,
+        "beta2_token_half_life": 10_000_000, # 10M tokens (per Marek et al.)
+        "max_lr": 2e-4,
+        "min_lr": 4e-5,
+        "aux_weight": 0.01,
+        
+        # Scheduling
+        "seq_len_start": 128,
+        "seq_len_warmup": 4000,
+        "warmup_steps": 1000,
+        "total_steps": 30000,
+        
+        # Evaluation
+        "eval_interval": 500,
+        "val_eval_steps": 50
     },
     "big": {
         "dim": 1536, "n_layers": 16, "n_heads": 12, "n_kv_heads": 4,
-        "hidden_dim": 4096, "num_experts": 8, "top_k": 2, "max_seq_len": 2048
+        "hidden_dim": 4096, "num_experts": 8, "top_k": 2, "max_seq_len": 2048,
+        
+        "micro_batch_size": 1,
+        "target_accumulation_steps": 128,
+        
+        "beta1": 0.9,
+        "beta2_token_half_life": 10_000_000, 
+        "max_lr": 1.5e-4,
+        "min_lr": 1.5e-5,
+        "aux_weight": 0.01,
+        
+        "seq_len_start": 128,
+        "seq_len_warmup": 4000,
+        "warmup_steps": 1500,
+        "total_steps": 50000,
+        
+        "eval_interval": 1000,
+        "val_eval_steps": 50
     },
-    # Uncomment and tune for full 8x MI50 run:
-    # "xl": {
-    #     "dim": 2048, "n_layers": 24, "n_heads": 16, "n_kv_heads": 4,
-    #     "hidden_dim": 6144, "num_experts": 8, "top_k": 2, "max_seq_len": 2048
-    # },
 }
 
 ACTIVE_CONFIG_NAME = "small_v2"
@@ -115,14 +132,10 @@ def setup_ddp():
 
 
 def get_seq_len(step, warmup_steps=4000, max_seq_len=1024, start_len=128):
-    # start_len now defaults to 128 so there's an actual curriculum.
-    # Tokens per batch grows from 128 → 1024 over warmup_steps.
-    # This speeds up early training significantly.
     if step >= warmup_steps:
         return max_seq_len
     progress = step / warmup_steps
     length = int(start_len + (max_seq_len - start_len) * progress)
-    # Round to nearest 64 for efficiency on tensor cores / AMD matrix units
     return max(start_len, (length // 64) * 64)
 
 
@@ -150,9 +163,9 @@ def print_model_stats(model, config, save_path=None):
         f"MODEL ARCHITECTURE STATS\n"
         f"{'='*40}\n"
         f"Config: {ACTIVE_CONFIG_NAME}\n"
-        f"Dim: {config['dim']} | Layers: {config['n_layers']} | Heads: {config['n_heads']} (GQA KV: {config['n_kv_heads']})\n"
-        f"MoE: {num_experts} Experts | Top K: {top_k} | Hidden Dim: {config['hidden_dim']}\n"
-        f"Max Seq Len: {config['max_seq_len']}\n"
+        f"Dim: {config.get('dim')} | Layers: {config.get('n_layers')} | Heads: {config.get('n_heads')} (GQA KV: {config.get('n_kv_heads')})\n"
+        f"MoE: {num_experts} Experts | Top K: {top_k} | Hidden Dim: {config.get('hidden_dim')}\n"
+        f"Max Seq Len: {config.get('max_seq_len')}\n"
         f"{'-'*40}\n"
         f"Total Parameters:  {total_params / 1e6:.2f} M\n"
         f"Active Parameters: {active_params / 1e6:.2f} M (Per Token)\n"
@@ -278,8 +291,7 @@ def get_lr(step, max_steps, max_lr, min_lr, warmup_steps):
 # ==========================================
 @torch.no_grad()
 def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=128, device='cuda',
-                           temperature=0.8, top_p=0.9):
-    # Replaced greedy argmax with temperature + top-p (nucleus) sampling.
+                          temperature=0.8, top_p=0.9):
     model.eval()
     results = []
     base_model = model.module if hasattr(model, 'module') else model
@@ -293,23 +305,18 @@ def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=128, device=
             with torch.amp.autocast('cuda', dtype=torch.float16):
                 logits, _, _ = model(seq)
 
-            next_logits = logits[:, -1, :].float()  # (1, vocab) — use float32 for sampling stability
+            next_logits = logits[:, -1, :].float()
 
-            # Apply temperature
             next_logits = next_logits / temperature
-
-            # Convert to probabilities
             probs = torch.softmax(next_logits, dim=-1)
 
-            # Top-p (nucleus) sampling
             sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)
             cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
-            # Remove tokens once cumulative prob exceeds top_p (shift right so we keep the token that pushes over)
+            
             sorted_indices_to_remove = cumulative_probs - sorted_probs > top_p
             sorted_probs[sorted_indices_to_remove] = 0.0
-            sorted_probs = sorted_probs / sorted_probs.sum(dim=-1, keepdim=True)  # renormalize
+            sorted_probs = sorted_probs / sorted_probs.sum(dim=-1, keepdim=True)
 
-            # Sample and remap back to vocab indices
             sampled_sorted_idx = torch.multinomial(sorted_probs, num_samples=1)
             next_token = sorted_indices.gather(-1, sampled_sorted_idx)
 
@@ -318,7 +325,6 @@ def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=128, device=
             if next_token.item() == tokenizer.eos_token_id:
                 break
 
-        # Decode — clean up tokenizer artifacts
         decoded = tokenizer.decode(input_ids[0].cpu().tolist(), skip_special_tokens=True,
                                    clean_up_tokenization_spaces=True)
         results.append(decoded)
@@ -336,27 +342,40 @@ def train():
     device = torch.device(f"cuda:{local_rank}" if local_rank is not None else "cuda:0")
     is_main = (local_rank == 0) or (local_rank is None)
 
-    # Load tokenizer
     tokenizer_path = "custom_tokenizer"
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # ---- Hyperparameters ----
-    batch_size = 1
-    accumulation_steps = 8
-    seq_len_start = 1024      # keep at 1024 to match original VRAM pre-allocation behavior
-    seq_len_warmup = 4000
-    max_lr = 2e-4
-    min_lr = 4e-5
-    warmup_steps = 1000
-    total_steps = 30000
-    eval_interval = 500
-    val_eval_steps = 50       # 50 steps = ~50K tokens, much more stable
+    # ---- Dynamic Hyperparameters & Setup ----
+    current_cfg = MODEL_CONFIGS[ACTIVE_CONFIG_NAME]
+    
+    batch_size = current_cfg.get("micro_batch_size", 1)
+    target_acc_steps = current_cfg.get("target_accumulation_steps", 128)
+    accumulation_steps = max(1, target_acc_steps // world_size)
+    
+    if is_main:
+        actual_global_steps = accumulation_steps * world_size
+        print(f"\n--- BATCH SCALING ---")
+        print(f"GPUs (World Size): {world_size}")
+        print(f"Local Accumulation Steps: {accumulation_steps}")
+        print(f"Global Effective Steps: {actual_global_steps} (Target: {target_acc_steps})\n")
+
+    seq_len_start = current_cfg.get("seq_len_start", 128)
+    seq_len_warmup = current_cfg.get("seq_len_warmup", 4000)
+    max_lr = current_cfg.get("max_lr", 2e-4)
+    min_lr = current_cfg.get("min_lr", 4e-5)
+    warmup_steps = current_cfg.get("warmup_steps", 1000)
+    total_steps = current_cfg.get("total_steps", 30000)
+    eval_interval = current_cfg.get("eval_interval", 500)
+    val_eval_steps = current_cfg.get("val_eval_steps", 50)
+    aux_weight = current_cfg.get("aux_weight", 0.01)
+    
+    # Optimizer Dynamics Config
+    beta1 = current_cfg.get("beta1", 0.9)
+    beta2_half_life = current_cfg.get("beta2_token_half_life", 10_000_000)
+
     checkpoint_dir = "jesper_checkpoints"
-
-    aux_weight = 0.01
-
     start_step = 0
     train_loss_history = []
     val_loss_history = []
@@ -367,11 +386,9 @@ def train():
         if is_main:
             print(f"\n[!] Resuming from: {latest_ckpt_path}")
             
-        # Load ONCE to CPU to save your VRAM
         checkpoint = torch.load(latest_ckpt_path, map_location='cpu', weights_only=False)
-        model_config = checkpoint.get('model_config', MODEL_CONFIGS[ACTIVE_CONFIG_NAME])
+        model_config = checkpoint.get('model_config', current_cfg)
 
-        # All ranks need start_step for the data stream, not just main.
         start_step = checkpoint['step'] + 1
         train_loss_history = checkpoint.get('train_loss_history', [])
         val_loss_history = checkpoint.get('val_loss_history', [])
@@ -382,33 +399,29 @@ def train():
     else:
         if is_main:
             print(f"\n[!] Starting fresh: {ACTIVE_CONFIG_NAME}")
-            initial_seq_len = get_seq_len(0, seq_len_warmup, MODEL_CONFIGS[ACTIVE_CONFIG_NAME]["max_seq_len"], seq_len_start)
+            initial_seq_len = get_seq_len(0, seq_len_warmup, current_cfg["max_seq_len"], seq_len_start)
             print(f"[!] Starting context size: {initial_seq_len} tokens\n")
-        model_config = MODEL_CONFIGS[ACTIVE_CONFIG_NAME]
+        model_config = current_cfg
         os.makedirs(checkpoint_dir, exist_ok=True)
+
+    arch_keys = ["dim", "n_layers", "n_heads", "n_kv_heads", "hidden_dim", "num_experts", "top_k", "max_seq_len"]
+    arch_config = {k: v for k, v in model_config.items() if k in arch_keys}
 
     model = JesperLLM(
         vocab_size=len(tokenizer),
         pad_id=tokenizer.pad_token_id,
-        **model_config
+        **arch_config
     ).to(device)
 
     if is_main:
         print_model_stats(model, model_config)
 
-    # Optimizer selection — Restoring your original ROCm bypass
     if IS_ROCM:
-        optimizer = torch.optim.AdamW(
-            model.parameters(), lr=max_lr, betas=(0.9, 0.95), weight_decay=0.1
-        )
+        optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr, betas=(beta1, 0.95), weight_decay=0.1)
     elif HAS_BNB:
-        optimizer = bnb.optim.AdamW8bit(
-            model.parameters(), lr=max_lr, betas=(0.9, 0.95), weight_decay=0.1
-        )
+        optimizer = bnb.optim.AdamW8bit(model.parameters(), lr=max_lr, betas=(beta1, 0.95), weight_decay=0.1)
     else:
-        optimizer = torch.optim.AdamW(
-            model.parameters(), lr=max_lr, betas=(0.9, 0.95), weight_decay=0.1
-        )
+        optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr, betas=(beta1, 0.95), weight_decay=0.1)
 
     scaler = GradScaler('cuda')
 
@@ -416,10 +429,7 @@ def train():
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         
-        # --- THE FIX: Clean broken BNB states and manually move to device ---
         for state in optimizer.state.values():
-            # If the state has a 'step' but no 8-bit 'state1', it's a partial state
-            # from an unused MoE expert. Clear it so BNB re-initializes it!
             if 'step' in state and 'state1' not in state:
                 state.clear()
             else:
@@ -430,13 +440,10 @@ def train():
         if 'scaler' in checkpoint:
             scaler.load_state_dict(checkpoint['scaler'])
             
-        # Free up the massive checkpoint memory footprint!
         del checkpoint
         torch.cuda.empty_cache()
 
     if is_distributed:
-        # find_unused_parameters=True is needed for MoE because not every expert fires
-        # on every batch. Cost: ~5-10% overhead. Worth it for correctness.
         model = DDP(model, device_ids=[local_rank], find_unused_parameters=True)
 
     datasets_dict, probabilities = load_dataset_index("data/index.txt")
@@ -450,15 +457,52 @@ def train():
         0, model_config["max_seq_len"], model_config["max_seq_len"], is_distributed
     )
 
+    # ==========================================
+    # DUMMY PASS FOR VRAM PRE-ALLOCATION
+    # ==========================================
+    if is_main:
+        print("\n--- Running Dummy Pass to Pre-allocate Max VRAM ---")
+    
+    model.train()
+    optimizer.zero_grad()
+    
+    dummy_x = torch.randint(0, len(tokenizer), (batch_size, model_config["max_seq_len"]), device=device)
+    dummy_y = torch.randint(0, len(tokenizer), (batch_size, model_config["max_seq_len"]), device=device)
+    
+    with torch.amp.autocast('cuda', dtype=torch.float16):
+        _, dummy_ce, dummy_aux = model(dummy_x, dummy_y)
+        dummy_loss = (dummy_ce / accumulation_steps) + (aux_weight * (dummy_aux / accumulation_steps))
+    
+    scaler.scale(dummy_loss).backward()
+    
+    optimizer.zero_grad()
+    del dummy_x, dummy_y, dummy_loss, dummy_ce, dummy_aux
+    
+    if is_main:
+        max_mem = torch.cuda.memory_allocated(device) / 1e9
+        print(f"Max VRAM Successfully Reserved: {max_mem:.1f}GB")
+        print("---------------------------------------------------\n")
+
     if is_distributed:
         dist.barrier()
 
     t0 = time.time()
+    tokens_since_last_log = 0
 
     for step in range(start_step, total_steps):
+        current_seq_len = get_seq_len(step, seq_len_warmup, model_config["max_seq_len"], seq_len_start)
+        
+        # Calculate tokens for EMA math
+        effective_tokens_per_step = batch_size * accumulation_steps * world_size * current_seq_len
+        tokens_since_last_log += effective_tokens_per_step
+        
         lr = get_lr(step, total_steps, max_lr, min_lr, warmup_steps)
+        dynamic_beta2 = 1.0 - (math.log(2) / beta2_half_life) * effective_tokens_per_step
+        dynamic_beta2 = max(0.0, min(0.9999, dynamic_beta2))
+        
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
+            param_group['betas'] = (beta1, dynamic_beta2)
 
         model.train()
         optimizer.zero_grad()
@@ -473,10 +517,8 @@ def train():
             with torch.amp.autocast('cuda', dtype=torch.float16):
                 logits, ce_loss, aux_loss = model(x, y)
 
-                # Scale losses for gradient accumulation
                 ce_loss_scaled = ce_loss / accumulation_steps
                 aux_loss_scaled = aux_loss / accumulation_steps
-
                 total_loss = ce_loss_scaled + (aux_weight * aux_loss_scaled)
 
             if is_distributed and micro_step < accumulation_steps - 1:
@@ -496,19 +538,33 @@ def train():
         train_loss_history.append((step, accumulated_ce_loss))
 
         if is_main and step % 10 == 0:
-            current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            current_time = datetime.datetime.now().strftime("%H:%M:%S")
             mem = torch.cuda.memory_allocated(device) / 1e9
-            current_seq_len = get_seq_len(step, seq_len_warmup, model_config["max_seq_len"], seq_len_start)
+            
             t1 = time.time()
             dt = t1 - t0
-            it_per_sec = 10 / dt if step > start_step else 0.0
+            
+            # Throughput Math
+            if step > start_step:
+                global_steps_per_sec = 10 / dt
+                local_passes_per_sec = (10 * accumulation_steps) / dt 
+                tokens_per_sec = tokens_since_last_log / dt
+            else:
+                global_steps_per_sec = 0.0
+                local_passes_per_sec = 0.0
+                tokens_per_sec = 0.0
+                
             t0 = t1
+            tokens_since_last_log = 0
+            
+            # Split over two lines to prevent massive horizontal wrap
             print(
-                f"[{current_time}] Step {step:05d} | {it_per_sec:.2f} it/s | "
-                f"LR: {lr:.2e} | Seq: {current_seq_len} | "
-                f"CE Loss: {accumulated_ce_loss:.4f} | "
-                f"Aux: {(accumulated_aux_loss * aux_weight):.4f} | "
-                f"VRAM: {mem:.1f}GB"
+                f"[{current_time}] Step {step:05d} | "
+                f"{global_steps_per_sec:.2f} global steps/s | "
+                f"{local_passes_per_sec:.1f} local passes/s | "
+                f"{tokens_per_sec:,.0f} tok/s\n"
+                f"          LR: {lr:.2e} | B2: {dynamic_beta2:.4f} | Seq: {current_seq_len} | "
+                f"CE Loss: {accumulated_ce_loss:.4f} | VRAM: {mem:.1f}GB"
             )
 
         # Validation, eval, and checkpointing
