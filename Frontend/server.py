@@ -65,7 +65,7 @@ def chat():
     data = request.json
     chat_id = data.get('chat_id')
     user_message = data.get('message')
-    edit_index = data.get('edit_index') # New parameter for edits!
+    edit_index = data.get('edit_index')
 
     if not chat_id:
         chat_id = str(uuid.uuid4())
@@ -75,7 +75,6 @@ def chat():
         with open(path, 'r') as f:
             chat_data = json.load(f)
 
-    # If we are editing, slice off the history from the edit point onwards
     if edit_index is not None:
         chat_data['messages'] = chat_data['messages'][:edit_index]
 
@@ -83,7 +82,6 @@ def chat():
     with open(get_chat_file_path(chat_id), 'w') as f:
         json.dump(chat_data, f)
 
-    # Prepend System Prompt for the LLM request
     messages_for_llm = [{"role": "system", "content": SYSTEM_PROMPT}] + chat_data['messages']
 
     llm_payload = {
@@ -103,6 +101,13 @@ def chat():
         full_response = ""
         try:
             with requests.post(LLM_ENDPOINT, json=llm_payload, headers=headers, stream=True) as r:
+                # NEW: Check if vLLM rejected our request before trying to stream!
+                if r.status_code != 200:
+                    error_msg = f"[~fade~] Oh no... Vesper's brain returned an error: {r.status_code} - {r.text}"
+                    print(f"--- vLLM ERROR ---\n{r.status_code}: {r.text}\n------------------")
+                    yield f"data: {json.dumps({'choices': [{'delta': {'content': error_msg}}]})}\n\n"
+                    return
+
                 for line in r.iter_lines():
                     if line:
                         decoded_line = line.decode('utf-8')
@@ -114,12 +119,20 @@ def chat():
                                 delta = chunk['choices'][0].get('delta', {})
                                 if 'content' in delta:
                                     full_response += delta['content']
-                            except Exception as e:
+                            except Exception:
                                 pass
+        except Exception as e:
+            # NEW: Catch python connection errors (like DNS failures or refused connections)
+            error_msg = f"[~flicker~] Vesper can't connect to his brain! The server said: {str(e)}"
+            print(f"--- CONNECTION ERROR ---\n{str(e)}\n------------------------")
+            yield f"data: {json.dumps({'choices': [{'delta': {'content': error_msg}}]})}\n\n"
+            return
+            
         finally:
-            chat_data['messages'].append({"role": "assistant", "content": full_response})
-            with open(get_chat_file_path(chat_id), 'w') as f:
-                json.dump(chat_data, f)
+            if full_response:
+                chat_data['messages'].append({"role": "assistant", "content": full_response})
+                with open(get_chat_file_path(chat_id), 'w') as f:
+                    json.dump(chat_data, f)
 
     return Response(generate(), mimetype='text/event-stream')
 

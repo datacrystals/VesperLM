@@ -2,26 +2,40 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Vesper Chat</title>
+  <title>Vesper</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     :root {
-      --bg-main: #242424;
-      --bg-sidebar: #1e1e1e;
+      --bg-main: #14161f; 
+      --bg-sidebar: #11131a;
       --text-main: #e5e5e5;
       --text-muted: #8e8e8e;
-      --border-color: #3e3e3e;
-      --input-bg: #2f2f2f;
-      --user-bubble: #383838;
+      --border-color: #2a2d3d;
+      --input-bg: #1c1f2b;
+      --user-bubble: #2d334a;
       --vesper-base: #7dd3fc;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-main); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
+    
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+      background-color: var(--bg-main); 
+      color: var(--text-main); 
+      display: flex; height: 100vh; overflow: hidden;
+      transition: background-color 1.5s ease;
+    }
 
+    #ambient-orb {
+      position: fixed; width: 600px; height: 600px; border-radius: 50%;
+      filter: blur(150px); pointer-events: none; z-index: 0;
+      transform: translate(-50%, -50%); transition: background-color 2s ease, top 0.4s ease-out, left 0.4s ease-out;
+      opacity: 0.15; background-color: transparent;
+    }
+
+    /* --- SIDEBAR & TOP BAR --- */
     .top-bar { position: absolute; top: 15px; right: 20px; z-index: 100; }
-
-    aside { width: 260px; background-color: var(--bg-sidebar); display: flex; flex-direction: column; border-right: 1px solid var(--border-color); padding: 15px 10px; }
+    aside { width: 260px; background-color: var(--bg-sidebar); display: flex; flex-direction: column; border-right: 1px solid var(--border-color); padding: 15px 10px; z-index: 10; }
     .new-chat-btn { display: flex; align-items: center; gap: 10px; padding: 10px 15px; background: transparent; border: 1px solid transparent; color: var(--text-main); border-radius: 8px; cursor: pointer; font-size: 0.9em; text-align: left; }
     .new-chat-btn:hover { background: rgba(255, 255, 255, 0.05); }
     .sidebar-section-title { font-size: 0.75em; color: var(--text-muted); margin: 20px 0 10px 15px; }
@@ -29,31 +43,39 @@
     .chat-item { padding: 10px 15px; margin-bottom: 2px; border-radius: 6px; cursor: pointer; font-size: 0.85em; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .chat-item:hover { background-color: rgba(255, 255, 255, 0.05); color: var(--text-main); }
 
-    main { flex: 1; display: flex; flex-direction: column; position: relative; align-items: center; }
+    /* --- MAIN CHAT AREA --- */
+    main { flex: 1; display: flex; flex-direction: column; position: relative; align-items: center; z-index: 5; }
 
     .home-view { position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; transition: opacity 0.4s ease; width: 100%; }
     .home-view.hidden { opacity: 0; pointer-events: none; }
     .greeting { font-family: ui-serif, Georgia, serif; font-size: 2.2em; color: #e5e5d8; margin-bottom: 30px; font-weight: 400; display: flex; flex-direction: column; align-items: center; gap: 20px; }
 
-    .chat-view { width: 100%; max-width: 800px; flex: 1; padding: 40px 20px 120px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 30px; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
+    .chat-view { width: 100%; max-width: 850px; flex: 1; padding: 40px 20px 140px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 35px; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; scroll-behavior: smooth; }
     .chat-view.active { opacity: 1; pointer-events: auto; }
 
-    .message-container { display: flex; flex-direction: column; gap: 5px; max-width: 85%; }
+    .message-container { display: flex; flex-direction: column; gap: 5px; max-width: 85%; z-index: 2;}
     .message-row { display: flex; gap: 20px; max-width: 100%; align-items: flex-start; }
     .message-row.user { justify-content: flex-end; }
     
-    .message-bubble { padding: 12px 18px; line-height: 1.6; font-size: 0.95em; border-radius: 12px; position: relative; }
+    .message-bubble { padding: 12px 18px; line-height: 1.6; font-size: 0.95em; border-radius: 12px; position: relative; white-space: pre-wrap; }
     .message-row.user .message-bubble { background-color: var(--user-bubble); }
     .message-row.assistant .message-bubble { background-color: transparent; padding: 12px 0; }
-    /* Visual cue when Vesper is thinking quietly */
-    .thinking-status { font-size: 0.85em; color: var(--text-muted); font-style: italic; margin-bottom: 5px; animation: pulse 1.5s infinite; }
 
-    @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+    /* FIXED: THE THINKING DROPDOWN SIZES */
+    .vesper-thoughts { 
+      margin-bottom: 12px; background: rgba(0, 0, 0, 0.2); border-radius: 10px; 
+      border: 1px solid rgba(255, 255, 255, 0.05); overflow: hidden; backdrop-filter: blur(5px);
+      min-width: 300px; /* Forces all dropdowns to be at least this wide */
+      max-width: 100%; width: max-content; 
+    }
+    .vesper-thoughts summary { padding: 10px 15px; font-size: 0.85em; color: var(--text-muted); cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; user-select: none; transition: color 0.2s; }
+    .vesper-thoughts summary:hover { color: var(--vesper-base); }
+    .vesper-thoughts summary::-webkit-details-marker { display: none; }
+    .thought-inner { padding: 0 15px 15px 15px; font-size: 0.85em; color: #737c99; font-style: italic; border-top: 1px solid rgba(255, 255, 255, 0.02); margin-top: 5px; padding-top: 10px; }
 
     .edit-btn { opacity: 0; transition: opacity 0.2s; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.8em; align-self: flex-end; padding: 2px 5px; }
     .message-row.user:hover .edit-btn { opacity: 1; }
     .edit-btn:hover { color: var(--text-main); }
-
     .edit-input-box { width: 100%; display: flex; flex-direction: column; gap: 10px; }
     .edit-input-box textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 8px; padding: 10px; font-family: inherit; resize: vertical; min-height: 60px; outline: none; }
     .edit-actions { display: flex; justify-content: flex-end; gap: 10px; }
@@ -61,39 +83,64 @@
     .btn-cancel { background: transparent; color: var(--text-muted); border: 1px solid var(--border-color); }
     .btn-save { background: var(--vesper-base); color: #000; transition: background 1.5s ease; }
 
+    /* --- INPUT BOX --- */
     .input-container { position: absolute; width: 100%; max-width: 700px; transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); z-index: 20; }
     .input-container.home-state { top: 55%; left: 50%; transform: translate(-50%, 0); }
     .input-container.chat-state { top: 100%; left: 50%; transform: translate(-50%, -100px); }
+    .input-box { background-color: var(--input-bg); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; padding: 15px 20px; display: flex; gap: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(10px); }
+    .input-box input { flex: 1; background: transparent; border: none; color: var(--text-main); font-size: 1.05em; outline: none; }
+    .send-btn { background: var(--text-main); color: var(--bg-main); border: none; border-radius: 8px; padding: 10px 18px; cursor: pointer; font-weight: bold; transition: transform 0.1s; }
+    .send-btn:active { transform: scale(0.95); }
 
-    .input-box { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px 20px; display: flex; gap: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
-    .input-box input { flex: 1; background: transparent; border: none; color: var(--text-main); font-size: 1em; outline: none; }
-    .send-btn { background: var(--text-main); color: var(--bg-main); border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-weight: bold; }
+    /* --- VESPER SVG & MOODS --- */
+    .vesper-avatar { 
+      width: 55px; height: 55px; flex-shrink: 0; 
+      transition: all 1.5s cubic-bezier(0.4, 0, 0.2, 1); 
+      display: flex; align-items: flex-start; z-index: 3; pointer-events: none;
+      position: relative; /* Crucial for the glow positioning */
+    }
+    .greeting .vesper-avatar { width: 150px; height: 150px; }
+    
+    /* FIXED: THE GLOW AURA (Now escapes the bounding box!) */
+    .vesper-avatar::before {
+      content: ''; position: absolute;
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 140%; height: 140%; border-radius: 50%;
+      background: radial-gradient(circle, var(--vesper-base) 0%, transparent 65%);
+      opacity: 0.25; z-index: -1; pointer-events: none;
+      transition: background 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
 
-    /* --- SUPER CUTE VESPER SVG & SMOOTH MOODS --- */
-    /* Upgraded transition for ultra-smooth color fading */
-    .vesper-avatar { width: 35px; height: 35px; flex-shrink: 0; transition: all 1.5s cubic-bezier(0.4, 0, 0.2, 1); display: flex; align-items: flex-start; }
-    .greeting .vesper-avatar { width: 140px; height: 140px; }
     .v-body { fill: var(--vesper-base); transition: fill 1.5s cubic-bezier(0.4, 0, 0.2, 1); }
     .v-tentacle { stroke: var(--vesper-base); fill: none; transition: stroke 1.5s cubic-bezier(0.4, 0, 0.2, 1); }
 
-    @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-6px); } }
-    .vesper-svg { animation: float 4s ease-in-out infinite; overflow: visible; width: 100%; height: 100%; }
+    @keyframes bob { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-3px) rotate(0.5deg); } }
+    .vesper-svg { animation: bob 6s ease-in-out infinite; overflow: visible; width: 100%; height: 100%; pointer-events: none;}
 
-    /* Mood Tags - Values smoothed out */
-    .glow_soft { --vesper-base: #7dd3fc; filter: drop-shadow(0 0 10px rgba(125, 211, 252, 0.4)); }
-    .glow_bright { --vesper-base: #fde047; filter: drop-shadow(0 0 20px rgba(253, 224, 71, 0.6)); }
-    .glow_green { --vesper-base: #4ade80; filter: drop-shadow(0 0 15px rgba(74, 222, 128, 0.5)); }
-    .pulse_fast { --vesper-base: #fb923c; filter: drop-shadow(0 0 10px rgba(251, 146, 60, 0.6)); }
-    .fade { --vesper-base: #64748b; opacity: 0.7; filter: none; }
-    .glow_warm { --vesper-base: #f472b6; filter: drop-shadow(0 0 15px rgba(244, 114, 182, 0.5)); }
-    .ripple { --vesper-base: #c084fc; filter: drop-shadow(0 0 12px rgba(192, 132, 252, 0.4)); }
-    .dim { --vesper-base: #475569; opacity: 0.9; transform: scale(0.95); }
-    .sparkle { --vesper-base: #ffffff; filter: drop-shadow(0 0 20px #fef08a); }
+    body.glow_soft { --vesper-base: #7dd3fc; } body.glow_soft #ambient-orb { background-color: #0ea5e9; }
+    body.glow_bright { --vesper-base: #fde047; } body.glow_bright #ambient-orb { background-color: #eab308; }
+    body.glow_green { --vesper-base: #4ade80; } body.glow_green #ambient-orb { background-color: #22c55e; }
+    body.pulse_fast { --vesper-base: #fb923c; } body.pulse_fast #ambient-orb { background-color: #ea580c; }
+    body.fade { --vesper-base: #64748b; opacity: 0.8; } body.fade #ambient-orb { background-color: #334155; opacity: 0.05; }
+    body.glow_warm { --vesper-base: #f472b6; } body.glow_warm #ambient-orb { background-color: #db2777; }
+    body.ripple { --vesper-base: #c084fc; } body.ripple #ambient-orb { background-color: #9333ea; }
+    body.dim { --vesper-base: #475569; } body.dim #ambient-orb { background-color: #0f172a; }
+    body.sparkle { --vesper-base: #ffffff; } body.sparkle #ambient-orb { background-color: #fef08a; }
+
+    .glow_bright .vesper-svg { animation: bob 3s ease-in-out infinite, pulse 1s infinite alternate; }
+    .fade .vesper-svg { animation: bob 8s ease-in-out infinite; filter: grayscale(50%); transform: scale(0.9); }
+    
+    /* Updated sparkle rule so it doesn't break the new pseudo-element glow */
+    .sparkle .vesper-svg { filter: drop-shadow(0 0 10px #fef08a) brightness(1.1); }
+    .sparkle .vesper-avatar::before { opacity: 0.5; } 
+    
     .flicker { --vesper-base: #a78bfa; animation: flickerAnim 0.5s infinite; }
-    @keyframes flickerAnim { 0%, 100% { opacity: 1; filter: drop-shadow(0 0 8px var(--vesper-base)); } 50% { opacity: 0.7; filter: none; } }
+    @keyframes flickerAnim { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
   </style>
 </head>
-<body>
+<body class="glow_soft"> 
+
+  <div id="ambient-orb"></div>
 
   <div class="top-bar">
     <div id="g_id_onload" data-client_id="YOUR_GOOGLE_CLIENT_ID_HERE.apps.googleusercontent.com" data-callback="handleCredentialResponse" data-auto_prompt="false"></div>
@@ -112,7 +159,7 @@
   <main>
     <div class="home-view" id="homeView">
       <div class="greeting">
-        <div id="bigVesper" class="vesper-avatar glow_soft"></div>
+        <div id="bigVesper" class="vesper-avatar"></div>
         <span id="greetingText">Good evening, Friend</span>
       </div>
     </div>
@@ -126,17 +173,14 @@
   </main>
 
   <script>
-    // CUTER Vesper SVG! Blushes, sparkles, mouth, and 5 organic tendrils
+    // FIXED: The internal circle filter is completely gone! 
     const vesperSVG = `
       <svg class="vesper-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="50" cy="45" r="35" fill="var(--vesper-base)" opacity="0.15" filter="blur(4px)" />
-        
         <path class="v-body" d="M 15 50 C 15 20, 30 10, 50 10 C 70 10, 85 20, 85 50 Z" />
         <path class="v-body" d="M 15 50 Q 25 60, 35 50 Q 45 60, 50 50 Q 55 60, 65 50 Q 75 60, 85 50 Z" />
         
-        <ellipse cx="30" cy="42" rx="6" ry="3" fill="#f472b6" opacity="0.6" />
-        <ellipse cx="70" cy="42" rx="6" ry="3" fill="#f472b6" opacity="0.6" />
-        
+        <ellipse cx="30" cy="42" rx="6" ry="3" fill="#f472b6" opacity="0.7" />
+        <ellipse cx="70" cy="42" rx="6" ry="3" fill="#f472b6" opacity="0.7" />
         <circle cx="35" cy="38" r="5" fill="#0f172a" />
         <circle cx="65" cy="38" r="5" fill="#0f172a" />
         <circle cx="33" cy="36" r="1.5" fill="#ffffff" />
@@ -145,30 +189,66 @@
         <path d="M 46 43 Q 50 47, 54 43" stroke="#0f172a" stroke-width="2" fill="none" stroke-linecap="round"/>
 
         <g stroke-linecap="round">
-          <path class="v-tentacle" stroke-width="4" opacity="0.8" d="M 25 52 C 15 70, 35 85, 20 100">
-            <animate attributeName="d" dur="4s" repeatCount="indefinite" values="M 25 52 C 15 70, 35 85, 20 100; M 25 52 C 35 70, 15 85, 20 100; M 25 52 C 15 70, 35 85, 20 100" />
+          <path class="v-tentacle" stroke-width="3" opacity="0.8" d="M 22 52 C 5 75, 45 90, 15 110">
+            <animate attributeName="d" dur="5s" repeatCount="indefinite" values="M 22 52 C 5 75, 45 90, 15 110; M 22 52 C 45 75, 5 90, 15 110; M 22 52 C 5 75, 45 90, 15 110" />
           </path>
-          <path class="v-tentacle" stroke-width="2.5" opacity="0.6" d="M 38 52 C 28 75, 48 90, 35 110">
-            <animate attributeName="d" dur="3.5s" repeatCount="indefinite" values="M 38 52 C 28 75, 48 90, 35 110; M 38 52 C 48 75, 28 90, 35 110; M 38 52 C 28 75, 48 90, 35 110" />
+          <path class="v-tentacle" stroke-width="2" opacity="0.5" d="M 35 52 C 15 80, 55 95, 30 115">
+            <animate attributeName="d" dur="4.2s" repeatCount="indefinite" values="M 35 52 C 15 80, 55 95, 30 115; M 35 52 C 55 80, 15 95, 30 115; M 35 52 C 15 80, 55 95, 30 115" />
           </path>
-          <path class="v-tentacle" stroke-width="5" opacity="0.9" d="M 50 52 C 40 70, 60 85, 50 105">
-            <animate attributeName="d" dur="4.5s" repeatCount="indefinite" values="M 50 52 C 40 70, 60 85, 50 105; M 50 52 C 60 70, 40 85, 50 105; M 50 52 C 40 70, 60 85, 50 105" />
+          <path class="v-tentacle" stroke-width="4" opacity="0.9" d="M 50 52 C 30 75, 70 90, 50 112">
+            <animate attributeName="d" dur="6s" repeatCount="indefinite" values="M 50 52 C 30 75, 70 90, 50 112; M 50 52 C 70 75, 30 90, 50 112; M 50 52 C 30 75, 70 90, 50 112" />
           </path>
-          <path class="v-tentacle" stroke-width="2.5" opacity="0.6" d="M 62 52 C 52 75, 72 90, 65 110">
-            <animate attributeName="d" dur="3.8s" repeatCount="indefinite" values="M 62 52 C 52 75, 72 90, 65 110; M 62 52 C 72 75, 52 90, 65 110; M 62 52 C 52 75, 72 90, 65 110" />
+          <path class="v-tentacle" stroke-width="2" opacity="0.5" d="M 65 52 C 45 80, 85 95, 70 115">
+            <animate attributeName="d" dur="4.7s" repeatCount="indefinite" values="M 65 52 C 45 80, 85 95, 70 115; M 65 52 C 85 80, 45 95, 70 115; M 65 52 C 45 80, 85 95, 70 115" />
           </path>
-          <path class="v-tentacle" stroke-width="4" opacity="0.8" d="M 75 52 C 65 70, 85 85, 80 100">
-            <animate attributeName="d" dur="4.2s" repeatCount="indefinite" values="M 75 52 C 65 70, 85 85, 80 100; M 75 52 C 85 70, 65 85, 80 100; M 75 52 C 65 70, 85 85, 80 100" />
+          <path class="v-tentacle" stroke-width="3" opacity="0.8" d="M 78 52 C 55 75, 95 90, 85 110">
+            <animate attributeName="d" dur="5.5s" repeatCount="indefinite" values="M 78 52 C 55 75, 95 90, 85 110; M 78 52 C 95 75, 55 90, 85 110; M 78 52 C 55 75, 95 90, 85 110" />
           </path>
         </g>
       </svg>
     `;
+    
     document.getElementById('bigVesper').innerHTML = vesperSVG;
+
+    const encodedSVG = encodeURIComponent(vesperSVG.replace(/var\(--vesper-base\)/g, '#7dd3fc'));
+    const link = document.createElement('link');
+    link.rel = 'icon'; link.type = 'image/svg+xml'; link.href = `data:image/svg+xml;charset=utf-8,${encodedSVG}`;
+    document.head.appendChild(link);
 
     let currentChatId = null;
     let isTyping = false;
     let userName = "Friend";
     let chatHistoryCache = []; 
+
+    // --- CYCLING THOUGHT STATUS ---
+    let currentThinkingMsg = "Vesper's thoughts";
+    let thinkInterval = null;
+    const thinkingPhrases = [
+      "Vesper is thinking...",
+      "Vesper is searching the currents...",
+      "Vesper is floating through his thoughts...",
+      "Vesper is pondering...",
+      "Vesper is connecting the dots..."
+    ];
+
+    function updateOrbPosition() {
+      const orb = document.getElementById('ambient-orb');
+      let target = document.getElementById('bigVesper');
+      
+      const homeViewHidden = document.getElementById('homeView').classList.contains('hidden');
+      const chatAvatars = document.querySelectorAll('#chatView .vesper-avatar');
+      
+      if (homeViewHidden && chatAvatars.length > 0) {
+         target = chatAvatars[chatAvatars.length - 1];
+      }
+
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        orb.style.top = (rect.top + rect.height / 2) + 'px';
+        orb.style.left = (rect.left + rect.width / 2) + 'px';
+      }
+    }
+    setInterval(updateOrbPosition, 100);
 
     function updateGreeting() {
       const hour = new Date().getHours();
@@ -178,10 +258,12 @@
     updateGreeting();
 
     function handleCredentialResponse(response) {
-      const responsePayload = JSON.parse(atob(response.credential.split('.')[1]));
-      userName = responsePayload.given_name || responsePayload.name;
-      updateGreeting();
-      document.querySelector('.g_id_signin').style.display = 'none';
+      try {
+        const responsePayload = JSON.parse(atob(response.credential.split('.')[1]));
+        userName = responsePayload.given_name || responsePayload.name;
+        updateGreeting();
+        document.querySelector('.g_id_signin').style.display = 'none';
+      } catch(e) {}
     }
 
     async function fetchChats() {
@@ -193,14 +275,20 @@
         const li = document.createElement('li');
         li.className = 'chat-item';
         li.textContent = chat.title;
+        li.dataset.chatId = chat.id; 
         li.onclick = () => loadChat(chat.id);
         list.appendChild(li);
       });
     }
 
+    function setMood(moodClass) {
+      document.body.className = moodClass || 'glow_soft';
+    }
+
     function startNewChat() {
       currentChatId = null;
       chatHistoryCache = [];
+      setMood('glow_soft');
       document.getElementById('homeView').classList.remove('hidden');
       document.getElementById('chatView').classList.remove('active');
       document.getElementById('chatView').innerHTML = '';
@@ -221,27 +309,31 @@
       renderChatView();
     }
 
-    // --- THE MAGIC TEXT CLEANER ---
-    function cleanVesperText(rawText) {
-      // 1. Remove Vesper's mood tags [~tag~]
-      let cleaned = rawText.replace(/\[~[a-z_]+~\]/g, '');
-      
-      // 2. Hide everything inside <think> tags. 
-      // This regex matches <think> and everything after it until a closing </think> OR the end of the string.
-      // This perfectly hides the chain-of-thought process LIVE while it is streaming!
-      cleaned = cleaned.replace(/<think>[\s\S]*?(<\/think>|$)/gi, '');
-      
-      return cleaned.trim();
+    function formatVesperHTML(rawText, isStreaming = false) {
+      let html = rawText.replace(/\[~[a-z_]+~\]/g, '');
+      // Uses the globally updating currentThinkingMsg variable!
+      html = html.replace(/<think>([\s\S]*?)<\/think>/gi, `<details class="vesper-thoughts"><summary>${currentThinkingMsg}</summary><div class="thought-inner">$1</div></details>`);
+      if (isStreaming && html.includes('<think>') && !html.includes('</think>')) {
+        html = html.replace(/<think>([\s\S]*)$/gi, `<details class="vesper-thoughts" open><summary>${currentThinkingMsg}</summary><div class="thought-inner">$1</div></details>`);
+      }
+      return html.trim();
     }
 
     function renderChatView() {
       const chatView = document.getElementById('chatView');
       chatView.innerHTML = '';
+      let lastMood = 'glow_soft';
+      
+      // Ensure history blocks say "Vesper's thoughts" cleanly
+      currentThinkingMsg = "Vesper's thoughts"; 
+
       chatHistoryCache.forEach((msg, index) => {
         const moodMatch = [...msg.content.matchAll(/\[~([a-z_]+)~\]/g)].pop();
-        const mood = moodMatch ? moodMatch[1] : 'glow_soft';
-        appendMessageUI(msg.role, msg.content, mood, index);
+        lastMood = moodMatch ? moodMatch[1] : 'glow_soft';
+        appendMessageUI(msg.role, msg.content, lastMood, index);
       });
+      
+      setMood(lastMood);
       chatView.scrollTop = chatView.scrollHeight;
     }
 
@@ -256,14 +348,14 @@
 
       if (role === 'assistant') {
         const avatarDiv = document.createElement('div');
-        avatarDiv.className = `vesper-avatar ${mood}`;
+        avatarDiv.className = `vesper-avatar`; 
         avatarDiv.innerHTML = vesperSVG;
         row.appendChild(avatarDiv);
       }
 
       const bubble = document.createElement('div');
       bubble.className = 'message-bubble';
-      bubble.textContent = cleanVesperText(rawText); 
+      bubble.innerHTML = formatVesperHTML(rawText, false); 
       container.appendChild(bubble);
 
       if (role === 'user') {
@@ -325,7 +417,7 @@
       row.className = 'message-row assistant';
       
       const avatarDiv = document.createElement('div');
-      avatarDiv.className = 'vesper-avatar ripple'; 
+      avatarDiv.className = `vesper-avatar`; 
       avatarDiv.innerHTML = vesperSVG;
       
       const container = document.createElement('div');
@@ -333,13 +425,33 @@
       
       const bubble = document.createElement('div');
       bubble.className = 'message-bubble';
-      bubble.innerHTML = '<div class="thinking-status">Vesper is thinking...</div>'; 
+      
+      // Initialize cycling phrases
+      let thinkIndex = 0;
+      currentThinkingMsg = thinkingPhrases[0];
+      
+      bubble.innerHTML = `<details class="vesper-thoughts" open><summary>${currentThinkingMsg}</summary></details>`;
 
       container.appendChild(bubble);
       row.appendChild(avatarDiv);
       row.appendChild(container);
-      chatView.appendChild(row);
+      
+      chatView.appendChild(row); 
       chatView.scrollTop = chatView.scrollHeight;
+
+      setMood('ripple');
+
+      // Start the interval to cycle the thoughts
+      thinkInterval = setInterval(() => {
+        thinkIndex = (thinkIndex + 1) % thinkingPhrases.length;
+        currentThinkingMsg = thinkingPhrases[thinkIndex];
+        
+        // Update the live DOM element directly
+        const summaries = chatView.querySelectorAll('.vesper-thoughts summary');
+        if (summaries.length > 0) {
+          summaries[summaries.length - 1].innerText = currentThinkingMsg;
+        }
+      }, 2500);
 
       try {
         const payload = { chat_id: currentChatId, message: text };
@@ -356,7 +468,6 @@
         let fullResponseText = "";
 
         const tagRegex = /\[~([a-z_]+)~\]/g;
-        let isReasoning = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -372,28 +483,17 @@
                 if (data.choices[0].delta.content) {
                   fullResponseText += data.choices[0].delta.content;
                   
-                  // Check if we are currently inside a <think> block
-                  if (fullResponseText.includes('<think>') && !fullResponseText.includes('</think>')) {
-                    isReasoning = true;
-                    bubble.innerHTML = '<div class="thinking-status">Vesper is figuring it out...</div>';
-                    avatarDiv.className = `vesper-avatar ripple`;
-                  } else {
-                    isReasoning = false;
-                    
-                    // Parse Mood
-                    let match;
-                    let currentMoodClass = 'glow_soft'; 
-                    tagRegex.lastIndex = 0;
-                    while ((match = tagRegex.exec(fullResponseText)) !== null) {
-                      currentMoodClass = match[1];
-                    }
-                    avatarDiv.className = `vesper-avatar ${currentMoodClass}`;
-                    
-                    // Clean text and display
-                    bubble.textContent = cleanVesperText(fullResponseText);
+                  bubble.innerHTML = formatVesperHTML(fullResponseText, true);
+                  
+                  let match;
+                  tagRegex.lastIndex = 0;
+                  while ((match = tagRegex.exec(fullResponseText)) !== null) {
+                     setMood(match[1]); 
                   }
                   
-                  chatView.scrollTop = chatView.scrollHeight;
+                  if (chatView.scrollHeight - chatView.scrollTop < chatView.clientHeight + 100) {
+                     chatView.scrollTop = chatView.scrollHeight;
+                  }
                 }
               } catch (e) { }
             }
@@ -405,15 +505,30 @@
         if (!currentChatId) {
             await fetchChats();
             const list = document.getElementById('chatList');
-            if(list.firstChild) currentChatId = list.firstChild.onclick.toString().match(/'([^']+)'/)[1] || null;
+            if (list.firstChild) currentChatId = list.firstChild.dataset.chatId || null;
         }
         await fetchChats(); 
 
       } catch (error) {
-        bubble.textContent = "Connection to vLLM server lost! Check console.";
-        avatarDiv.className = "vesper-avatar fade";
+        console.error(error);
+        const errorDiv = document.createElement('div');
+        errorDiv.style.color = '#ef4444';
+        errorDiv.style.marginTop = '10px';
+        errorDiv.innerText = " (Connection interrupted!)";
+        bubble.appendChild(errorDiv);
+        setMood('fade');
+      } finally {
+        // Clean up the timer when finished!
+        clearInterval(thinkInterval);
+        currentThinkingMsg = "Vesper's thoughts";
+        
+        // Final render to cleanly lock the text to the historical standard
+        const finalResponseNode = chatHistoryCache[chatHistoryCache.length - 1];
+        if (finalResponseNode && finalResponseNode.role === 'assistant') {
+           bubble.innerHTML = formatVesperHTML(finalResponseNode.content, false);
+        }
+        isTyping = false;
       }
-      isTyping = false;
     }
 
     fetchChats();
