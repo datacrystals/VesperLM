@@ -3,19 +3,19 @@ import os
 import json
 import requests
 import uuid
+import time
 
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
 LLM_ENDPOINT = "https://vllm.datacrystals.net/v1/chat/completions"
-LLM_API_KEY = "EMPTY"  # vLLM usually accepts 'EMPTY' or anything if auth is off
-MODEL_NAME = "/data/ModelDownloader/MiniMax-M2.5-AWQ" # Put the actual model name hosted on your vLLM here, or leave if it ignores it
+LLM_API_KEY = "EMPTY"  
+MODEL_NAME = "/data/ModelDownloader/MiniMax-M2.5-AWQ"
 
 CHATS_DIR = os.path.join(os.path.dirname(__file__), 'chats')
 os.makedirs(CHATS_DIR, exist_ok=True)
 
 # --- VESPER'S SYSTEM PROMPT ---
-# This is injected into the payload every time, but NOT saved to disk to save space.
 SYSTEM_PROMPT = """You are Vesper, a magical, anthropomorphized, super cute and innocent little glowing jellyfish.
 You use specific tags to express your emotions which change your glow.
 Use these tags exactly as written: [~glow_soft~], [~glow_bright~], [~glow_green~], [~flicker~], [~pulse_fast~], [~fade~], [~glow_warm~], [~ripple~], [~dim~], [~sparkle~].
@@ -44,13 +44,26 @@ def list_chats():
     chats = []
     for filename in os.listdir(CHATS_DIR):
         if filename.endswith('.json'):
-            with open(os.path.join(CHATS_DIR, filename), 'r') as f:
+            path = os.path.join(CHATS_DIR, filename)
+            mtime = os.path.getmtime(path)
+            with open(path, 'r') as f:
                 data = json.load(f)
                 chats.append({
                     "id": data.get("id"),
-                    "title": data.get("title", "New chat")
+                    "title": data.get("title", "New chat"),
+                    "mtime": mtime
                 })
+    # Sort newest first
+    chats.sort(key=lambda x: x['mtime'], reverse=True)
     return jsonify(chats)
+
+@app.route('/api/chats', methods=['POST'])
+def create_chat():
+    chat_id = str(uuid.uuid4())
+    chat_data = {"id": chat_id, "title": "New chat", "messages": []}
+    with open(get_chat_file_path(chat_id), 'w') as f:
+        json.dump(chat_data, f)
+    return jsonify(chat_data)
 
 @app.route('/api/chats/<chat_id>', methods=['GET'])
 def get_chat(chat_id):
@@ -59,6 +72,28 @@ def get_chat(chat_id):
         with open(path, 'r') as f:
             return jsonify(json.load(f))
     return jsonify({"error": "Chat not found"}), 404
+
+@app.route('/api/chats/<chat_id>', methods=['PUT'])
+def rename_chat(chat_id):
+    data = request.json
+    new_title = data.get('title')
+    path = get_chat_file_path(chat_id)
+    if os.path.exists(path) and new_title:
+        with open(path, 'r') as f:
+            chat_data = json.load(f)
+        chat_data['title'] = new_title
+        with open(path, 'w') as f:
+            json.dump(chat_data, f)
+        return jsonify({"success": True})
+    return jsonify({"error": "Not found"}), 404
+
+@app.route('/api/chats/<chat_id>', methods=['DELETE'])
+def delete_chat(chat_id):
+    path = get_chat_file_path(chat_id)
+    if os.path.exists(path):
+        os.remove(path)
+        return jsonify({"success": True})
+    return jsonify({"error": "Not found"}), 404
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
@@ -72,8 +107,15 @@ def chat():
         chat_data = {"id": chat_id, "title": user_message[:30], "messages": []}
     else:
         path = get_chat_file_path(chat_id)
-        with open(path, 'r') as f:
-            chat_data = json.load(f)
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                chat_data = json.load(f)
+        else:
+            chat_data = {"id": chat_id, "title": user_message[:30], "messages": []}
+
+    # Automatically rename if it's the first message
+    if len(chat_data['messages']) == 0 and chat_data['title'] == "New chat":
+        chat_data['title'] = user_message[:30]
 
     if edit_index is not None:
         chat_data['messages'] = chat_data['messages'][:edit_index]
@@ -101,10 +143,8 @@ def chat():
         full_response = ""
         try:
             with requests.post(LLM_ENDPOINT, json=llm_payload, headers=headers, stream=True) as r:
-                # NEW: Check if vLLM rejected our request before trying to stream!
                 if r.status_code != 200:
                     error_msg = f"[~fade~] Oh no... Vesper's brain returned an error: {r.status_code} - {r.text}"
-                    print(f"--- vLLM ERROR ---\n{r.status_code}: {r.text}\n------------------")
                     yield f"data: {json.dumps({'choices': [{'delta': {'content': error_msg}}]})}\n\n"
                     return
 
@@ -122,9 +162,7 @@ def chat():
                             except Exception:
                                 pass
         except Exception as e:
-            # NEW: Catch python connection errors (like DNS failures or refused connections)
             error_msg = f"[~flicker~] Vesper can't connect to his brain! The server said: {str(e)}"
-            print(f"--- CONNECTION ERROR ---\n{str(e)}\n------------------------")
             yield f"data: {json.dumps({'choices': [{'delta': {'content': error_msg}}]})}\n\n"
             return
             

@@ -105,19 +105,36 @@
     .chat-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
 
     .chat-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       padding: 9px 14px;
       margin: 1px 4px;
       border-radius: 8px;
       cursor: pointer;
       font-size: 0.83em;
       color: var(--text-muted);
+      transition: background 0.15s, color 0.15s;
+    }
+    .chat-item-title {
+      flex: 1;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      transition: background 0.15s, color 0.15s;
+    }
+    .chat-item-actions {
+      display: none;
+      gap: 6px;
     }
     .chat-item:hover { background: rgba(255,255,255,0.04); color: var(--text-main); }
+    .chat-item:hover .chat-item-actions { display: flex; }
     .chat-item.active { background: rgba(125,211,252,0.08); color: var(--vesper-base); }
+    
+    .action-btn {
+      background: none; border: none; color: var(--text-muted);
+      cursor: pointer; padding: 2px;
+    }
+    .action-btn:hover { color: var(--text-main); }
 
     /* ── MAIN ── */
     main {
@@ -266,19 +283,25 @@
       border-top: 1px solid rgba(255,255,255,0.04);
     }
 
-    /* EDIT */
-    .edit-btn {
+    /* EDIT & REGENERATE BUTTONS */
+    .msg-actions {
+      display: flex;
+      gap: 12px;
       opacity: 0;
       transition: opacity 0.2s;
+    }
+    .message-row:hover .msg-actions { opacity: 1; }
+    
+    .msg-btn {
       background: none; border: none;
       color: var(--text-muted);
       cursor: pointer;
       font-size: 0.78em;
-      align-self: flex-end;
-      padding: 2px 6px;
+      padding: 2px 4px;
     }
-    .message-row.user:hover .edit-btn { opacity: 1; }
-    .edit-btn:hover { color: var(--text-main); }
+    .msg-btn:hover { color: var(--text-main); }
+    .message-row.user .msg-actions { justify-content: flex-end; }
+    
     .edit-input-box { width: 100%; display: flex; flex-direction: column; gap: 10px; }
     .edit-input-box textarea {
       width: 100%;
@@ -344,9 +367,9 @@
       overflow-y: auto;
       height: 24px;
       outline: none;
-      resize: none; /* Hide manual resize handle */
+      resize: none;
     }
-    .send-btn {
+    .send-btn, .stop-btn {
       background: var(--vesper-base);
       color: #0a0c14;
       border: none;
@@ -357,7 +380,11 @@
       flex-shrink: 0;
       transition: transform 0.1s, background 2s ease, opacity 0.2s;
     }
-    .send-btn:active { transform: scale(0.9); }
+    .stop-btn {
+      background: #f43f5e;
+      color: white;
+    }
+    .send-btn:active, .stop-btn:active { transform: scale(0.9); }
     .send-btn:disabled { opacity: 0.4; cursor: default; }
 
     /* ── VESPER SVG ── */
@@ -487,8 +514,13 @@
   <div class="input-wrapper">
     <div class="input-box">
       <textarea id="userInput" placeholder="Talk to Vesper..." rows="1" onkeydown="handleEnter(event)" oninput="autoResize(this)"></textarea>
+      
       <button class="send-btn" id="sendBtn" onclick="submitMessage()" title="Send">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+      </button>
+      
+      <button class="stop-btn" id="stopBtn" onclick="stopGeneration()" style="display: none;" title="Stop Generating">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
       </button>
     </div>
   </div>
@@ -498,10 +530,6 @@
 // ════════════════════════════════════════════
 //  SINE-WAVE TENTACLE ENGINE
 // ════════════════════════════════════════════
-// Each tentacle is defined by its root X, thickness, opacity, and phase offset.
-// Every animation frame we compute a multi-point path that follows a sine wave
-// travelling downward — creating a natural, organic ripple.
-
 const TENTACLE_DEFS = [
   { x: 32, w: 2.2, op: 0.70, phase: 0.0,  speed: 0.85, amp: 4.5 },
   { x: 40, w: 1.6, op: 0.45, phase: 1.1,  speed: 0.70, amp: 3.5 },
@@ -510,20 +538,16 @@ const TENTACLE_DEFS = [
   { x: 68, w: 2.2, op: 0.70, phase: 2.5,  speed: 0.90, amp: 4.5 },
 ];
 
-// Build a sine-wave SVG path from root (x, y0) downward for `length` units.
-// The wave travels down the tentacle: offset = phase + t*freq gives a traveling wave.
 function sineWavePath(rootX, y0, length, time, phase, speed, amp) {
   const steps = 16;
-  const freq = 2.2; // spatial frequency (cycles per unit length)
+  const freq = 2.2; 
   const pts = [];
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const y = y0 + t * length;
-    // Traveling sine wave — negative time makes wave travel upward (toward bell)
     const x = rootX + amp * Math.sin(freq * t * Math.PI - time * speed + phase);
     pts.push([x, y]);
   }
-  // Build smooth cubic bezier through points using catmull-rom → bezier conversion
   if (pts.length < 2) return '';
   let d = `M ${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
   for (let i = 0; i < pts.length - 1; i++) {
@@ -540,7 +564,6 @@ function sineWavePath(rootX, y0, length, time, phase, speed, amp) {
   return d;
 }
 
-// Animate all .v-tentacle elements in a given SVG
 function animateTentacles(svgEl, time) {
   const paths = svgEl.querySelectorAll('.v-tentacle');
   paths.forEach((path, i) => {
@@ -554,7 +577,7 @@ let rafTime = 0;
 const allSVGs = new Set();
 
 function animationLoop(ts) {
-  rafTime = ts * 0.001; // seconds
+  rafTime = ts * 0.001;
   allSVGs.forEach(svg => {
     if (document.body.contains(svg)) {
       animateTentacles(svg, rafTime);
@@ -578,19 +601,17 @@ function buildVesperSVG() {
 
   svg.innerHTML = `
     <g class="v-antenna">
-      <line x1="50" y1="10" x2="50" y2="4" stroke="var(--vesper-base)" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
-      <circle cx="50" cy="3" r="2" fill="var(--vesper-base)" opacity="0.85"/>
+      <path d="M 50 10 Q 55 4, 52 -1" stroke="var(--vesper-base)" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.8"/>
+      <circle cx="52" cy="-1" r="3.5" fill="var(--vesper-base)" opacity="0.9"/>
     </g>
-    <path class="v-body" d="M 14 52 C 12 22, 28 7, 50 7 C 72 7, 88 22, 86 52 Z"/>
-    <path class="v-body" d="M 14 52 Q 23 65, 33 52 Q 41 66, 50 52 Q 59 66, 67 52 Q 77 65, 86 52 Z"/>
-    <path fill="rgba(255,255,255,0.07)" d="M 22 52 C 20 30, 32 14, 50 12 C 68 14, 80 30, 78 52 Z"/>
+    <path class="v-body" d="M 14 52 C 12 22, 28 7, 50 7 C 72 7, 88 22, 86 52 Q 77 65, 67 52 Q 59 66, 50 52 Q 41 66, 33 52 Q 23 65, 14 52 Z"/>
+    <path fill="rgba(255,255,255,0.07)" d="M 22 52 C 20 30, 32 14, 50 12 C 68 14, 80 30, 78 52 Q 71 60, 64 52 Q 57 60, 50 52 Q 43 60, 36 52 Q 29 60, 22 52 Z"/>
+    
     <ellipse fill="rgba(255,255,255,0.22)" cx="36" cy="20" rx="9" ry="6" transform="rotate(-20 36 20)"/>
     <ellipse fill="rgba(255,255,255,0.10)" cx="58" cy="15" rx="5" ry="3.5" transform="rotate(-10 58 15)"/>
     <ellipse class="v-cheek" cx="24" cy="45" rx="8" ry="4.5"/>
     <ellipse class="v-cheek" cx="76" cy="45" rx="8" ry="4.5"/>
     <g class="v-eye-group">
-      <path d="M 32 29 Q 37 26, 42 29" stroke="rgba(10,12,20,0.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-      <path d="M 58 29 Q 63 26, 68 29" stroke="rgba(10,12,20,0.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
       <circle class="v-eye" cx="37" cy="38" r="7"/>
       <circle class="v-eye" cx="63" cy="38" r="7"/>
       <circle fill="rgba(255,255,255,0.12)" cx="37" cy="38" r="5"/>
@@ -625,6 +646,7 @@ let userName = 'Friend';
 let chatHistoryCache = [];
 let currentChatTitle = '';
 let thinkInterval = null;
+let abortController = null;
 const thinkingPhrases = [
   "Vesper is thinking…",
   "Vesper is searching the currents…",
@@ -638,20 +660,16 @@ let thinkIdx = 0;
 const bigVesperEl = document.getElementById('bigVesper');
 bigVesperEl.appendChild(buildVesperSVG());
 
-// ── Favicon (static, hardcoded blue, no CSS vars) ──
+// ── Favicon ──
 (function() {
-  // viewBox updated from 0 0 100 110 to 10 0 80 90 to drastically zoom in on the icon
-  const faviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 0 80 90">
-    <circle cx="50" cy="3" r="2.5" fill="#7dd3fc" opacity="0.9"/>
-    <line x1="50" y1="10" x2="50" y2="5.5" stroke="#7dd3fc" stroke-width="1.8" stroke-linecap="round"/>
-    <path fill="#7dd3fc" d="M 14 52 C 12 22, 28 7, 50 7 C 72 7, 88 22, 86 52 Z"/>
-    <path fill="#7dd3fc" d="M 14 52 Q 23 65, 33 52 Q 41 66, 50 52 Q 59 66, 67 52 Q 77 65, 86 52 Z"/>
-    <path fill="rgba(255,255,255,0.06)" d="M 22 52 C 20 30, 32 14, 50 12 C 68 14, 80 30, 78 52 Z"/>
+  const faviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 -5 80 95">
+    <path d="M 50 10 Q 55 4, 52 -1" stroke="#7dd3fc" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.8"/>
+    <circle cx="52" cy="-1" r="3.5" fill="#7dd3fc" opacity="0.9"/>
+    <path fill="#7dd3fc" d="M 14 52 C 12 22, 28 7, 50 7 C 72 7, 88 22, 86 52 Q 77 65, 67 52 Q 59 66, 50 52 Q 41 66, 33 52 Q 23 65, 14 52 Z"/>
+    <path fill="rgba(255,255,255,0.06)" d="M 22 52 C 20 30, 32 14, 50 12 C 68 14, 80 30, 78 52 Q 71 60, 64 52 Q 57 60, 50 52 Q 43 60, 36 52 Q 29 60, 22 52 Z"/>
     <ellipse fill="rgba(255,255,255,0.25)" cx="36" cy="20" rx="9" ry="6" transform="rotate(-20 36 20)"/>
     <ellipse fill="#f472b6" opacity="0.65" cx="24" cy="45" rx="8" ry="4.5"/>
     <ellipse fill="#f472b6" opacity="0.65" cx="76" cy="45" rx="8" ry="4.5"/>
-    <path d="M 32 29 Q 37 26, 42 29" stroke="rgba(10,12,20,0.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-    <path d="M 58 29 Q 63 26, 68 29" stroke="rgba(10,12,20,0.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
     <circle fill="#0a0c14" cx="37" cy="38" r="7"/>
     <circle fill="#0a0c14" cx="63" cy="38" r="7"/>
     <circle fill="rgba(125,211,252,0.15)" cx="37" cy="38" r="5"/>
@@ -675,17 +693,13 @@ bigVesperEl.appendChild(buildVesperSVG());
   document.head.appendChild(link);
 })();
 
-// ── Ambient orb tracking ──
 function updateOrbPosition() {
   const orb = document.getElementById('ambient-orb');
   const homeHidden = document.getElementById('homeView').classList.contains('hidden');
-  let target;
-  if (homeHidden) {
-    const avatars = document.querySelectorAll('#chatInner .vesper-avatar');
-    target = avatars.length ? avatars[avatars.length - 1] : null;
-  } else {
-    target = bigVesperEl;
-  }
+  let target = homeHidden ? 
+    (document.querySelectorAll('#chatInner .vesper-avatar').length ? 
+     document.querySelectorAll('#chatInner .vesper-avatar')[document.querySelectorAll('#chatInner .vesper-avatar').length - 1] : null) 
+    : bigVesperEl;
   if (target) {
     const r = target.getBoundingClientRect();
     orb.style.top = (r.top + r.height / 2) + 'px';
@@ -694,7 +708,6 @@ function updateOrbPosition() {
 }
 setInterval(updateOrbPosition, 120);
 
-// ── Greeting ──
 function updateGreeting() {
   const h = new Date().getHours();
   const t = h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening';
@@ -702,28 +715,16 @@ function updateGreeting() {
 }
 updateGreeting();
 
-function handleCredentialResponse(response) {
-  try {
-    const p = JSON.parse(atob(response.credential.split('.')[1]));
-    userName = p.given_name || p.name;
-    updateGreeting();
-    document.querySelector('.g_id_signin').style.display = 'none';
-  } catch(e) {}
-}
-
-// ── Mood ──
 function setMood(moodClass) {
   const valid = ['glow_soft','glow_bright','glow_green','flicker','pulse_fast','fade','glow_warm','ripple','dim','sparkle'];
   document.body.className = valid.includes(moodClass) ? moodClass : 'glow_soft';
 }
 
-// ── Auto-resize textarea ──
 function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 140) + 'px';
 }
 
-// ── Enter to send ──
 function handleEnter(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -731,7 +732,7 @@ function handleEnter(e) {
   }
 }
 
-// ── Sidebar state ──
+// ── Sidebar & Chat Management ──
 async function fetchChats() {
   try {
     const res = await fetch('/api/chats');
@@ -741,12 +742,48 @@ async function fetchChats() {
     chats.forEach(chat => {
       const li = document.createElement('li');
       li.className = 'chat-item' + (chat.id === currentChatId ? ' active' : '');
-      li.textContent = chat.title;
       li.dataset.chatId = chat.id;
-      li.onclick = () => loadChat(chat.id);
+      
+      li.innerHTML = `
+        <span class="chat-item-title">${chat.title}</span>
+        <div class="chat-item-actions">
+          <button class="action-btn" title="Rename" onclick="renameChat(event, '${chat.id}', '${chat.title}')">✏️</button>
+          <button class="action-btn" title="Delete" onclick="deleteChat(event, '${chat.id}')">🗑️</button>
+        </div>
+      `;
+      li.onclick = (e) => {
+        if (!e.target.closest('.chat-item-actions')) loadChat(chat.id);
+      };
       list.appendChild(li);
     });
   } catch(e) {}
+}
+
+async function renameChat(e, id, oldTitle) {
+  e.stopPropagation();
+  const newTitle = prompt("Enter new name for chat:", oldTitle);
+  if (!newTitle || newTitle === oldTitle) return;
+  await fetch(`/api/chats/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: newTitle })
+  });
+  if (id === currentChatId) {
+    currentChatTitle = newTitle;
+    document.getElementById('chatHeaderTitle').textContent = newTitle;
+  }
+  fetchChats();
+}
+
+async function deleteChat(e, id) {
+  e.stopPropagation();
+  if (!confirm("Are you sure you want to delete this chat?")) return;
+  await fetch(`/api/chats/${id}`, { method: 'DELETE' });
+  if (currentChatId === id) {
+    startNewChat();
+  } else {
+    fetchChats();
+  }
 }
 
 function updateSidebarActive() {
@@ -755,7 +792,6 @@ function updateSidebarActive() {
   });
 }
 
-// ── Show / hide chat mode ──
 function enterChatMode(title) {
   document.getElementById('homeView').classList.add('hidden');
   document.getElementById('chatView').classList.add('active');
@@ -769,20 +805,25 @@ function exitChatMode() {
   document.getElementById('chatHeader').classList.remove('visible');
 }
 
-// ── New chat ──
-function startNewChat() {
-  currentChatId = null;
-  currentChatTitle = '';
-  chatHistoryCache = [];
+async function startNewChat() {
   setMood('glow_soft');
   exitChatMode();
   document.getElementById('chatInner').innerHTML = '';
   document.getElementById('userInput').value = '';
   autoResize(document.getElementById('userInput'));
-  updateSidebarActive();
+  
+  // Immediately create empty chat on backend
+  try {
+    const res = await fetch('/api/chats', { method: 'POST' });
+    const newChat = await res.json();
+    currentChatId = newChat.id;
+    currentChatTitle = newChat.title;
+    chatHistoryCache = [];
+    await fetchChats();
+    updateSidebarActive();
+  } catch(e) {}
 }
 
-// ── Load existing chat ──
 async function loadChat(chatId) {
   currentChatId = chatId;
   const res = await fetch(`/api/chats/${chatId}`);
@@ -794,10 +835,8 @@ async function loadChat(chatId) {
   updateSidebarActive();
 }
 
-// ── Format text ──
 function formatVesperHTML(rawText, label) {
   let html = rawText.replace(/\[~[a-z_]+~\]/g, '');
-  // Using "Thought process" instead of "Vesper's thoughts" so it sounds less like an active state
   html = html.replace(/<think>([\s\S]*?)<\/think>/gi,
     `<details class="vesper-thoughts"><summary>${label || "Thought process"}</summary><div class="thought-inner">$1</div></details>`);
   if (html.includes('<think>') && !html.includes('</think>')) {
@@ -807,7 +846,6 @@ function formatVesperHTML(rawText, label) {
   return html.trim();
 }
 
-// ── Render full chat ──
 function renderChatView() {
   const inner = document.getElementById('chatInner');
   inner.innerHTML = '';
@@ -822,7 +860,6 @@ function renderChatView() {
   cv.scrollTop = cv.scrollHeight;
 }
 
-// ── Append one message ──
 function appendMessageUI(role, rawText, index, thinkLabel) {
   const inner = document.getElementById('chatInner');
   const row = document.createElement('div');
@@ -844,27 +881,35 @@ function appendMessageUI(role, rawText, index, thinkLabel) {
   bubble.innerHTML = formatVesperHTML(rawText, thinkLabel);
   container.appendChild(bubble);
 
+  const actionsRow = document.createElement('div');
+  actionsRow.className = 'msg-actions';
+
   if (role === 'user') {
     const editBtn = document.createElement('button');
-    editBtn.className = 'edit-btn';
-    editBtn.innerHTML = '✎ Edit';
+    editBtn.className = 'msg-btn'; editBtn.innerHTML = '✎ Edit';
     editBtn.onclick = () => enableEditMode(index, rawText, container);
-    container.appendChild(editBtn);
+    actionsRow.appendChild(editBtn);
+  } else if (role === 'assistant' && index === chatHistoryCache.length - 1) {
+    const regenBtn = document.createElement('button');
+    regenBtn.className = 'msg-btn'; regenBtn.innerHTML = '↻ Regenerate';
+    regenBtn.onclick = () => regenerateLast();
+    actionsRow.appendChild(regenBtn);
   }
+  
+  if (actionsRow.childNodes.length > 0) container.appendChild(actionsRow);
 
   row.appendChild(container);
   inner.appendChild(row);
   return bubble;
 }
 
-// ── Edit mode ──
 function enableEditMode(index, text, container) {
   container.innerHTML = `
     <div class="edit-input-box">
       <textarea id="edit-area-${index}">${text}</textarea>
       <div class="edit-actions">
         <button class="btn-cancel" onclick="renderChatView()">Cancel</button>
-        <button class="btn-save" onclick="saveEdit(${index})">Save & Submit</button>
+        <button class="btn-save" onclick="saveEdit(${index})">Save</button>
       </div>
     </div>`;
 }
@@ -877,7 +922,28 @@ async function saveEdit(index) {
   await performChatRequest(newText, index);
 }
 
-// ── Submit ──
+async function regenerateLast() {
+  if (isTyping || chatHistoryCache.length < 2) return;
+  let lastUserIdx = -1;
+  for (let i = chatHistoryCache.length - 1; i >= 0; i--) {
+    if (chatHistoryCache[i].role === 'user') {
+      lastUserIdx = i; break;
+    }
+  }
+  if (lastUserIdx === -1) return;
+  
+  const userMsg = chatHistoryCache[lastUserIdx].content;
+  chatHistoryCache = chatHistoryCache.slice(0, lastUserIdx);
+  renderChatView();
+  await performChatRequest(userMsg, lastUserIdx);
+}
+
+function stopGeneration() {
+  if (abortController) {
+    abortController.abort();
+  }
+}
+
 async function submitMessage() {
   const input = document.getElementById('userInput');
   const text = input.value.trim();
@@ -887,15 +953,14 @@ async function submitMessage() {
   await performChatRequest(text, null);
 }
 
-// ── Core request ──
 async function performChatRequest(text, editIndex) {
   if (isTyping) return;
   isTyping = true;
-  document.getElementById('sendBtn').disabled = true;
+  document.getElementById('sendBtn').style.display = 'none';
+  document.getElementById('stopBtn').style.display = 'flex';
 
-  // Switch to chat mode if not already
   if (!document.getElementById('chatView').classList.contains('active')) {
-    enterChatMode(text.slice(0, 40) + (text.length > 40 ? '…' : ''));
+    enterChatMode(text.slice(0, 30) + (text.length > 30 ? '…' : ''));
   }
 
   const userIndex = chatHistoryCache.length;
@@ -905,7 +970,6 @@ async function performChatRequest(text, editIndex) {
   const chatView = document.getElementById('chatView');
   const inner = document.getElementById('chatInner');
 
-  // Assistant placeholder row
   const row = document.createElement('div');
   row.className = 'message-row assistant';
   const av = document.createElement('div');
@@ -923,8 +987,6 @@ async function performChatRequest(text, editIndex) {
   chatView.scrollTop = chatView.scrollHeight;
 
   setMood('ripple');
-
-  // Cycle thinking phrases ONLY while streaming
   thinkIdx = 0;
   let isCycling = true;
   thinkInterval = setInterval(() => {
@@ -936,26 +998,20 @@ async function performChatRequest(text, editIndex) {
 
   let fullResponseText = '';
   const tagRegex = /\[~([a-z_]+)~\]/g;
+  
+  abortController = new AbortController();
 
   try {
-    // Snapshot existing chat IDs before the request so we can detect the new one
-    let existingChatIds = new Set();
-    try {
-      const snap = await fetch('/api/chats');
-      const snapChats = await snap.json();
-      snapChats.forEach(c => existingChatIds.add(c.id));
-    } catch(e) {}
-
     const payload = { chat_id: currentChatId, message: text };
     if (editIndex !== null) payload.edit_index = editIndex;
 
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: abortController.signal
     });
 
-    // Grab chat_id from response headers if new
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
@@ -986,50 +1042,35 @@ async function performChatRequest(text, editIndex) {
       }
     }
 
-    chatHistoryCache.push({ role: 'assistant', content: fullResponseText });
-
-    // Refresh sidebar — find new chat if this was a fresh conversation
-    await fetchChats();
-    if (!currentChatId) {
-      try {
-        const res2 = await fetch('/api/chats');
-        const allChats = await res2.json();
-        const newChat = allChats.find(c => !existingChatIds.has(c.id));
-        if (newChat) {
-          currentChatId = newChat.id;
-          currentChatTitle = newChat.title;
-          document.getElementById('chatHeaderTitle').textContent = currentChatTitle;
-        } else if (allChats.length > 0) {
-          // fallback: take the first (most recent)
-          currentChatId = allChats[0].id;
-          currentChatTitle = allChats[0].title;
-          document.getElementById('chatHeaderTitle').textContent = currentChatTitle;
-        }
-        updateSidebarActive();
-        await fetchChats(); // re-render sidebar with active highlight
-      } catch(e) {}
-    }
-
   } catch(err) {
-    console.error(err);
-    bubble.innerHTML += `<div style="color:#ef4444;margin-top:10px;font-size:0.85em">⚠️ Connection interrupted</div>`;
-    setMood('fade');
+    if (err.name === 'AbortError') {
+      bubble.innerHTML += `\n\n<div style="color:#ef4444;margin-top:10px;font-size:0.85em">⚠️ Generation stopped</div>`;
+      setMood('fade');
+    } else {
+      console.error(err);
+      bubble.innerHTML += `<div style="color:#ef4444;margin-top:10px;font-size:0.85em">⚠️ Connection interrupted</div>`;
+      setMood('fade');
+    }
   } finally {
     isCycling = false;
     clearInterval(thinkInterval);
-    bubble.innerHTML = formatVesperHTML(fullResponseText || '…', "Thought process");
     
-    // Ensure we don't get stuck in the pulsing `ripple` state if the model didn't output a mood tag
+    // Clean up response layout and add regenerate button
+    chatHistoryCache.push({ role: 'assistant', content: fullResponseText });
+    renderChatView(); 
+
     let finalMood = null;
     tagRegex.lastIndex = 0;
     let match;
-    while ((match = tagRegex.exec(fullResponseText)) !== null) {
-      finalMood = match[1];
-    }
+    while ((match = tagRegex.exec(fullResponseText)) !== null) finalMood = match[1];
     setMood(finalMood || 'glow_soft');
 
     isTyping = false;
-    document.getElementById('sendBtn').disabled = false;
+    document.getElementById('sendBtn').style.display = 'flex';
+    document.getElementById('stopBtn').style.display = 'none';
+    
+    await fetchChats();
+    document.getElementById('chatHeaderTitle').textContent = currentChatTitle;
   }
 }
 
