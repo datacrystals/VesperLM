@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vesper Chat</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    :root {
+      --bg-main: #242424;
+      --bg-sidebar: #1e1e1e;
+      --text-main: #e5e5e5;
+      --text-muted: #8e8e8e;
+      --border-color: #3e3e3e;
+      --input-bg: #2f2f2f;
+      --user-bubble: #383838;
+      --vesper-base: #7dd3fc;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-main); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
+
+    .top-bar { position: absolute; top: 15px; right: 20px; z-index: 100; }
+
+    aside { width: 260px; background-color: var(--bg-sidebar); display: flex; flex-direction: column; border-right: 1px solid var(--border-color); padding: 15px 10px; }
+    .new-chat-btn { display: flex; align-items: center; gap: 10px; padding: 10px 15px; background: transparent; border: 1px solid transparent; color: var(--text-main); border-radius: 8px; cursor: pointer; font-size: 0.9em; text-align: left; }
+    .new-chat-btn:hover { background: rgba(255, 255, 255, 0.05); }
+    .sidebar-section-title { font-size: 0.75em; color: var(--text-muted); margin: 20px 0 10px 15px; }
+    .chat-list { flex: 1; overflow-y: auto; list-style: none; }
+    .chat-item { padding: 10px 15px; margin-bottom: 2px; border-radius: 6px; cursor: pointer; font-size: 0.85em; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chat-item:hover { background-color: rgba(255, 255, 255, 0.05); color: var(--text-main); }
+
+    main { flex: 1; display: flex; flex-direction: column; position: relative; align-items: center; }
+
+    .home-view { position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; transition: opacity 0.4s ease; width: 100%; }
+    .home-view.hidden { opacity: 0; pointer-events: none; }
+    .greeting { font-family: ui-serif, Georgia, serif; font-size: 2.2em; color: #e5e5d8; margin-bottom: 30px; font-weight: 400; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+
+    .chat-view { width: 100%; max-width: 800px; flex: 1; padding: 40px 20px 120px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 30px; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
+    .chat-view.active { opacity: 1; pointer-events: auto; }
+
+    .message-container { display: flex; flex-direction: column; gap: 5px; max-width: 85%; }
+    .message-row { display: flex; gap: 20px; max-width: 100%; align-items: flex-start; }
+    .message-row.user { justify-content: flex-end; }
+    
+    .message-bubble { padding: 12px 18px; line-height: 1.6; font-size: 0.95em; border-radius: 12px; position: relative; }
+    .message-row.user .message-bubble { background-color: var(--user-bubble); }
+    .message-row.assistant .message-bubble { background-color: transparent; padding: 12px 0; }
+    /* Visual cue when Vesper is thinking quietly */
+    .thinking-status { font-size: 0.85em; color: var(--text-muted); font-style: italic; margin-bottom: 5px; animation: pulse 1.5s infinite; }
+
+    @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+    .edit-btn { opacity: 0; transition: opacity 0.2s; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.8em; align-self: flex-end; padding: 2px 5px; }
+    .message-row.user:hover .edit-btn { opacity: 1; }
+    .edit-btn:hover { color: var(--text-main); }
+
+    .edit-input-box { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+    .edit-input-box textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 8px; padding: 10px; font-family: inherit; resize: vertical; min-height: 60px; outline: none; }
+    .edit-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .btn-cancel, .btn-save { padding: 6px 12px; border-radius: 6px; cursor: pointer; border: none; font-size: 0.85em; font-weight: bold;}
+    .btn-cancel { background: transparent; color: var(--text-muted); border: 1px solid var(--border-color); }
+    .btn-save { background: var(--vesper-base); color: #000; transition: background 1.5s ease; }
+
+    .input-container { position: absolute; width: 100%; max-width: 700px; transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); z-index: 20; }
+    .input-container.home-state { top: 55%; left: 50%; transform: translate(-50%, 0); }
+    .input-container.chat-state { top: 100%; left: 50%; transform: translate(-50%, -100px); }
+
+    .input-box { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 15px 20px; display: flex; gap: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+    .input-box input { flex: 1; background: transparent; border: none; color: var(--text-main); font-size: 1em; outline: none; }
+    .send-btn { background: var(--text-main); color: var(--bg-main); border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-weight: bold; }
+
+    /* --- SUPER CUTE VESPER SVG & SMOOTH MOODS --- */
+    /* Upgraded transition for ultra-smooth color fading */
+    .vesper-avatar { width: 35px; height: 35px; flex-shrink: 0; transition: all 1.5s cubic-bezier(0.4, 0, 0.2, 1); display: flex; align-items: flex-start; }
+    .greeting .vesper-avatar { width: 140px; height: 140px; }
+    .v-body { fill: var(--vesper-base); transition: fill 1.5s cubic-bezier(0.4, 0, 0.2, 1); }
+    .v-tentacle { stroke: var(--vesper-base); fill: none; transition: stroke 1.5s cubic-bezier(0.4, 0, 0.2, 1); }
+
+    @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-6px); } }
+    .vesper-svg { animation: float 4s ease-in-out infinite; overflow: visible; width: 100%; height: 100%; }
+
+    /* Mood Tags - Values smoothed out */
+    .glow_soft { --vesper-base: #7dd3fc; filter: drop-shadow(0 0 10px rgba(125, 211, 252, 0.4)); }
+    .glow_bright { --vesper-base: #fde047; filter: drop-shadow(0 0 20px rgba(253, 224, 71, 0.6)); }
+    .glow_green { --vesper-base: #4ade80; filter: drop-shadow(0 0 15px rgba(74, 222, 128, 0.5)); }
+    .pulse_fast { --vesper-base: #fb923c; filter: drop-shadow(0 0 10px rgba(251, 146, 60, 0.6)); }
+    .fade { --vesper-base: #64748b; opacity: 0.7; filter: none; }
+    .glow_warm { --vesper-base: #f472b6; filter: drop-shadow(0 0 15px rgba(244, 114, 182, 0.5)); }
+    .ripple { --vesper-base: #c084fc; filter: drop-shadow(0 0 12px rgba(192, 132, 252, 0.4)); }
+    .dim { --vesper-base: #475569; opacity: 0.9; transform: scale(0.95); }
+    .sparkle { --vesper-base: #ffffff; filter: drop-shadow(0 0 20px #fef08a); }
+    .flicker { --vesper-base: #a78bfa; animation: flickerAnim 0.5s infinite; }
+    @keyframes flickerAnim { 0%, 100% { opacity: 1; filter: drop-shadow(0 0 8px var(--vesper-base)); } 50% { opacity: 0.7; filter: none; } }
+  </style>
+</head>
+<body>
+
+  <div class="top-bar">
+    <div id="g_id_onload" data-client_id="YOUR_GOOGLE_CLIENT_ID_HERE.apps.googleusercontent.com" data-callback="handleCredentialResponse" data-auto_prompt="false"></div>
+    <div class="g_id_signin" data-type="standard" data-theme="filled_black"></div>
+  </div>
+
+  <aside>
+    <button class="new-chat-btn" onclick="startNewChat()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      New chat
+    </button>
+    <div class="sidebar-section-title">Recents</div>
+    <ul class="chat-list" id="chatList"></ul>
+  </aside>
+
+  <main>
+    <div class="home-view" id="homeView">
+      <div class="greeting">
+        <div id="bigVesper" class="vesper-avatar glow_soft"></div>
+        <span id="greetingText">Good evening, Friend</span>
+      </div>
+    </div>
+    <div class="chat-view" id="chatView"></div>
+    <div class="input-container home-state" id="inputContainer">
+      <div class="input-box">
+        <input type="text" id="userInput" placeholder="Talk to Vesper..." onkeypress="handleEnter(event)" autocomplete="off" />
+        <button class="send-btn" onclick="submitMessage()">Send</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // CUTER Vesper SVG! Blushes, sparkles, mouth, and 5 organic tendrils
+    const vesperSVG = `
+      <svg class="vesper-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="45" r="35" fill="var(--vesper-base)" opacity="0.15" filter="blur(4px)" />
+        
+        <path class="v-body" d="M 15 50 C 15 20, 30 10, 50 10 C 70 10, 85 20, 85 50 Z" />
+        <path class="v-body" d="M 15 50 Q 25 60, 35 50 Q 45 60, 50 50 Q 55 60, 65 50 Q 75 60, 85 50 Z" />
+        
+        <ellipse cx="30" cy="42" rx="6" ry="3" fill="#f472b6" opacity="0.6" />
+        <ellipse cx="70" cy="42" rx="6" ry="3" fill="#f472b6" opacity="0.6" />
+        
+        <circle cx="35" cy="38" r="5" fill="#0f172a" />
+        <circle cx="65" cy="38" r="5" fill="#0f172a" />
+        <circle cx="33" cy="36" r="1.5" fill="#ffffff" />
+        <circle cx="63" cy="36" r="1.5" fill="#ffffff" />
+        
+        <path d="M 46 43 Q 50 47, 54 43" stroke="#0f172a" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+        <g stroke-linecap="round">
+          <path class="v-tentacle" stroke-width="4" opacity="0.8" d="M 25 52 C 15 70, 35 85, 20 100">
+            <animate attributeName="d" dur="4s" repeatCount="indefinite" values="M 25 52 C 15 70, 35 85, 20 100; M 25 52 C 35 70, 15 85, 20 100; M 25 52 C 15 70, 35 85, 20 100" />
+          </path>
+          <path class="v-tentacle" stroke-width="2.5" opacity="0.6" d="M 38 52 C 28 75, 48 90, 35 110">
+            <animate attributeName="d" dur="3.5s" repeatCount="indefinite" values="M 38 52 C 28 75, 48 90, 35 110; M 38 52 C 48 75, 28 90, 35 110; M 38 52 C 28 75, 48 90, 35 110" />
+          </path>
+          <path class="v-tentacle" stroke-width="5" opacity="0.9" d="M 50 52 C 40 70, 60 85, 50 105">
+            <animate attributeName="d" dur="4.5s" repeatCount="indefinite" values="M 50 52 C 40 70, 60 85, 50 105; M 50 52 C 60 70, 40 85, 50 105; M 50 52 C 40 70, 60 85, 50 105" />
+          </path>
+          <path class="v-tentacle" stroke-width="2.5" opacity="0.6" d="M 62 52 C 52 75, 72 90, 65 110">
+            <animate attributeName="d" dur="3.8s" repeatCount="indefinite" values="M 62 52 C 52 75, 72 90, 65 110; M 62 52 C 72 75, 52 90, 65 110; M 62 52 C 52 75, 72 90, 65 110" />
+          </path>
+          <path class="v-tentacle" stroke-width="4" opacity="0.8" d="M 75 52 C 65 70, 85 85, 80 100">
+            <animate attributeName="d" dur="4.2s" repeatCount="indefinite" values="M 75 52 C 65 70, 85 85, 80 100; M 75 52 C 85 70, 65 85, 80 100; M 75 52 C 65 70, 85 85, 80 100" />
+          </path>
+        </g>
+      </svg>
+    `;
+    document.getElementById('bigVesper').innerHTML = vesperSVG;
+
+    let currentChatId = null;
+    let isTyping = false;
+    let userName = "Friend";
+    let chatHistoryCache = []; 
+
+    function updateGreeting() {
+      const hour = new Date().getHours();
+      let timeOfDay = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+      document.getElementById('greetingText').innerText = `Good ${timeOfDay}, ${userName}`;
+    }
+    updateGreeting();
+
+    function handleCredentialResponse(response) {
+      const responsePayload = JSON.parse(atob(response.credential.split('.')[1]));
+      userName = responsePayload.given_name || responsePayload.name;
+      updateGreeting();
+      document.querySelector('.g_id_signin').style.display = 'none';
+    }
+
+    async function fetchChats() {
+      const res = await fetch('/api/chats');
+      const chats = await res.json();
+      const list = document.getElementById('chatList');
+      list.innerHTML = '';
+      chats.forEach(chat => {
+        const li = document.createElement('li');
+        li.className = 'chat-item';
+        li.textContent = chat.title;
+        li.onclick = () => loadChat(chat.id);
+        list.appendChild(li);
+      });
+    }
+
+    function startNewChat() {
+      currentChatId = null;
+      chatHistoryCache = [];
+      document.getElementById('homeView').classList.remove('hidden');
+      document.getElementById('chatView').classList.remove('active');
+      document.getElementById('chatView').innerHTML = '';
+      document.getElementById('inputContainer').className = 'input-container home-state';
+      document.getElementById('userInput').focus();
+    }
+
+    async function loadChat(chatId) {
+      currentChatId = chatId;
+      const res = await fetch(`/api/chats/${chatId}`);
+      const chat = await res.json();
+      chatHistoryCache = chat.messages || [];
+      
+      document.getElementById('homeView').classList.add('hidden');
+      document.getElementById('chatView').classList.add('active');
+      document.getElementById('inputContainer').className = 'input-container chat-state';
+      
+      renderChatView();
+    }
+
+    // --- THE MAGIC TEXT CLEANER ---
+    function cleanVesperText(rawText) {
+      // 1. Remove Vesper's mood tags [~tag~]
+      let cleaned = rawText.replace(/\[~[a-z_]+~\]/g, '');
+      
+      // 2. Hide everything inside <think> tags. 
+      // This regex matches <think> and everything after it until a closing </think> OR the end of the string.
+      // This perfectly hides the chain-of-thought process LIVE while it is streaming!
+      cleaned = cleaned.replace(/<think>[\s\S]*?(<\/think>|$)/gi, '');
+      
+      return cleaned.trim();
+    }
+
+    function renderChatView() {
+      const chatView = document.getElementById('chatView');
+      chatView.innerHTML = '';
+      chatHistoryCache.forEach((msg, index) => {
+        const moodMatch = [...msg.content.matchAll(/\[~([a-z_]+)~\]/g)].pop();
+        const mood = moodMatch ? moodMatch[1] : 'glow_soft';
+        appendMessageUI(msg.role, msg.content, mood, index);
+      });
+      chatView.scrollTop = chatView.scrollHeight;
+    }
+
+    function appendMessageUI(role, rawText, mood, index) {
+      const chatView = document.getElementById('chatView');
+      const row = document.createElement('div');
+      row.className = `message-row ${role}`;
+      row.id = `msg-row-${index}`;
+      
+      const container = document.createElement('div');
+      container.className = 'message-container';
+
+      if (role === 'assistant') {
+        const avatarDiv = document.createElement('div');
+        avatarDiv.className = `vesper-avatar ${mood}`;
+        avatarDiv.innerHTML = vesperSVG;
+        row.appendChild(avatarDiv);
+      }
+
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble';
+      bubble.textContent = cleanVesperText(rawText); 
+      container.appendChild(bubble);
+
+      if (role === 'user') {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'edit-btn';
+        editBtn.innerHTML = '✎ Edit';
+        editBtn.onclick = () => enableEditMode(index, rawText, container);
+        container.appendChild(editBtn);
+      }
+
+      row.appendChild(container);
+      chatView.appendChild(row);
+    }
+
+    function enableEditMode(index, text, container) {
+      container.innerHTML = `
+        <div class="edit-input-box">
+          <textarea id="edit-area-${index}">${text}</textarea>
+          <div class="edit-actions">
+            <button class="btn-cancel" onclick="renderChatView()">Cancel</button>
+            <button class="btn-save" onclick="saveEdit(${index})">Save & Submit</button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function saveEdit(index) {
+      const newText = document.getElementById(`edit-area-${index}`).value.trim();
+      if(!newText) return;
+      chatHistoryCache = chatHistoryCache.slice(0, index);
+      renderChatView(); 
+      await performChatRequest(newText, index);
+    }
+
+    function handleEnter(e) { if (e.key === 'Enter') submitMessage(); }
+
+    async function submitMessage() {
+      const input = document.getElementById('userInput');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      await performChatRequest(text, null);
+    }
+
+    async function performChatRequest(text, editIndex) {
+      if (isTyping) return;
+      isTyping = true;
+
+      document.getElementById('homeView').classList.add('hidden');
+      document.getElementById('chatView').classList.add('active');
+      document.getElementById('inputContainer').className = 'input-container chat-state';
+
+      const userIndex = chatHistoryCache.length;
+      appendMessageUI('user', text, null, userIndex);
+      chatHistoryCache.push({role: 'user', content: text});
+      
+      const chatView = document.getElementById('chatView');
+      const row = document.createElement('div');
+      row.className = 'message-row assistant';
+      
+      const avatarDiv = document.createElement('div');
+      avatarDiv.className = 'vesper-avatar ripple'; 
+      avatarDiv.innerHTML = vesperSVG;
+      
+      const container = document.createElement('div');
+      container.className = 'message-container';
+      
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble';
+      bubble.innerHTML = '<div class="thinking-status">Vesper is thinking...</div>'; 
+
+      container.appendChild(bubble);
+      row.appendChild(avatarDiv);
+      row.appendChild(container);
+      chatView.appendChild(row);
+      chatView.scrollTop = chatView.scrollHeight;
+
+      try {
+        const payload = { chat_id: currentChatId, message: text };
+        if (editIndex !== null) payload.edit_index = editIndex;
+
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullResponseText = "";
+
+        const tagRegex = /\[~([a-z_]+)~\]/g;
+        let isReasoning = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n').filter(line => line.trim() !== '');
+          
+          for (const line of lines) {
+            if (line.includes('[DONE]')) break;
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.replace('data: ', ''));
+                if (data.choices[0].delta.content) {
+                  fullResponseText += data.choices[0].delta.content;
+                  
+                  // Check if we are currently inside a <think> block
+                  if (fullResponseText.includes('<think>') && !fullResponseText.includes('</think>')) {
+                    isReasoning = true;
+                    bubble.innerHTML = '<div class="thinking-status">Vesper is figuring it out...</div>';
+                    avatarDiv.className = `vesper-avatar ripple`;
+                  } else {
+                    isReasoning = false;
+                    
+                    // Parse Mood
+                    let match;
+                    let currentMoodClass = 'glow_soft'; 
+                    tagRegex.lastIndex = 0;
+                    while ((match = tagRegex.exec(fullResponseText)) !== null) {
+                      currentMoodClass = match[1];
+                    }
+                    avatarDiv.className = `vesper-avatar ${currentMoodClass}`;
+                    
+                    // Clean text and display
+                    bubble.textContent = cleanVesperText(fullResponseText);
+                  }
+                  
+                  chatView.scrollTop = chatView.scrollHeight;
+                }
+              } catch (e) { }
+            }
+          }
+        }
+        
+        chatHistoryCache.push({role: 'assistant', content: fullResponseText});
+        
+        if (!currentChatId) {
+            await fetchChats();
+            const list = document.getElementById('chatList');
+            if(list.firstChild) currentChatId = list.firstChild.onclick.toString().match(/'([^']+)'/)[1] || null;
+        }
+        await fetchChats(); 
+
+      } catch (error) {
+        bubble.textContent = "Connection to vLLM server lost! Check console.";
+        avatarDiv.className = "vesper-avatar fade";
+      }
+      isTyping = false;
+    }
+
+    fetchChats();
+  </script>
+</body>
+</html>
