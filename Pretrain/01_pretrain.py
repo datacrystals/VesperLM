@@ -71,7 +71,7 @@ MODEL_CONFIGS = {
         "total_steps": 30000,
         
         # Evaluation
-        "eval_interval": 500,
+        "eval_interval": 100,
         "val_eval_steps": 50
     },
     "big": {
