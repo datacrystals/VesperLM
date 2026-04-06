@@ -332,7 +332,6 @@
       pointer-events: auto;
       transition: border-color 0.3s;
     }
-    .input-box:focus-within { border-color: rgba(125,211,252,0.25); }
     .input-box textarea {
       flex: 1;
       background: transparent;
@@ -344,6 +343,8 @@
       max-height: 140px;
       overflow-y: auto;
       height: 24px;
+      outline: none;
+      resize: none; /* Hide manual resize handle */
     }
     .send-btn {
       background: var(--vesper-base);
@@ -461,7 +462,6 @@
 </aside>
 
 <main>
-  <!-- CHAT HEADER (shown when in a chat) -->
   <div class="chat-header" id="chatHeader">
     <span class="chat-header-title" id="chatHeaderTitle">Chat with Vesper</span>
     <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
@@ -470,7 +470,6 @@
     </div>
   </div>
 
-  <!-- HOME -->
   <div class="home-view" id="homeView">
     <div style="position:absolute;top:16px;right:18px;z-index:20">
       <div class="g_id_signin" data-type="standard" data-theme="filled_black" id="homeSignin"></div>
@@ -481,12 +480,10 @@
     </div>
   </div>
 
-  <!-- CHAT -->
   <div class="chat-view" id="chatView">
     <div class="chat-inner" id="chatInner"></div>
   </div>
 
-  <!-- INPUT (always at bottom, always same size) -->
   <div class="input-wrapper">
     <div class="input-box">
       <textarea id="userInput" placeholder="Talk to Vesper..." rows="1" onkeydown="handleEnter(event)" oninput="autoResize(this)"></textarea>
@@ -580,48 +577,32 @@ function buildVesperSVG() {
   svg.setAttribute('xmlns', ns);
 
   svg.innerHTML = `
-    <!-- Antenna -->
     <g class="v-antenna">
       <line x1="50" y1="10" x2="50" y2="4" stroke="var(--vesper-base)" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
       <circle cx="50" cy="3" r="2" fill="var(--vesper-base)" opacity="0.85"/>
     </g>
-    <!-- Bell (chubbier, rounder) -->
     <path class="v-body" d="M 14 52 C 12 22, 28 7, 50 7 C 72 7, 88 22, 86 52 Z"/>
-    <!-- Bell underskirt with gentle scallop -->
     <path class="v-body" d="M 14 52 Q 23 65, 33 52 Q 41 66, 50 52 Q 59 66, 67 52 Q 77 65, 86 52 Z"/>
-    <!-- Inner glow -->
     <path fill="rgba(255,255,255,0.07)" d="M 22 52 C 20 30, 32 14, 50 12 C 68 14, 80 30, 78 52 Z"/>
-    <!-- Highlight sheen (bigger, rounder) -->
     <ellipse fill="rgba(255,255,255,0.22)" cx="36" cy="20" rx="9" ry="6" transform="rotate(-20 36 20)"/>
     <ellipse fill="rgba(255,255,255,0.10)" cx="58" cy="15" rx="5" ry="3.5" transform="rotate(-10 58 15)"/>
-    <!-- Big blushy cheeks -->
-    <ellipse class="v-cheek" cx="25" cy="46" rx="9" ry="5"/>
-    <ellipse class="v-cheek" cx="75" cy="46" rx="9" ry="5"/>
-    <!-- Eyes with blink group -->
+    <ellipse class="v-cheek" cx="24" cy="45" rx="8" ry="4.5"/>
+    <ellipse class="v-cheek" cx="76" cy="45" rx="8" ry="4.5"/>
     <g class="v-eye-group">
-      <!-- Eyelash curves -->
-      <path d="M 31 33 Q 37 30, 43 33" stroke="rgba(10,12,20,0.5)" stroke-width="1.2" fill="none" stroke-linecap="round"/>
-      <path d="M 57 33 Q 63 30, 69 33" stroke="rgba(10,12,20,0.5)" stroke-width="1.2" fill="none" stroke-linecap="round"/>
-      <!-- Eyeballs -->
+      <path d="M 32 29 Q 37 26, 42 29" stroke="rgba(10,12,20,0.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      <path d="M 58 29 Q 63 26, 68 29" stroke="rgba(10,12,20,0.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
       <circle class="v-eye" cx="37" cy="38" r="7"/>
       <circle class="v-eye" cx="63" cy="38" r="7"/>
-      <!-- Iris shimmer -->
       <circle fill="rgba(255,255,255,0.12)" cx="37" cy="38" r="5"/>
       <circle fill="rgba(255,255,255,0.12)" cx="63" cy="38" r="5"/>
-      <!-- Pupils -->
       <circle class="v-eye" cx="37" cy="38.5" r="4"/>
       <circle class="v-eye" cx="63" cy="38.5" r="4"/>
-      <!-- Sparkle highlights (two per eye) -->
       <circle class="v-pupil" cx="34.5" cy="35.5" r="2.2"/>
       <circle class="v-pupil" cx="60.5" cy="35.5" r="2.2"/>
       <circle fill="rgba(255,255,255,0.6)" cx="39" cy="40.5" r="1.1"/>
       <circle fill="rgba(255,255,255,0.6)" cx="65" cy="40.5" r="1.1"/>
     </g>
-    <!-- Cute small smile -->
-    <path class="v-mouth" d="M 43 47 Q 50 53, 57 47" stroke-width="2.4"/>
-    <!-- Tiny heart -->
-    <path fill="#f472b6" opacity="0.8" d="M 50 56 C 50 56, 47 53, 45 54.5 C 43 56, 44 58.5, 50 61 C 56 58.5, 57 56, 55 54.5 C 53 53, 50 56, 50 56 Z"/>
-    <!-- Tentacles (paths animated by JS) -->
+    <path class="v-mouth" d="M 43 46 Q 50 52, 57 46" stroke-width="2.2"/>
     <g>
       <path class="v-tentacle" stroke-width="2.2" opacity="0.70" d=""/>
       <path class="v-tentacle" stroke-width="1.6" opacity="0.45" d=""/>
@@ -645,11 +626,11 @@ let chatHistoryCache = [];
 let currentChatTitle = '';
 let thinkInterval = null;
 const thinkingPhrases = [
-  "🪼 Vesper is thinking…",
-  "🌊 Vesper is searching the currents…",
-  "✨ Vesper is floating through thoughts…",
-  "💭 Vesper is pondering…",
-  "🌀 Vesper is connecting the dots…",
+  "Vesper is thinking…",
+  "Vesper is searching the currents…",
+  "Vesper is floating through thoughts…",
+  "Vesper is pondering…",
+  "Vesper is connecting the dots…"
 ];
 let thinkIdx = 0;
 
@@ -659,15 +640,18 @@ bigVesperEl.appendChild(buildVesperSVG());
 
 // ── Favicon (static, hardcoded blue, no CSS vars) ──
 (function() {
-  const faviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 110">
+  // viewBox updated from 0 0 100 110 to 10 0 80 90 to drastically zoom in on the icon
+  const faviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 0 80 90">
     <circle cx="50" cy="3" r="2.5" fill="#7dd3fc" opacity="0.9"/>
     <line x1="50" y1="10" x2="50" y2="5.5" stroke="#7dd3fc" stroke-width="1.8" stroke-linecap="round"/>
     <path fill="#7dd3fc" d="M 14 52 C 12 22, 28 7, 50 7 C 72 7, 88 22, 86 52 Z"/>
     <path fill="#7dd3fc" d="M 14 52 Q 23 65, 33 52 Q 41 66, 50 52 Q 59 66, 67 52 Q 77 65, 86 52 Z"/>
     <path fill="rgba(255,255,255,0.06)" d="M 22 52 C 20 30, 32 14, 50 12 C 68 14, 80 30, 78 52 Z"/>
     <ellipse fill="rgba(255,255,255,0.25)" cx="36" cy="20" rx="9" ry="6" transform="rotate(-20 36 20)"/>
-    <ellipse fill="#f472b6" opacity="0.65" cx="25" cy="46" rx="9" ry="5"/>
-    <ellipse fill="#f472b6" opacity="0.65" cx="75" cy="46" rx="9" ry="5"/>
+    <ellipse fill="#f472b6" opacity="0.65" cx="24" cy="45" rx="8" ry="4.5"/>
+    <ellipse fill="#f472b6" opacity="0.65" cx="76" cy="45" rx="8" ry="4.5"/>
+    <path d="M 32 29 Q 37 26, 42 29" stroke="rgba(10,12,20,0.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <path d="M 58 29 Q 63 26, 68 29" stroke="rgba(10,12,20,0.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
     <circle fill="#0a0c14" cx="37" cy="38" r="7"/>
     <circle fill="#0a0c14" cx="63" cy="38" r="7"/>
     <circle fill="rgba(125,211,252,0.15)" cx="37" cy="38" r="5"/>
@@ -678,8 +662,7 @@ bigVesperEl.appendChild(buildVesperSVG());
     <circle fill="#ffffff" cx="60.5" cy="35.5" r="2.2"/>
     <circle fill="rgba(255,255,255,0.6)" cx="39" cy="40.5" r="1.1"/>
     <circle fill="rgba(255,255,255,0.6)" cx="65" cy="40.5" r="1.1"/>
-    <path d="M 43 47 Q 50 53, 57 47" stroke="#0a0c14" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-    <path fill="#f472b6" opacity="0.85" d="M 50 56 C 50 56, 47 53, 45 54.5 C 43 56, 44 58.5, 50 61 C 56 58.5, 57 56, 55 54.5 C 53 53, 50 56, 50 56 Z"/>
+    <path d="M 43 46 Q 50 52, 57 46" stroke="#0a0c14" stroke-width="2.2" fill="none" stroke-linecap="round"/>
     <path d="M 33 80 C 28 68, 37 63, 33 75" stroke="#7dd3fc" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.7"/>
     <path d="M 42 85 C 36 70, 46 65, 41 80" stroke="#7dd3fc" stroke-width="1.6" fill="none" stroke-linecap="round" opacity="0.45"/>
     <path d="M 50 87 C 44 72, 56 72, 50 87" stroke="#7dd3fc" stroke-width="3.2" fill="none" stroke-linecap="round" opacity="0.88"/>
@@ -814,11 +797,12 @@ async function loadChat(chatId) {
 // ── Format text ──
 function formatVesperHTML(rawText, label) {
   let html = rawText.replace(/\[~[a-z_]+~\]/g, '');
+  // Using "Thought process" instead of "Vesper's thoughts" so it sounds less like an active state
   html = html.replace(/<think>([\s\S]*?)<\/think>/gi,
-    `<details class="vesper-thoughts"><summary>💭 ${label || "Vesper's thoughts"}</summary><div class="thought-inner">$1</div></details>`);
+    `<details class="vesper-thoughts"><summary>${label || "Thought process"}</summary><div class="thought-inner">$1</div></details>`);
   if (html.includes('<think>') && !html.includes('</think>')) {
     html = html.replace(/<think>([\s\S]*)$/gi,
-      `<details class="vesper-thoughts" open><summary>💭 ${label || "Vesper's thoughts"}</summary><div class="thought-inner">$1</div></details>`);
+      `<details class="vesper-thoughts" open><summary>${label || "Thought process"}</summary><div class="thought-inner">$1</div></details>`);
   }
   return html.trim();
 }
@@ -831,7 +815,7 @@ function renderChatView() {
   chatHistoryCache.forEach((msg, index) => {
     const moodMatch = [...msg.content.matchAll(/\[~([a-z_]+)~\]/g)].pop();
     if (moodMatch) lastMood = moodMatch[1];
-    appendMessageUI(msg.role, msg.content, index, "Vesper's thoughts");
+    appendMessageUI(msg.role, msg.content, index, "Thought process");
   });
   setMood(lastMood);
   const cv = document.getElementById('chatView');
@@ -1033,7 +1017,17 @@ async function performChatRequest(text, editIndex) {
   } finally {
     isCycling = false;
     clearInterval(thinkInterval);
-    bubble.innerHTML = formatVesperHTML(fullResponseText || '…', "Vesper's thoughts");
+    bubble.innerHTML = formatVesperHTML(fullResponseText || '…', "Thought process");
+    
+    // Ensure we don't get stuck in the pulsing `ripple` state if the model didn't output a mood tag
+    let finalMood = null;
+    tagRegex.lastIndex = 0;
+    let match;
+    while ((match = tagRegex.exec(fullResponseText)) !== null) {
+      finalMood = match[1];
+    }
+    setMood(finalMood || 'glow_soft');
+
     isTyping = false;
     document.getElementById('sendBtn').disabled = false;
   }
