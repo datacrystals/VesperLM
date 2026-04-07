@@ -45,7 +45,7 @@ elif command -v rocm-smi &> /dev/null; then
     cd bitsandbytes
 
     # Configure for HIP and explicitly target the MI50/MI60 architecture
-    cmake -DCOMPUTE_BACKEND=hip -DBNB_ROCM_ARCH="gfx906" -S .
+    cmake -DCOMPUTE_BACKEND=hip -DCMAKE_HIP_ARCHITECTURES="gfx906" -S .
     
     # Compile using all available CPU cores
     make -j$(nproc)

@@ -27,8 +27,9 @@ except ImportError:
 try:
     import bitsandbytes as bnb
     HAS_BNB = True
-    print("Using bitsandbytes 8-bit optimizer")
+    print("Detected bitsandbytes 8-bit optimizer is installed")
 except ImportError:
+    print("Did not detect bitsandbytes 8-bit optimizer installed, skipping and falling back to 32-bit optimizer")
     HAS_BNB = False
 
 import numpy as np
@@ -51,7 +52,8 @@ MODEL_CONFIGS = {
     "small_v2": {
         # Architecture
         "dim": 1024, "n_layers": 10, "n_heads": 8, "n_kv_heads": 2,
-        "hidden_dim": 1280, "num_experts": 8, "top_k": 2, "max_seq_len": 1024,
+        "hidden_dim": 1280, "num_experts": 8, "top_k": 2, "max_seq_len": 4096,
+        
         
         # Training & Batching
         "micro_batch_size": 1,
@@ -65,7 +67,7 @@ MODEL_CONFIGS = {
         "aux_weight": 0.01,
         
         # Scheduling
-        "seq_len_start": 1024,
+        "seq_len_start": 2048,
         "seq_len_warmup": 4000,
         "warmup_steps": 1000,
         "total_steps": 30000,
@@ -416,11 +418,13 @@ def train():
     if is_main:
         print_model_stats(model, model_config)
 
-    if IS_ROCM:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr, betas=(beta1, 0.95), weight_decay=0.1)
-    elif HAS_BNB:
+    # if IS_ROCM:
+        # optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr, betas=(beta1, 0.95), weight_decay=0.1)
+    if HAS_BNB:
+        print("Using 8-bit bitsandbytes AdamW optimizer")
         optimizer = bnb.optim.AdamW8bit(model.parameters(), lr=max_lr, betas=(beta1, 0.95), weight_decay=0.1)
     else:
+        print("Using torch AdamW optimizer")
         optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr, betas=(beta1, 0.95), weight_decay=0.1)
 
     scaler = GradScaler('cuda')

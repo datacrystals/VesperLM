@@ -199,26 +199,29 @@ class JesperLLM(nn.Module):
         total_aux_loss = 0.0
 
         for layer in self.layers:
-            # Wrap the layer execution in the checkpoint function
-            # use_reentrant=False is the modern standard for PyTorch checkpointing
-            def create_custom_forward(module_dict):
-                def custom_forward(x_in, freqs):
-                    attn_out = module_dict['attn'](module_dict['attn_norm'](x_in), freqs)
-                    x_out = x_in + attn_out
-                    ffn_out, aux = module_dict['ffn'](module_dict['ffn_norm'](x_out))
-                    return x_out + ffn_out, aux
-                return custom_forward
-
             if self.training:
-                # Checkpointing is only for training
-                x, aux_loss = cp.checkpoint(
-                    create_custom_forward(layer), 
+                # FIX: Only checkpoint Attention. MoE is excluded to avoid dynamic shape 
+                # mismatches during recomputation (routing decisions are non-deterministic).
+                def create_attn_forward(module_dict):
+                    def custom_forward(x_in, freqs):
+                        attn_out = module_dict['attn'](module_dict['attn_norm'](x_in), freqs)
+                        return x_in + attn_out
+                    return custom_forward
+
+                # Checkpoint attention (static shapes - safe)
+                x = cp.checkpoint(
+                    create_attn_forward(layer), 
                     x, 
                     self.freqs_cis,
                     use_reentrant=False
                 )
+                
+                # MoE outside checkpoint (dynamic shapes - avoids recomputation errors)
+                ffn_out, aux_loss = layer['ffn'](layer['ffn_norm'](x))
+                x = x + ffn_out
+                
             else:
-                # Standard forward pass for inference/eval
+                # Inference path unchanged
                 attn_out = layer['attn'](layer['attn_norm'](x), self.freqs_cis)
                 x = x + attn_out
                 ffn_out, aux_loss = layer['ffn'](layer['ffn_norm'](x))
