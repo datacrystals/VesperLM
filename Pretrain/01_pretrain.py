@@ -60,7 +60,7 @@ MODEL_CONFIGS = {
         # Optimizer Dynamics
         "beta1": 0.9,
         "beta2_token_half_life": 10_000_000, # 10M tokens (per Marek et al.)
-        "max_lr": 2e-4,
+        "max_lr": 5e-4,
         "min_lr": 4e-5,
         "aux_weight": 0.01,
         
