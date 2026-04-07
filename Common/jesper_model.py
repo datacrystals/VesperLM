@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.utils.checkpoint as cp
 import math
 
 
@@ -195,13 +196,34 @@ class JesperLLM(nn.Module):
                 targets = targets[:, :self.max_seq_len]
 
         x = self.tok_embeddings(tokens)
-
         total_aux_loss = 0.0
 
         for layer in self.layers:
-            x = x + layer['attn'](layer['attn_norm'](x), self.freqs_cis)
-            ffn_out, aux_loss = layer['ffn'](layer['ffn_norm'](x))
-            x = x + ffn_out
+            # Wrap the layer execution in the checkpoint function
+            # use_reentrant=False is the modern standard for PyTorch checkpointing
+            def create_custom_forward(module_dict):
+                def custom_forward(x_in, freqs):
+                    attn_out = module_dict['attn'](module_dict['attn_norm'](x_in), freqs)
+                    x_out = x_in + attn_out
+                    ffn_out, aux = module_dict['ffn'](module_dict['ffn_norm'](x_out))
+                    return x_out + ffn_out, aux
+                return custom_forward
+
+            if self.training:
+                # Checkpointing is only for training
+                x, aux_loss = cp.checkpoint(
+                    create_custom_forward(layer), 
+                    x, 
+                    self.freqs_cis,
+                    use_reentrant=False
+                )
+            else:
+                # Standard forward pass for inference/eval
+                attn_out = layer['attn'](layer['attn_norm'](x), self.freqs_cis)
+                x = x + attn_out
+                ffn_out, aux_loss = layer['ffn'](layer['ffn_norm'](x))
+                x = x + ffn_out
+                
             total_aux_loss += aux_loss
 
         x = self.norm(x)

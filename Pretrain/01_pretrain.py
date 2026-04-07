@@ -65,7 +65,7 @@ MODEL_CONFIGS = {
         "aux_weight": 0.01,
         
         # Scheduling
-        "seq_len_start": 128,
+        "seq_len_start": 1024,
         "seq_len_warmup": 4000,
         "warmup_steps": 1000,
         "total_steps": 30000,
