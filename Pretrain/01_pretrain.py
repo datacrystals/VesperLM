@@ -6,6 +6,7 @@ import shutil
 import warnings
 import time
 import datetime
+from collections import defaultdict
 
 # Silence AMD / PyTorch warnings
 os.environ["HIPBLASLT_DISABLE"] = "1"
@@ -54,14 +55,13 @@ MODEL_CONFIGS = {
         "dim": 1024, "n_layers": 10, "n_heads": 8, "n_kv_heads": 2,
         "hidden_dim": 1280, "num_experts": 8, "top_k": 2, "max_seq_len": 4096,
         
-        
         # Training & Batching
         "micro_batch_size": 1,
-        "target_accumulation_steps": 128,  # Global target for effective batch size
+        "target_accumulation_steps": 128,
         
         # Optimizer Dynamics
         "beta1": 0.9,
-        "beta2_token_half_life": 10_000_000, # 10M tokens (per Marek et al.)
+        "beta2_token_half_life": 10_000_000,
         "max_lr": 5e-4,
         "min_lr": 4e-5,
         "aux_weight": 0.01,
@@ -183,8 +183,81 @@ def print_model_stats(model, config, save_path=None):
 
 
 # ==========================================
-# DATA LOADING
+# STATEFUL DATA LOADING (Resume Support)
 # ==========================================
+class MixedDataStream:
+    """Stateful data loader that tracks position in each dataset for checkpoint resume."""
+    
+    def __init__(self, datasets_dict, probabilities, batch_size, start_step, accumulation_steps,
+                 warmup_steps=4000, max_seq_len=1024, start_len=128, is_distributed=False,
+                 resume_state=None):
+        self.datasets_dict = datasets_dict
+        self.probabilities = probabilities
+        self.batch_size = batch_size
+        self.accumulation_steps = accumulation_steps
+        self.warmup_steps = warmup_steps
+        self.max_seq_len = max_seq_len
+        self.start_len = start_len
+        self.is_distributed = is_distributed
+        
+        self.world_size = dist.get_world_size() if is_distributed else 1
+        self.local_rank = dist.get_rank() if is_distributed else 0
+        self.dataset_names = list(datasets_dict.keys())
+        self.dataset_probs = [probabilities[n] for n in self.dataset_names]
+        
+        # State that gets saved/restored
+        if resume_state:
+            self.pointers = resume_state['pointers']
+            self.counter = resume_state['counter']
+            self.rng_state = resume_state.get('rng_state', None)
+            if self.rng_state is not None:
+                np.random.set_state(self.rng_state)
+        else:
+            self.pointers = {k: 0 for k in datasets_dict.keys()}
+            self.counter = start_step * accumulation_steps
+            self.rng_state = None
+            
+    def get_state(self):
+        """Returns serializable state dict for checkpointing."""
+        return {
+            'pointers': self.pointers.copy(),
+            'counter': self.counter,
+            'rng_state': np.random.get_state()
+        }
+    
+    def __iter__(self):
+        while True:
+            current_step = self.counter // self.accumulation_steps
+            current_seq_len = get_seq_len(current_step, self.warmup_steps, self.max_seq_len, self.start_len)
+            tokens_per_local_batch = self.batch_size * (current_seq_len + 1)
+            tokens_per_global_batch = self.world_size * tokens_per_local_batch
+
+            source = np.random.choice(self.dataset_names, p=self.dataset_probs)
+            self.counter += 1
+            mmap = self.datasets_dict[source]
+            ptr = self.pointers[source]
+
+            # Wrap around if at end of file
+            if ptr + tokens_per_global_batch > len(mmap):
+                ptr = 0
+                self.pointers[source] = 0
+
+            start_idx = ptr + (self.local_rank * tokens_per_local_batch)
+            end_idx = start_idx + tokens_per_local_batch
+
+            if end_idx > len(mmap):
+                chunk = np.zeros(tokens_per_local_batch, dtype=np.int64)
+            else:
+                chunk = mmap[start_idx:end_idx].astype(np.int64)
+
+            self.pointers[source] += tokens_per_global_batch
+            chunk = torch.from_numpy(chunk).view(self.batch_size, current_seq_len + 1)
+
+            x = chunk[:, :current_seq_len].contiguous()
+            y = chunk[:, 1:current_seq_len + 1].contiguous()
+            yield x, y
+
+
 def load_dataset_index(index_path="data/index.txt"):
     datasets = {'train': {}, 'val': {}}
     probabilities = {}
@@ -222,47 +295,6 @@ def load_dataset_index(index_path="data/index.txt"):
     return datasets, probabilities
 
 
-def mixed_data_stream(datasets_dict, probabilities, batch_size, start_step, accumulation_steps,
-                      warmup_steps=4000, max_seq_len=1024, start_len=128, is_distributed=False):
-    world_size = dist.get_world_size() if is_distributed else 1
-    local_rank = dist.get_rank() if is_distributed else 0
-    dataset_names = list(datasets_dict.keys())
-    dataset_probs = [probabilities[n] for n in dataset_names]
-
-    pointers = {k: 0 for k in datasets_dict.keys()}
-    counter = start_step * accumulation_steps
-
-    while True:
-        current_step = counter // accumulation_steps
-        current_seq_len = get_seq_len(current_step, warmup_steps, max_seq_len, start_len)
-        tokens_per_local_batch = batch_size * (current_seq_len + 1)
-        tokens_per_global_batch = world_size * tokens_per_local_batch
-
-        source = np.random.choice(dataset_names, p=dataset_probs)
-        counter += 1
-        mmap = datasets_dict[source]
-        ptr = pointers[source]
-
-        if ptr + tokens_per_global_batch > len(mmap):
-            ptr = 0
-            pointers[source] = 0
-
-        start_idx = ptr + (local_rank * tokens_per_local_batch)
-        end_idx = start_idx + tokens_per_local_batch
-
-        if end_idx > len(mmap):
-            chunk = np.zeros(tokens_per_local_batch, dtype=np.int64)
-        else:
-            chunk = mmap[start_idx:end_idx].astype(np.int64)
-
-        pointers[source] += tokens_per_global_batch
-        chunk = torch.from_numpy(chunk).view(batch_size, current_seq_len + 1)
-
-        x = chunk[:, :current_seq_len].contiguous()
-        y = chunk[:, 1:current_seq_len + 1].contiguous()
-        yield x, y
-
-
 def get_latest_checkpoint(checkpoint_dir="jesper_checkpoints"):
     if not os.path.exists(checkpoint_dir):
         return None
@@ -294,13 +326,16 @@ def get_lr(step, max_steps, max_lr, min_lr, warmup_steps):
 @torch.no_grad()
 def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=128, device='cuda',
                           temperature=0.8, top_p=0.9):
+    """Returns (generated_texts, total_tokens_generated)."""
     model.eval()
     results = []
+    total_tokens = 0
     base_model = model.module if hasattr(model, 'module') else model
 
     for prompt in prompts:
         input_ids = tokenizer.encode(prompt, return_tensors='pt').to(device)
-
+        prompt_len = input_ids.size(1)
+        
         for _ in range(max_new_tokens):
             seq = input_ids[:, -base_model.max_seq_len:]
 
@@ -308,10 +343,9 @@ def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=128, device=
                 logits, _, _ = model(seq)
 
             next_logits = logits[:, -1, :].float()
-
             next_logits = next_logits / temperature
             probs = torch.softmax(next_logits, dim=-1)
-
+            
             sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)
             cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
             
@@ -327,11 +361,14 @@ def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=128, device=
             if next_token.item() == tokenizer.eos_token_id:
                 break
 
+        generated_tokens = input_ids.size(1) - prompt_len
+        total_tokens += generated_tokens
+        
         decoded = tokenizer.decode(input_ids[0].cpu().tolist(), skip_special_tokens=True,
                                    clean_up_tokenization_spaces=True)
         results.append(decoded)
 
-    return results
+    return results, total_tokens
 
 
 # ==========================================
@@ -373,7 +410,6 @@ def train():
     val_eval_steps = current_cfg.get("val_eval_steps", 50)
     aux_weight = current_cfg.get("aux_weight", 0.01)
     
-    # Optimizer Dynamics Config
     beta1 = current_cfg.get("beta1", 0.9)
     beta2_half_life = current_cfg.get("beta2_token_half_life", 10_000_000)
 
@@ -381,6 +417,12 @@ def train():
     start_step = 0
     train_loss_history = []
     val_loss_history = []
+    
+    # TOKEN TRACKING STATE
+    total_tokens_trained = 0  # Cumulative across all GPUs
+    total_tokens_generated = 0  # Cumulative eval tokens
+    train_stream_state = None
+    val_stream_state = None
 
     latest_ckpt_path = get_latest_checkpoint(checkpoint_dir)
 
@@ -394,10 +436,19 @@ def train():
         start_step = checkpoint['step'] + 1
         train_loss_history = checkpoint.get('train_loss_history', [])
         val_loss_history = checkpoint.get('val_loss_history', [])
+        
+        # RESTORE TOKEN COUNTERS
+        total_tokens_trained = checkpoint.get('tokens_trained', 0)
+        total_tokens_generated = checkpoint.get('tokens_generated', 0)
+        train_stream_state = checkpoint.get('train_stream_state', None)
+        val_stream_state = checkpoint.get('val_stream_state', None)
 
         if is_main:
             initial_seq_len = get_seq_len(start_step, seq_len_warmup, model_config["max_seq_len"], seq_len_start)
-            print(f"[!] Resuming at step {start_step} | Context: {initial_seq_len} tokens\n")
+            print(f"[!] Resuming at step {start_step} | Tokens trained: {total_tokens_trained:,} | Context: {initial_seq_len}")
+            if total_tokens_generated > 0:
+                print(f"[!] Total tokens generated (eval): {total_tokens_generated:,}")
+            print()
     else:
         if is_main:
             print(f"\n[!] Starting fresh: {ACTIVE_CONFIG_NAME}")
@@ -418,8 +469,6 @@ def train():
     if is_main:
         print_model_stats(model, model_config)
 
-    # if IS_ROCM:
-        # optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr, betas=(beta1, 0.95), weight_decay=0.1)
     if HAS_BNB:
         print("Using 8-bit bitsandbytes AdamW optimizer")
         optimizer = bnb.optim.AdamW8bit(model.parameters(), lr=max_lr, betas=(beta1, 0.95), weight_decay=0.1)
@@ -451,14 +500,17 @@ def train():
         model = DDP(model, device_ids=[local_rank], find_unused_parameters=True)
 
     datasets_dict, probabilities = load_dataset_index("data/index.txt")
-    train_stream = mixed_data_stream(
+    
+    # Create stateful data streams with resume support
+    train_stream = MixedDataStream(
         datasets_dict['train'], probabilities, batch_size, start_step,
         accumulation_steps, seq_len_warmup, model_config["max_seq_len"],
-        seq_len_start, is_distributed
+        seq_len_start, is_distributed, resume_state=train_stream_state
     )
-    val_stream = mixed_data_stream(
+    val_stream = MixedDataStream(
         datasets_dict['val'], probabilities, batch_size, 0, 1,
-        0, model_config["max_seq_len"], model_config["max_seq_len"], is_distributed
+        0, model_config["max_seq_len"], model_config["max_seq_len"], 
+        is_distributed, resume_state=val_stream_state
     )
 
     # ==========================================
@@ -478,7 +530,6 @@ def train():
         dummy_loss = (dummy_ce / accumulation_steps) + (aux_weight * (dummy_aux / accumulation_steps))
     
     scaler.scale(dummy_loss).backward()
-    
     optimizer.zero_grad()
     del dummy_x, dummy_y, dummy_loss, dummy_ce, dummy_aux
     
@@ -490,18 +541,26 @@ def train():
     if is_distributed:
         dist.barrier()
 
+    # Training metrics timers
     t0 = time.time()
-    tokens_since_last_log = 0
+    local_tokens_since_last_log = 0  # Tokens processed on this GPU
+    
+    # Pre-allocate for throughput calculation
+    train_iter = iter(train_stream)
 
     for step in range(start_step, total_steps):
         current_seq_len = get_seq_len(step, seq_len_warmup, model_config["max_seq_len"], seq_len_start)
         
-        # Calculate tokens for EMA math
-        effective_tokens_per_step = batch_size * accumulation_steps * world_size * current_seq_len
-        tokens_since_last_log += effective_tokens_per_step
+        # Tokens processed on THIS GPU for this global step
+        local_tokens_this_step = batch_size * accumulation_steps * current_seq_len
+        local_tokens_since_last_log += local_tokens_this_step
+        
+        # Total tokens across all GPUs (for global tracking)
+        global_tokens_this_step = local_tokens_this_step * world_size
+        total_tokens_trained += global_tokens_this_step
         
         lr = get_lr(step, total_steps, max_lr, min_lr, warmup_steps)
-        dynamic_beta2 = 1.0 - (math.log(2) / beta2_half_life) * effective_tokens_per_step
+        dynamic_beta2 = 1.0 - (math.log(2) / beta2_half_life) * global_tokens_this_step
         dynamic_beta2 = max(0.0, min(0.9999, dynamic_beta2))
         
         for param_group in optimizer.param_groups:
@@ -514,13 +573,12 @@ def train():
         accumulated_aux_loss = 0.0
 
         for micro_step in range(accumulation_steps):
-            x, y = next(train_stream)
+            x, y = next(train_iter)
             x = x.pin_memory().to(device, non_blocking=True)
             y = y.pin_memory().to(device, non_blocking=True)
 
             with torch.amp.autocast('cuda', dtype=torch.float16):
                 logits, ce_loss, aux_loss = model(x, y)
-
                 ce_loss_scaled = ce_loss / accumulation_steps
                 aux_loss_scaled = aux_loss / accumulation_steps
                 total_loss = ce_loss_scaled + (aux_weight * aux_loss_scaled)
@@ -548,25 +606,31 @@ def train():
             t1 = time.time()
             dt = t1 - t0
             
-            # Throughput Math
-            if step > start_step:
+            # Throughput calculations
+            if step > start_step and dt > 0:
+                # Per-GPU throughput (this GPU's processing speed)
+                local_tok_per_sec = local_tokens_since_last_log / dt
+                # Total cluster throughput (assuming perfect scaling)
+                total_tok_per_sec = local_tok_per_sec * world_size
+                
                 global_steps_per_sec = 10 / dt
                 local_passes_per_sec = (10 * accumulation_steps) / dt 
-                tokens_per_sec = tokens_since_last_log / dt
             else:
+                local_tok_per_sec = 0.0
+                total_tok_per_sec = 0.0
                 global_steps_per_sec = 0.0
                 local_passes_per_sec = 0.0
-                tokens_per_sec = 0.0
                 
             t0 = t1
-            tokens_since_last_log = 0
+            local_tokens_since_last_log = 0
             
             # Split over two lines to prevent massive horizontal wrap
             print(
                 f"[{current_time}] Step {step:05d} | "
                 f"{global_steps_per_sec:.2f} global steps/s | "
-                f"{local_passes_per_sec:.1f} local passes/s | "
-                f"{tokens_per_sec:,.0f} tok/s\n"
+                f"{local_passes_per_sec:.1f} local passes/s\n"
+                f"          Tok/s: {local_tok_per_sec:,.0f} (GPU) | {total_tok_per_sec:,.0f} (Total) | "
+                f"Total Trained: {total_tokens_trained:,}\n"
                 f"          LR: {lr:.2e} | B2: {dynamic_beta2:.4f} | Seq: {current_seq_len} | "
                 f"CE Loss: {accumulated_ce_loss:.4f} | VRAM: {mem:.1f}GB"
             )
@@ -591,10 +655,12 @@ def train():
                 print(f"\n--- Validation at Step {step} | Val Loss: {val_loss:.4f} ---")
 
                 print("Generating Eval Samples...")
-                generated_texts = generate_eval_samples(
+                generated_texts, eval_tokens = generate_eval_samples(
                     model, tokenizer, EVAL_PROMPTS, device=device,
                     temperature=0.8, top_p=0.9
                 )
+                total_tokens_generated += eval_tokens
+                
                 for p, gen in zip(EVAL_PROMPTS, generated_texts):
                     print(f"Prompt: {p}\nOutput: {gen}\n" + "-" * 30)
 
@@ -609,6 +675,10 @@ def train():
 
                 print_model_stats(model, model_config, save_path=os.path.join(ckpt_dir, "model_stats.txt"))
 
+                # Save data stream states for resume
+                current_train_state = train_stream.get_state()
+                current_val_state = val_stream.get_state()
+
                 ckpt = {
                     'model_config': model_config,
                     'model': model.module.state_dict() if is_distributed else model.state_dict(),
@@ -617,6 +687,12 @@ def train():
                     'step': step,
                     'train_loss_history': train_loss_history,
                     'val_loss_history': val_loss_history,
+                    # NEW: Token tracking
+                    'tokens_trained': total_tokens_trained,
+                    'tokens_generated': total_tokens_generated,
+                    # NEW: Data position tracking
+                    'train_stream_state': current_train_state,
+                    'val_stream_state': current_val_state,
                 }
                 torch.save(ckpt, os.path.join(ckpt_dir, "checkpoint.pt"))
 
@@ -624,6 +700,8 @@ def train():
                     json.dump({
                         "step": step,
                         "val_loss": round(val_loss, 4),
+                        "tokens_trained": total_tokens_trained,
+                        "tokens_generated": total_tokens_generated,
                         "samples": generated_texts
                     }, f, indent=2)
 
@@ -637,13 +715,15 @@ def train():
                         plt.plot(v_steps, v_losses, label="Val CE Loss", color='red', linewidth=2)
                     plt.xlabel("Step")
                     plt.ylabel("Cross Entropy Loss")
-                    plt.title(f"{ACTIVE_CONFIG_NAME} — Training Curves (Step {step})")
+                    plt.title(f"{ACTIVE_CONFIG_NAME} — Training Curves (Step {step})\nTotal Tokens: {total_tokens_trained:,}")
                     plt.legend()
                     plt.grid(True)
                     plt.savefig(os.path.join(ckpt_dir, "loss_curve.png"), dpi=150)
                     plt.close()
 
-                print(f">>> Saved checkpoint and graphs to: {ckpt_dir}\n")
+                print(f">>> Saved checkpoint to: {ckpt_dir}")
+                print(f"    Total tokens trained: {total_tokens_trained:,}")
+                print(f"    Total tokens generated: {total_tokens_generated:,}\n")
 
             t0 = time.time()
             if is_distributed:
