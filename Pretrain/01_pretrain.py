@@ -53,7 +53,7 @@ MODEL_CONFIGS = {
     "small_v2": {
         # Architecture
         "dim": 1024, "n_layers": 10, "n_heads": 8, "n_kv_heads": 2,
-        "hidden_dim": 1280, "num_experts": 8, "top_k": 2, "max_seq_len": 4096,
+        "hidden_dim": 1280, "num_experts": 8, "top_k": 2, "max_seq_len": 2048,
         
         # Training & Batching
         "micro_batch_size": 1,
@@ -62,15 +62,15 @@ MODEL_CONFIGS = {
         # Optimizer Dynamics
         "beta1": 0.9,
         "beta2_token_half_life": 10_000_000,
-        "max_lr": 5e-4,
-        "min_lr": 4e-5,
+        "max_lr": 2e-4,
+        "min_lr": 3e-5,
         "aux_weight": 0.01,
         
         # Scheduling
-        "seq_len_start": 2048,
+        "seq_len_start": 128,
         "seq_len_warmup": 4000,
         "warmup_steps": 1000,
-        "total_steps": 30000,
+        "total_steps": 20000,
         
         # Evaluation
         "eval_interval": 100,
@@ -226,36 +226,40 @@ class MixedDataStream:
         }
     
     def __iter__(self):
-        while True:
-            current_step = self.counter // self.accumulation_steps
-            current_seq_len = get_seq_len(current_step, self.warmup_steps, self.max_seq_len, self.start_len)
-            tokens_per_local_batch = self.batch_size * (current_seq_len + 1)
-            tokens_per_global_batch = self.world_size * tokens_per_local_batch
+        """Return self as iterator."""
+        return self
+    
+    def __next__(self):
+        """Generate next batch."""
+        current_step = self.counter // self.accumulation_steps
+        current_seq_len = get_seq_len(current_step, self.warmup_steps, self.max_seq_len, self.start_len)
+        tokens_per_local_batch = self.batch_size * (current_seq_len + 1)
+        tokens_per_global_batch = self.world_size * tokens_per_local_batch
 
-            source = np.random.choice(self.dataset_names, p=self.dataset_probs)
-            self.counter += 1
-            mmap = self.datasets_dict[source]
-            ptr = self.pointers[source]
+        source = np.random.choice(self.dataset_names, p=self.dataset_probs)
+        self.counter += 1
+        mmap = self.datasets_dict[source]
+        ptr = self.pointers[source]
 
-            # Wrap around if at end of file
-            if ptr + tokens_per_global_batch > len(mmap):
-                ptr = 0
-                self.pointers[source] = 0
+        # Wrap around if at end of file
+        if ptr + tokens_per_global_batch > len(mmap):
+            ptr = 0
+            self.pointers[source] = 0
 
-            start_idx = ptr + (self.local_rank * tokens_per_local_batch)
-            end_idx = start_idx + tokens_per_local_batch
+        start_idx = ptr + (self.local_rank * tokens_per_local_batch)
+        end_idx = start_idx + tokens_per_local_batch
 
-            if end_idx > len(mmap):
-                chunk = np.zeros(tokens_per_local_batch, dtype=np.int64)
-            else:
-                chunk = mmap[start_idx:end_idx].astype(np.int64)
+        if end_idx > len(mmap):
+            chunk = np.zeros(tokens_per_local_batch, dtype=np.int64)
+        else:
+            chunk = mmap[start_idx:end_idx].astype(np.int64)
 
-            self.pointers[source] += tokens_per_global_batch
-            chunk = torch.from_numpy(chunk).view(self.batch_size, current_seq_len + 1)
+        self.pointers[source] += tokens_per_global_batch
+        chunk = torch.from_numpy(chunk).view(self.batch_size, current_seq_len + 1)
 
-            x = chunk[:, :current_seq_len].contiguous()
-            y = chunk[:, 1:current_seq_len + 1].contiguous()
-            yield x, y
+        x = chunk[:, :current_seq_len].contiguous()
+        y = chunk[:, 1:current_seq_len + 1].contiguous()
+        return x, y
 
 
 def load_dataset_index(index_path="data/index.txt"):

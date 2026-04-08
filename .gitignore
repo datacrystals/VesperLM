@@ -21,3 +21,5 @@ __pycache__/
 
 # 5. Make sure the gitignore itself is tracked
 !.gitignore
+
+Pretrain/Log*.txt
