@@ -130,7 +130,7 @@ MODEL_CONFIGS = {
     },
 }
 
-ACTIVE_CONFIG_NAME = "1b_scaled"
+ACTIVE_CONFIG_NAME = "small_v2"
 
 EVAL_PROMPTS = [
     "The most important rule of debugging is",
@@ -660,6 +660,15 @@ def train():
             local_tokens_since_last_log = 0
             
             # Split over two lines to prevent massive horizontal wrap
+#            print(
+#                f"[{current_time}] Step {step:05d} | "
+#                f"{global_steps_per_sec:.2f} global steps/s | "
+#                f"{local_passes_per_sec:.1f} local passes/s\n"
+#                f"          Tok/s: {local_tok_per_sec:,.0f} (GPU) | {total_tok_per_sec:,.0f} (Total) | "
+#                f"Total Trained: {total_tokens_trained:,}\n"
+#                f"          LR: {lr:.2e} | B2: {dynamic_beta2:.4f} | Seq: {current_seq_len} | "
+#                f"CE Loss: {accumulated_ce_loss:.4f} | VRAM: {mem:.1f}GB"
+#            )
             print(
                 f"[{current_time}] Step {step:05d} | "
                 f"{global_steps_per_sec:.2f} global steps/s | "
@@ -667,8 +676,9 @@ def train():
                 f"          Tok/s: {local_tok_per_sec:,.0f} (GPU) | {total_tok_per_sec:,.0f} (Total) | "
                 f"Total Trained: {total_tokens_trained:,}\n"
                 f"          LR: {lr:.2e} | B2: {dynamic_beta2:.4f} | Seq: {current_seq_len} | "
-                f"CE Loss: {accumulated_ce_loss:.4f} | VRAM: {mem:.1f}GB"
+                f"CE Loss: {accumulated_ce_loss:.4f} | Aux: {accumulated_aux_loss:.4f} | VRAM: {mem:.1f}GB"
             )
+
 
         # Validation, eval, and checkpointing
         if step > 0 and step % eval_interval == 0:
