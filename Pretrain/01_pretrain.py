@@ -64,7 +64,7 @@ MODEL_CONFIGS = {
         "beta2_token_half_life": 10_000_000,
         "max_lr": 2e-4,
         "min_lr": 3e-5,
-        "aux_weight": 0.01,
+        "aux_weight": 0.1,
         
         # Scheduling
         "seq_len_start": 128,
@@ -76,9 +76,40 @@ MODEL_CONFIGS = {
         "eval_interval": 100,
         "val_eval_steps": 50
     },
+    "1b_scaled": {
+        # Architecture
+        "dim": 1152,
+        "n_layers": 12,
+        "n_heads": 12,
+        "n_kv_heads": 2,
+        "hidden_dim": 1600,
+        "num_experts": 10,
+        "top_k": 2,
+        "max_seq_len": 2048,
+
+        # Training & Batching
+        "micro_batch_size": 1,
+        "target_accumulation_steps": 128,
+
+        # Optimizer Dynamics
+        "beta1": 0.9,
+        "beta2_token_half_life": 12_000_000,
+        "max_lr": 1.3e-4,
+        "min_lr": 1.5e-5,
+        "aux_weight": 0.1,
+
+        # Scheduling
+        "seq_len_start": 128,
+        "seq_len_warmup": 5000,
+        "warmup_steps": 1500,
+        "total_steps": 25000,
+
+        # Evaluation
+        "eval_interval": 100,
+        "val_eval_steps": 75    },
     "big": {
-        "dim": 1536, "n_layers": 16, "n_heads": 12, "n_kv_heads": 4,
-        "hidden_dim": 4096, "num_experts": 8, "top_k": 2, "max_seq_len": 2048,
+        "dim": 1268, "n_layers": 16, "n_heads": 12, "n_kv_heads": 4,
+        "hidden_dim": 1536, "num_experts": 10, "top_k": 2, "max_seq_len": 2048,
         
         "micro_batch_size": 1,
         "target_accumulation_steps": 128,
@@ -99,7 +130,7 @@ MODEL_CONFIGS = {
     },
 }
 
-ACTIVE_CONFIG_NAME = "small_v2"
+ACTIVE_CONFIG_NAME = "1b_scaled"
 
 EVAL_PROMPTS = [
     "The most important rule of debugging is",
