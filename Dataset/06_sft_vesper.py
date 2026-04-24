@@ -15,7 +15,7 @@ TOKENIZER_DIR   = "custom_tokenizer"
 VESPER_DATA_DIR = "InputDatasets/Vesper"   # *.json files live here
 OUT_DIR         = "data/sft"
 MAX_SEQ_LEN     = 1024
-VESPER_EPOCHS   = 4    # Repeat Vesper data N times — keeps personality strong
+VESPER_EPOCHS   = 1    # Repeat Vesper data N times — keeps personality strong
                # relative to OASST. Tune this (3-5 is usually right).
 
 os.makedirs(OUT_DIR, exist_ok=True)
