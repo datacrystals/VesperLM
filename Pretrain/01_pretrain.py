@@ -422,20 +422,39 @@ def train():
         tokenizer.pad_token = tokenizer.eos_token
 
     # ---- Dynamic Hyperparameters & Setup ----
+    #current_cfg = MODEL_CONFIGS[ACTIVE_CONFIG_NAME]
+    
+    #batch_size = current_cfg.get("micro_batch_size", 1)
+    #target_acc_steps = current_cfg.get("target_accumulation_steps", 128)
+    #accumulation_steps = max(1, target_acc_steps // world_size)
+    
+    #if is_main:
+    #    actual_global_steps = accumulation_steps * world_size
+    #    print(f"\n--- BATCH SCALING ---")
+    #    print(f"GPUs (World Size): {world_size}")
+    #    print(f"Local Accumulation Steps: {accumulation_steps}")
+    #    print(f"Global Effective Steps: {actual_global_steps} (Target: {target_acc_steps})\n")
+
+    #seq_len_start = current_cfg.get("seq_len_start", 128)
+    # ---- Dynamic Hyperparameters & Setup ----
     current_cfg = MODEL_CONFIGS[ACTIVE_CONFIG_NAME]
     
     batch_size = current_cfg.get("micro_batch_size", 1)
     target_acc_steps = current_cfg.get("target_accumulation_steps", 128)
-    accumulation_steps = max(1, target_acc_steps // world_size)
+    
+    # Calculate accumulation steps factoring in both the cluster size and micro-batch size
+    accumulation_steps = max(1, target_acc_steps // (world_size * batch_size))
     
     if is_main:
-        actual_global_steps = accumulation_steps * world_size
+        actual_global_batch = accumulation_steps * world_size * batch_size
         print(f"\n--- BATCH SCALING ---")
         print(f"GPUs (World Size): {world_size}")
+        print(f"Micro-Batch Size: {batch_size}")
         print(f"Local Accumulation Steps: {accumulation_steps}")
-        print(f"Global Effective Steps: {actual_global_steps} (Target: {target_acc_steps})\n")
+        print(f"Global Effective Batch: {actual_global_batch} (Target: {target_acc_steps})\n")
 
     seq_len_start = current_cfg.get("seq_len_start", 128)
+
     seq_len_warmup = current_cfg.get("seq_len_warmup", 4000)
     max_lr = current_cfg.get("max_lr", 2e-4)
     min_lr = current_cfg.get("min_lr", 4e-5)
