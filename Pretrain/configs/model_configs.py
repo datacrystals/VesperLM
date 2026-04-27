@@ -1,5 +1,5 @@
 """
-JesperLLM model configurations keyed by active-parameter size.
+VesperLLM model configurations keyed by active-parameter size.
 
 Backwards compatibility:
   - "small_v2"  -> "470m"

@@ -40,7 +40,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.amp import GradScaler
 from transformers import AutoTokenizer
-from jesper_model import JesperLLM
+from vesper_model import VesperLLM
 
 import matplotlib
 matplotlib.use('Agg')
@@ -255,7 +255,7 @@ def load_dataset_index(index_path="data/index.txt"):
     return datasets, probabilities
 
 
-def get_latest_checkpoint(checkpoint_dir="jesper_checkpoints"):
+def get_latest_checkpoint(checkpoint_dir="vesper_checkpoints"):
     if not os.path.exists(checkpoint_dir):
         return None
     steps = []
@@ -412,7 +412,7 @@ def train():
     beta1 = current_cfg.get("beta1", 0.9)
     beta2_half_life = current_cfg.get("beta2_token_half_life", 10_000_000)
 
-    checkpoint_dir = "jesper_checkpoints"
+    checkpoint_dir = "vesper_checkpoints"
     start_step = 0
     train_loss_history = []
     val_loss_history = []
@@ -477,7 +477,7 @@ def train():
     arch_keys = ["dim", "n_layers", "n_heads", "n_kv_heads", "hidden_dim", "num_experts", "top_k", "max_seq_len"]
     arch_config = {k: v for k, v in model_config.items() if k in arch_keys}
 
-    model = JesperLLM(
+    model = VesperLLM(
         vocab_size=len(tokenizer),
         pad_id=tokenizer.pad_token_id,
         **arch_config
@@ -632,7 +632,7 @@ def train():
                             if consecutive_idle_seconds % 60 == 0:
                                 print(f"[*] vLLM idle. Resuming in {600 - consecutive_idle_seconds} seconds...")
                     
-                    print(f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] [*] 10 minutes passed. Resuming Jesper training!")
+                    print(f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] [*] 10 minutes passed. Resuming Vesper training!")
                     pause_signal[0] = 0
 
                 # 3. Block all worker GPUs here until Rank 0 releases them
@@ -782,7 +782,7 @@ def train():
                 os.makedirs(ckpt_dir, exist_ok=True)
 
                 try:
-                    shutil.copy("jesper_model.py", os.path.join(ckpt_dir, "jesper_model_snapshot.py"))
+                    shutil.copy("vesper_model.py", os.path.join(ckpt_dir, "vesper_model_snapshot.py"))
                     shutil.copy(__file__, os.path.join(ckpt_dir, f"{os.path.basename(__file__)}_snapshot.py"))
                 except Exception as e:
                     print(f"Warning: Could not save code snapshots: {e}")

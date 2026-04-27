@@ -3,7 +3,7 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
-echo "🚀 Starting universal environment setup for JesperLM..."
+echo "🚀 Starting universal environment setup for VesperLM..."
 
 # 1. Create and activate virtual environment
 if [ ! -d "venv" ]; then

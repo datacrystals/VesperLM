@@ -144,7 +144,7 @@ class MoEFeedForward(nn.Module):
         return final_output.view(B, T, C), aux_loss
 
 
-class JesperLLM(nn.Module):
+class VesperLLM(nn.Module):
     # FIX: defaults now match small_v2 (the config actually being trained).
     # Change these if you want a different default — just keep them in sync with MODEL_CONFIGS.
     def __init__(self, vocab_size=32000, dim=1024, n_layers=10, n_heads=8, n_kv_heads=2,

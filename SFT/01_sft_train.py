@@ -37,7 +37,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.amp import GradScaler
 from transformers import AutoTokenizer
-from jesper_model import JesperLLM
+from vesper_model import VesperLLM
 
 import matplotlib
 matplotlib.use('Agg')
@@ -104,7 +104,7 @@ ACTIVE_CONFIG_NAME = "small_v2_sft"
 
 # Path to the pretrained checkpoint to start SFT from.
 # Set to None to scan sft_checkpoints/ for a resume instead.
-PRETRAIN_CHECKPOINT = "jesper_checkpoints/step_19900/checkpoint.pt"
+PRETRAIN_CHECKPOINT = "vesper_checkpoints/step_19900/checkpoint.pt"
 
 # ChatML eval prompts — unlike pretrain these are full conversation turns
 # so we can see if Vesper is learning to chat correctly
@@ -516,7 +516,7 @@ def train():
                    "num_experts", "top_k", "max_seq_len"]
     arch_config = {k: v for k, v in model_config.items() if k in arch_keys}
 
-    model = JesperLLM(
+    model = VesperLLM(
         vocab_size=len(tokenizer),
         pad_id=tokenizer.pad_token_id,
         **arch_config
@@ -705,7 +705,7 @@ def train():
 
                 # Snapshot source files
                 try:
-                    shutil.copy("jesper_model.py", os.path.join(ckpt_dir, "jesper_model_snapshot.py"))
+                    shutil.copy("vesper_model.py", os.path.join(ckpt_dir, "vesper_model_snapshot.py"))
                     shutil.copy(__file__, os.path.join(ckpt_dir, f"{os.path.basename(__file__)}_snapshot.py"))
                 except Exception as e:
                     print(f"Warning: Could not save code snapshots: {e}")

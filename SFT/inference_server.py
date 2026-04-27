@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-JesperLLM OpenAI-Compatible Inference Server v2
+VesperLLM OpenAI-Compatible Inference Server v2
 
 - Auto-detects architecture from checkpoint
 - GPU -> MPS -> CPU fallback
@@ -38,7 +38,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
     datefmt="%H:%M:%S",
 )
-logger = logging.getLogger("jesper-api")
+logger = logging.getLogger("vesper-api")
 
 # ------------------------------------------------------------------
 # Device detection
@@ -61,9 +61,9 @@ def detect_device(preferred: Optional[str] = None) -> torch.device:
 # Import model
 # ------------------------------------------------------------------
 try:
-    from jesper_model import JesperLLM
+    from vesper_model import VesperLLM
 except ImportError as e:
-    logger.error("Failed to import JesperLLM from jesper_model.py")
+    logger.error("Failed to import VesperLLM from vesper_model.py")
     raise e
 
 # ------------------------------------------------------------------
@@ -109,7 +109,7 @@ def find_tokenizer_dir(checkpoint_path: Path) -> Path:
 # ------------------------------------------------------------------
 @torch.no_grad()
 def generate_stream(
-    model: JesperLLM,
+    model: VesperLLM,
     tokenizer: AutoTokenizer,
     prompt: str,
     max_new_tokens: int = 256,
@@ -197,7 +197,7 @@ def generate_stream(
 
 
 def generate_non_stream(
-    model: JesperLLM,
+    model: VesperLLM,
     tokenizer: AutoTokenizer,
     prompt: str,
     max_new_tokens: int = 256,
@@ -224,7 +224,7 @@ def generate_non_stream(
 # Async wrapper for concurrency + clean disconnects
 # ------------------------------------------------------------------
 async def async_generate_stream(
-    model: JesperLLM,
+    model: VesperLLM,
     tokenizer: AutoTokenizer,
     prompt: str,
     max_new_tokens: int = 256,
@@ -295,10 +295,10 @@ def format_chatml(messages: List[Dict[str, str]]) -> str:
 # ------------------------------------------------------------------
 # FastAPI
 # ------------------------------------------------------------------
-app = FastAPI(title="JesperLLM API", version="2.0.0")
+app = FastAPI(title="VesperLLM API", version="2.0.0")
 
 # These are populated in __main__
-model: Optional[JesperLLM] = None
+model: Optional[VesperLLM] = None
 tokenizer: Optional[AutoTokenizer] = None
 device: Optional[torch.device] = None
 INFERENCE_EXECUTOR: Optional[ThreadPoolExecutor] = None
@@ -310,7 +310,7 @@ class ChatMessage(BaseModel):
 
 
 class ChatCompletionRequest(BaseModel):
-    model: Optional[str] = "jesper"
+    model: Optional[str] = "vesper"
     messages: List[ChatMessage]
     max_tokens: Optional[int] = Field(default=256, ge=1, le=4096)
     temperature: Optional[float] = Field(default=0.8, ge=0.0, le=2.0)
@@ -320,7 +320,7 @@ class ChatCompletionRequest(BaseModel):
 
 
 class CompletionRequest(BaseModel):
-    model: Optional[str] = "jesper"
+    model: Optional[str] = "vesper"
     prompt: str
     max_tokens: Optional[int] = Field(default=256, ge=1, le=4096)
     temperature: Optional[float] = Field(default=0.8, ge=0.0, le=2.0)
@@ -335,7 +335,7 @@ class TokenizeRequest(BaseModel):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": "jesper"}
+    return {"status": "ok", "model": "vesper"}
 
 
 @app.get("/v1/models")
@@ -344,7 +344,7 @@ async def list_models():
         "object": "list",
         "data": [
             {
-                "id": "jesper",
+                "id": "vesper",
                 "object": "model",
                 "created": int(time.time()),
                 "owned_by": "user",
@@ -373,7 +373,7 @@ async def chat_completions(request: ChatCompletionRequest):
             completion_id = f"chatcmpl-{uuid.uuid4().hex}"
             created = int(time.time())
 
-            yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': request.model or 'jesper', 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]})}\n\n"
+            yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': request.model or 'vesper', 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]})}\n\n"
 
             try:
                 async for delta in async_generate_stream(
@@ -390,7 +390,7 @@ async def chat_completions(request: ChatCompletionRequest):
                         "id": completion_id,
                         "object": "chat.completion.chunk",
                         "created": created,
-                        "model": request.model or "jesper",
+                        "model": request.model or "vesper",
                         "choices": [
                             {
                                 "index": 0,
@@ -404,7 +404,7 @@ async def chat_completions(request: ChatCompletionRequest):
                 # Client disconnected; bail out cleanly.
                 raise
 
-            yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': request.model or 'jesper', 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
+            yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': request.model or 'vesper', 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -428,7 +428,7 @@ async def chat_completions(request: ChatCompletionRequest):
             "id": f"chatcmpl-{uuid.uuid4().hex}",
             "object": "chat.completion",
             "created": int(time.time()),
-            "model": request.model or "jesper",
+            "model": request.model or "vesper",
             "choices": [
                 {
                     "index": 0,
@@ -468,7 +468,7 @@ async def completions(request: CompletionRequest):
                         "id": completion_id,
                         "object": "text_completion.chunk",
                         "created": created,
-                        "model": request.model or "jesper",
+                        "model": request.model or "vesper",
                         "choices": [
                             {
                                 "index": 0,
@@ -481,7 +481,7 @@ async def completions(request: CompletionRequest):
             except asyncio.CancelledError:
                 raise
 
-            yield f"data: {json.dumps({'id': completion_id, 'object': 'text_completion.chunk', 'created': created, 'model': request.model or 'jesper', 'choices': [{'index': 0, 'text': '', 'finish_reason': 'stop'}]})}\n\n"
+            yield f"data: {json.dumps({'id': completion_id, 'object': 'text_completion.chunk', 'created': created, 'model': request.model or 'vesper', 'choices': [{'index': 0, 'text': '', 'finish_reason': 'stop'}]})}\n\n"
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -505,7 +505,7 @@ async def completions(request: CompletionRequest):
             "id": f"cmpl-{uuid.uuid4().hex}",
             "object": "text_completion",
             "created": int(time.time()),
-            "model": request.model or "jesper",
+            "model": request.model or "vesper",
             "choices": [
                 {
                     "index": 0,
@@ -525,7 +525,7 @@ async def completions(request: CompletionRequest):
 # Main
 # ------------------------------------------------------------------
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="JesperLLM OpenAI-compatible inference server")
+    parser = argparse.ArgumentParser(description="VesperLLM OpenAI-compatible inference server")
     parser.add_argument("--checkpoint", type=str, required=True)
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
@@ -566,7 +566,7 @@ if __name__ == "__main__":
     logger.info(f"vocab_size={vocab_size}, pad_id={pad_id}")
 
     # 4. Build model
-    model = JesperLLM(vocab_size=vocab_size, pad_id=pad_id, **arch_config)
+    model = VesperLLM(vocab_size=vocab_size, pad_id=pad_id, **arch_config)
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
     if missing:
         logger.warning(f"Missing keys: {missing}")
