@@ -73,14 +73,17 @@ def setup_ddp():
     if world_size <= 1:
         return None
 
+    # Extended timeout to accommodate vLLM cooperative yielding (up to 10+ min pauses)
+    timeout = datetime.timedelta(hours=2)
+
     if IS_ROCM:
         try:
-            dist.init_process_group(backend="nccl")
+            dist.init_process_group(backend="nccl", timeout=timeout)
         except Exception:
             print("WARNING: NCCL failed, falling back to GLOO.")
-            dist.init_process_group(backend="gloo")
+            dist.init_process_group(backend="gloo", timeout=timeout)
     else:
-        dist.init_process_group(backend="nccl")
+        dist.init_process_group(backend="nccl", timeout=timeout)
 
     torch.cuda.set_device(local_rank)
     return local_rank
