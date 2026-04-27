@@ -48,88 +48,9 @@ import matplotlib.pyplot as plt
 
 
 # ==========================================
-# MODEL CONFIGURATIONS
+# MODEL CONFIGURATIONS (moved to configs/)
 # ==========================================
-MODEL_CONFIGS = {
-    "small_v2": {
-        # Architecture
-        "dim": 1024, "n_layers": 10, "n_heads": 8, "n_kv_heads": 2,
-        "hidden_dim": 1280, "num_experts": 8, "top_k": 2, "max_seq_len": 2048,
-        
-        # Training & Batching
-        "micro_batch_size": 1,
-        "target_accumulation_steps": 128,
-        
-        # Optimizer Dynamics
-        "beta1": 0.9,
-        "beta2_token_half_life": 10_000_000,
-        "max_lr": 2e-4,
-        "min_lr": 3e-5,
-        "aux_weight": 0.1,
-        
-        # Scheduling
-        "seq_len_start": 128,
-        "seq_len_warmup": 4000,
-        "warmup_steps": 1000,
-        "total_steps": 20000,
-        
-        # Evaluation
-        "eval_interval": 100,
-        "val_eval_steps": 50
-    },
-    "1b_scaled": {
-        # Architecture
-        "dim": 1152,
-        "n_layers": 12,
-        "n_heads": 12,
-        "n_kv_heads": 2,
-        "hidden_dim": 1600,
-        "num_experts": 10,
-        "top_k": 2,
-        "max_seq_len": 2048,
-
-        # Training & Batching
-        "micro_batch_size": 1,
-        "target_accumulation_steps": 128,
-
-        # Optimizer Dynamics
-        "beta1": 0.9,
-        "beta2_token_half_life": 12_000_000,
-        "max_lr": 1.3e-4,
-        "min_lr": 1.5e-5,
-        "aux_weight": 0.1,
-
-        # Scheduling
-        "seq_len_start": 128,
-        "seq_len_warmup": 5000,
-        "warmup_steps": 1500,
-        "total_steps": 25000,
-
-        # Evaluation
-        "eval_interval": 100,
-        "val_eval_steps": 75    },
-    "big": {
-        "dim": 1268, "n_layers": 16, "n_heads": 12, "n_kv_heads": 4,
-        "hidden_dim": 1536, "num_experts": 10, "top_k": 2, "max_seq_len": 2048,
-        
-        "micro_batch_size": 1,
-        "target_accumulation_steps": 128,
-        
-        "beta1": 0.9,
-        "beta2_token_half_life": 10_000_000, 
-        "max_lr": 1.5e-4,
-        "min_lr": 1.5e-5,
-        "aux_weight": 0.01,
-        
-        "seq_len_start": 128,
-        "seq_len_warmup": 4000,
-        "warmup_steps": 1500,
-        "total_steps": 50000,
-        
-        "eval_interval": 1000,
-        "val_eval_steps": 50
-    },
-}
+from configs.model_configs import MODEL_CONFIGS, get_model_config
 
 ACTIVE_CONFIG_NAME = "small_v2"
 
@@ -458,7 +379,7 @@ def train():
 
     #seq_len_start = current_cfg.get("seq_len_start", 128)
     # ---- Dynamic Hyperparameters & Setup ----
-    current_cfg = MODEL_CONFIGS[ACTIVE_CONFIG_NAME]
+    current_cfg = get_model_config(ACTIVE_CONFIG_NAME)
     
     batch_size = current_cfg.get("micro_batch_size", 1)
     target_acc_steps = current_cfg.get("target_accumulation_steps", 128)
