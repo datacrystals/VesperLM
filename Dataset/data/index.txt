@@ -1,0 +1,5 @@
+# data/index.txt
+# Nemotron 3 Super curriculum datasets (exclusively)
+
+pretrain/phase1_pretrain.bin, 1
+pretrain/phase2_pretrain.bin, 1

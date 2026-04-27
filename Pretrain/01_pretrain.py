@@ -6,6 +6,7 @@ import shutil
 import warnings
 import time
 import datetime
+import urllib.request
 from collections import defaultdict
 
 # Silence AMD / PyTorch warnings
@@ -356,6 +357,26 @@ def get_lr(step, max_steps, max_lr, min_lr, warmup_steps):
 
 
 # ==========================================
+# vLLM API DETECTION POLLER
+# ==========================================
+def check_vllm_api(port=9100):
+    """Returns True if vLLM is actively processing or waiting on requests."""
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/metrics")
+        with urllib.request.urlopen(req, timeout=1.0) as response:
+            text = response.read().decode('utf-8')
+            for line in text.split('\n'):
+                if line.startswith('#'): continue
+                if 'num_requests_running' in line or 'num_requests_waiting' in line:
+                    val = float(line.split(' ')[-1])
+                    if val > 0:
+                        return True
+            return False
+    except Exception:
+        return False # API offline or not responding
+
+
+# ==========================================
 # TEXT GENERATION (EVALUATION)
 # ==========================================
 @torch.no_grad()
@@ -475,7 +496,8 @@ def train():
     # TOKEN TRACKING STATE
     total_tokens_trained = 0  # Cumulative across all GPUs
     total_tokens_generated = 0  # Cumulative eval tokens
-    train_stream_state = None
+    phase1_stream_state = None
+    phase2_stream_state = None
     val_stream_state = None
 
     latest_ckpt_path = get_latest_checkpoint(checkpoint_dir)
@@ -494,12 +516,25 @@ def train():
         # RESTORE TOKEN COUNTERS
         total_tokens_trained = checkpoint.get('tokens_trained', 0)
         total_tokens_generated = checkpoint.get('tokens_generated', 0)
-        train_stream_state = checkpoint.get('train_stream_state', None)
+        
+        # Curriculum stream states (backward compat: fall back to old train_stream_state)
+        phase1_stream_state = checkpoint.get('phase1_stream_state', None)
+        phase2_stream_state = checkpoint.get('phase2_stream_state', None)
         val_stream_state = checkpoint.get('val_stream_state', None)
+        
+        legacy_state = checkpoint.get('train_stream_state', None)
+        if legacy_state is not None and phase1_stream_state is None and phase2_stream_state is None:
+            # Old checkpoint: map legacy unified state to the active curriculum phase
+            _legacy_switch = int(total_steps * 0.8)
+            if start_step < _legacy_switch:
+                phase1_stream_state = legacy_state
+            else:
+                phase2_stream_state = legacy_state
 
         if is_main:
             initial_seq_len = get_seq_len(start_step, seq_len_warmup, model_config["max_seq_len"], seq_len_start)
-            print(f"[!] Resuming at step {start_step} | Tokens trained: {total_tokens_trained:,} | Context: {initial_seq_len}")
+            _phase = 1 if start_step < int(model_config.get("total_steps", total_steps) * 0.8) else 2
+            print(f"[!] Resuming at step {start_step} | Tokens trained: {total_tokens_trained:,} | Context: {initial_seq_len} | Phase: {_phase}")
             if total_tokens_generated > 0:
                 print(f"[!] Total tokens generated (eval): {total_tokens_generated:,}")
             print()
@@ -507,9 +542,13 @@ def train():
         if is_main:
             print(f"\n[!] Starting fresh: {ACTIVE_CONFIG_NAME}")
             initial_seq_len = get_seq_len(0, seq_len_warmup, current_cfg["max_seq_len"], seq_len_start)
-            print(f"[!] Starting context size: {initial_seq_len} tokens\n")
+            _switch = int(total_steps * 0.8)
+            print(f"[!] Starting context size: {initial_seq_len} tokens")
+            print(f"[!] Nemotron curriculum: Phase 1 (steps 0-{_switch}) -> Phase 2 (steps {_switch}-{total_steps})\n")
         model_config = current_cfg
         os.makedirs(checkpoint_dir, exist_ok=True)
+
+    phase_switch_step = int(model_config.get("total_steps", total_steps) * 0.8)
 
     arch_keys = ["dim", "n_layers", "n_heads", "n_kv_heads", "hidden_dim", "num_experts", "top_k", "max_seq_len"]
     arch_config = {k: v for k, v in model_config.items() if k in arch_keys}
@@ -553,16 +592,45 @@ def train():
     if is_distributed:
         model = DDP(model, device_ids=[local_rank], find_unused_parameters=True)
 
-    datasets_dict, probabilities = load_dataset_index("data/index.txt")
+    datasets_dict, _ = load_dataset_index("data/index.txt")
+    
+    # Nemotron curriculum: Phase 1 (diversity, 80%) -> Phase 2 (quality, 20%)
+    phase1_train = {}
+    phase2_train = {}
+    for name, data in datasets_dict['train'].items():
+        if 'phase1' in name:
+            phase1_train[name] = data
+        elif 'phase2' in name:
+            phase2_train[name] = data
+    
+    if not phase1_train or not phase2_train:
+        raise ValueError("Nemotron curriculum requires both phase1 and phase2 datasets in data/index.txt")
+    
+    phase1_probs = {k: 1.0 for k in phase1_train}
+    phase2_probs = {k: 1.0 for k in phase2_train}
+    
+    # Validation samples from both phases (80/20 split reflecting curriculum proportions)
+    val_datasets = {}
+    for name, data in datasets_dict['val'].items():
+        if 'phase1' in name or 'phase2' in name:
+            val_datasets[name] = data
+    val_probs = {}
+    for name in val_datasets:
+        val_probs[name] = 0.8 if 'phase1' in name else 0.2
     
     # Create stateful data streams with resume support
-    train_stream = MixedDataStream(
-        datasets_dict['train'], probabilities, batch_size, start_step,
+    phase1_stream = MixedDataStream(
+        phase1_train, phase1_probs, batch_size, start_step,
         accumulation_steps, seq_len_warmup, model_config["max_seq_len"],
-        seq_len_start, is_distributed, resume_state=train_stream_state
+        seq_len_start, is_distributed, resume_state=phase1_stream_state
+    )
+    phase2_stream = MixedDataStream(
+        phase2_train, phase2_probs, batch_size, max(0, start_step - phase_switch_step),
+        accumulation_steps, seq_len_warmup, model_config["max_seq_len"],
+        seq_len_start, is_distributed, resume_state=phase2_stream_state
     )
     val_stream = MixedDataStream(
-        datasets_dict['val'], probabilities, batch_size, 0, 1,
+        val_datasets, val_probs, batch_size, 0, 1,
         0, model_config["max_seq_len"], model_config["max_seq_len"], 
         is_distributed, resume_state=val_stream_state
     )
@@ -599,10 +667,67 @@ def train():
     t0 = time.time()
     local_tokens_since_last_log = 0  # Tokens processed on this GPU
     
-    # Pre-allocate for throughput calculation
-    train_iter = iter(train_stream)
+    # Initialize iterator based on curriculum phase
+    if start_step >= phase_switch_step:
+        train_iter = iter(phase2_stream)
+        current_phase = 2
+    else:
+        train_iter = iter(phase1_stream)
+        current_phase = 1
 
     for step in range(start_step, total_steps):
+        
+        # ==========================================================
+        # COOPERATIVE VLLM YIELDING (API POLLING)
+        # ==========================================================
+        if step % 5 == 0:
+            pause_signal = torch.tensor([0], device=device)
+            
+            if is_main:
+                # Polling the specific port you used earlier (9100)
+                if check_vllm_api(port=9100):
+                    print(f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] [!] vLLM active requests detected. Pausing training to yield compute...")
+                    pause_signal[0] = 1
+
+            if is_distributed:
+                dist.broadcast(pause_signal, src=0)
+
+            if pause_signal.item() == 1:
+                # 1. Finish all pending GPU operations safely so ROCm is happy
+                torch.cuda.synchronize(device)
+                
+                # 2. Wait for 10 minutes of complete vLLM inactivity
+                if is_main:
+                    consecutive_idle_seconds = 0
+                    while consecutive_idle_seconds < 600:
+                        time.sleep(5)
+                        if check_vllm_api(port=9100):
+                            consecutive_idle_seconds = 0 # Reset cooldown
+                        else:
+                            consecutive_idle_seconds += 5
+                            if consecutive_idle_seconds % 60 == 0:
+                                print(f"[*] vLLM idle. Resuming in {600 - consecutive_idle_seconds} seconds...")
+                    
+                    print(f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] [*] 10 minutes passed. Resuming Jesper training!")
+                    pause_signal[0] = 0
+
+                # 3. Block all worker GPUs here until Rank 0 releases them
+                if is_distributed:
+                    dist.broadcast(pause_signal, src=0)
+                
+                # Reset throughput timers so the pause doesn't ruin your Tok/s metric
+                t0 = time.time() 
+        # ==========================================================
+        
+        # Curriculum switch: Phase 1 -> Phase 2
+        if step == phase_switch_step:
+            if is_main:
+                print(f"\n{'='*60}")
+                print(f"CURRICULUM SWITCH: Phase 1 -> Phase 2 at step {step}")
+                print(f"{'='*60}\n")
+            train_iter = iter(phase2_stream)
+            current_phase = 2
+        
         current_seq_len = get_seq_len(step, seq_len_warmup, model_config["max_seq_len"], seq_len_start)
         
         # Tokens processed on THIS GPU for this global step
@@ -695,6 +820,7 @@ def train():
                 f"          Tok/s: {local_tok_per_sec:,.0f} (GPU) | {total_tok_per_sec:,.0f} (Total) | "
                 f"Total Trained: {total_tokens_trained:,}\n"
                 f"          LR: {lr:.2e} | B2: {dynamic_beta2:.4f} | Seq: {current_seq_len} | "
+                f"Phase: {current_phase} | "
                 f"CE Loss: {accumulated_ce_loss:.4f} | Aux: {accumulated_aux_loss:.4f} | VRAM: {mem:.1f}GB"
             )
 
@@ -740,7 +866,8 @@ def train():
                 print_model_stats(model, model_config, save_path=os.path.join(ckpt_dir, "model_stats.txt"))
 
                 # Save data stream states for resume
-                current_train_state = train_stream.get_state()
+                current_phase1_state = phase1_stream.get_state()
+                current_phase2_state = phase2_stream.get_state()
                 current_val_state = val_stream.get_state()
 
                 ckpt = {
@@ -751,11 +878,12 @@ def train():
                     'step': step,
                     'train_loss_history': train_loss_history,
                     'val_loss_history': val_loss_history,
-                    # NEW: Token tracking
+                    # Token tracking
                     'tokens_trained': total_tokens_trained,
                     'tokens_generated': total_tokens_generated,
-                    # NEW: Data position tracking
-                    'train_stream_state': current_train_state,
+                    # Curriculum data position tracking
+                    'phase1_stream_state': current_phase1_state,
+                    'phase2_stream_state': current_phase2_state,
                     'val_stream_state': current_val_state,
                 }
                 torch.save(ckpt, os.path.join(ckpt_dir, "checkpoint.pt"))

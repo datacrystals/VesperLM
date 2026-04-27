@@ -104,7 +104,7 @@ ACTIVE_CONFIG_NAME = "small_v2_sft"
 
 # Path to the pretrained checkpoint to start SFT from.
 # Set to None to scan sft_checkpoints/ for a resume instead.
-PRETRAIN_CHECKPOINT = "jesper_checkpoints/step_29900/checkpoint.pt"
+PRETRAIN_CHECKPOINT = "jesper_checkpoints/step_19900/checkpoint.pt"
 
 # ChatML eval prompts — unlike pretrain these are full conversation turns
 # so we can see if Vesper is learning to chat correctly
@@ -504,6 +504,10 @@ def train():
         else:
             if is_main:
                 print(f"[!] Pretrain weights loaded — SFT starts at step 0\n")
+
+#        for name, param in model.named_parameters():
+#            if 'router' in name:
+#                param.requires_grad = False
 
     os.makedirs(checkpoint_dir, exist_ok=True)
 
