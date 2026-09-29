@@ -48,7 +48,11 @@ class GatedLinearAttn(nn.Module):
         )
 
     def forward(self, x):
-        out, _, _ = self.gla(x)
+        # GLA's chunked Triton kernels cannot compile for fp16 on P40
+        # (cc 6.1) and abort the process ("Unsupported rounding mode").
+        # Run GLA in fp32 even when the caller is under fp16 autocast.
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            out, _, _ = self.gla(x.float())
         return out
 
 
