@@ -187,6 +187,41 @@ MODEL_CONFIGS = {
         "eval_interval": 1000,
         "val_eval_steps": 50,
     },
+    # ------------------------------------------------------------------
+    # ~30 M active params — tiny proof-of-pipeline agent model
+    # ------------------------------------------------------------------
+    "tiny_agent": {
+        # Architecture
+        "dim": 384,
+        "n_layers": 6,
+        "n_heads": 6,
+        "n_kv_heads": 2,
+        "hidden_dim": 1024,
+        "num_experts": 4,
+        "top_k": 2,
+        "max_seq_len": 2048,
+
+        # Training & Batching
+        "micro_batch_size": 1,
+        "target_accumulation_steps": 128,
+
+        # Optimizer Dynamics
+        "beta1": 0.9,
+        "beta2_token_half_life": 1_000_000,
+        "max_lr": 6e-4,
+        "min_lr": 6e-5,
+        "aux_weight": 0.1,
+
+        # Scheduling
+        "seq_len_start": 128,
+        "seq_len_warmup": 1000,
+        "warmup_steps": 200,
+        "total_steps": 2000,
+
+        # Evaluation
+        "eval_interval": 100,
+        "val_eval_steps": 50,
+    },
 }
 
 # Backwards-compatibility aliases

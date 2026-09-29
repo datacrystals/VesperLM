@@ -35,7 +35,7 @@ class RMSNorm(nn.Module):
 
 
 class GroupedQueryAttention(nn.Module):
-    def __init__(self, dim, n_heads, n_kv_heads, max_seq_len=2048):
+    def __init__(self, dim, n_heads, n_kv_heads, max_seq_len=2048, qk_norm=False):
         super().__init__()
         self.n_heads = n_heads
         self.n_kv_heads = n_kv_heads
@@ -48,12 +48,21 @@ class GroupedQueryAttention(nn.Module):
         self.wv = nn.Linear(dim, n_kv_heads * self.head_dim, bias=False)
         self.wo = nn.Linear(dim, dim, bias=False)
 
+        # QK-norm: RMSNorm on Q and K (before RoPE) keeps attention
+        # logits bounded and stabilizes long training runs.
+        self.q_norm = RMSNorm(self.head_dim) if qk_norm else None
+        self.k_norm = RMSNorm(self.head_dim) if qk_norm else None
+
     def forward(self, x, freqs_cis):
         B, T, C = x.size()
 
         q = self.wq(x).view(B, T, self.n_heads, self.head_dim)
         k = self.wk(x).view(B, T, self.n_kv_heads, self.head_dim)
         v = self.wv(x).view(B, T, self.n_kv_heads, self.head_dim)
+
+        if self.q_norm is not None:
+            q = self.q_norm(q)
+            k = self.k_norm(k)
 
         q, k = apply_rotary_emb(q, k, freqs_cis[:T])
 

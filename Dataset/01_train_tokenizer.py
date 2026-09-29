@@ -1,13 +1,13 @@
 import os
+import glob
 import json
 from tokenizers import Tokenizer, models, trainers, pre_tokenizers
 from transformers import PreTrainedTokenizerFast
 from datasets import load_dataset
 
 # We register SFT tokens now so the embedding matrix is sized correctly for pretraining
-#SPECIAL_TOKENS = ["<|endoftext|>", "<|im_start|>", "<|im_end|>", "<|im_sep|>", "<|unk|>", "<|pad|>"]
 SPECIAL_TOKENS = [
-    "<|endoftext|>",   # Standard pretraining EOS / BOS
+    "endoftext",   # Standard pretraining EOS / BOS
     "<|im_start|>",    # ChatML role start
     "<|im_end|>",      # ChatML role end
     "<|thought|>",     # Start CoT monologue
@@ -18,7 +18,7 @@ SPECIAL_TOKENS = [
     "<|fim_middle|>",  # Code generation: Text to insert at cursor
     "<|fim_suffix|>",  # Code generation: Text after cursor
     "<|file_sep|>",    # Cross-file context separator
-    "<|unk|>", 
+    "<|unk|>",
     "<|pad|>"
 ]
 
@@ -39,23 +39,26 @@ def text_iterator(raw_dir: str, sample_size: int = 50000):
                             count += 1
                     except: continue
 
-    print("Sampling HuggingFace FineWeb...")
-    fw_ds = load_dataset("HuggingFaceFW/fineweb-edu", name="sample-10BT", split="train", streaming=True)
-    for i, row in enumerate(fw_ds):
-        if i >= sample_size // 4: break
+    print("Sampling HuggingFace FineWeb (local cache)...")
+    fw_ds = load_dataset("HuggingFaceFW/fineweb-edu", name="sample-10BT", split="train")
+    fw_ds = fw_ds.select(range(min(sample_size // 4, len(fw_ds))))
+    for row in fw_ds:
         yield row["text"]
 
-    print("Sampling HuggingFace Code...")
-    code_ds = load_dataset("bigcode/starcoderdata", data_dir="python", split="train", streaming=True)
-    for i, row in enumerate(code_ds):
-        if i >= sample_size // 4: break
+    print("Sampling HuggingFace Code (local cache)...")
+    code_ds = load_dataset("bigcode/starcoderdata", data_dir="python", split="train")
+    code_ds = code_ds.select(range(min(sample_size // 4, len(code_ds))))
+    for row in code_ds:
         yield row["content"]
-        
-    print("Sampling HuggingFace French...")
-    fr_ds = load_dataset("uonlp/CulturaX", "fr", split="train", streaming=True)
-    for i, row in enumerate(fr_ds):
-        if i >= sample_size // 4: break
+
+    # CulturaX (French) not cached locally; use more fineweb instead
+    print("Sampling extra FineWeb (replaces French)...")
+    extra = load_dataset("HuggingFaceFW/fineweb-edu", name="sample-10BT", split="train")
+    start = sample_size // 4
+    extra = extra.select(range(start, start + sample_size // 4))
+    for row in extra:
         yield row["text"]
+
 
 def train_custom_tokenizer(raw_dir: str, output_path: str, vocab_size: int = 65523): # 65536 minus 13 special tokens
     print("\n--- Training Custom BPE Tokenizer ---")
@@ -70,13 +73,13 @@ def train_custom_tokenizer(raw_dir: str, output_path: str, vocab_size: int = 655
     )
 
     tokenizer.train_from_iterator(text_iterator(raw_dir), trainer=trainer)
-    
+
     fast_tokenizer = PreTrainedTokenizerFast(
         tokenizer_object=tokenizer,
         unk_token="<|unk|>",
         pad_token="<|pad|>",
-        eos_token="<|endoftext|>",
-        bos_token="<|endoftext|>" # Standard practice to use endoftext for both in base pretraining
+        eos_token="endoftext",
+        bos_token="endoftext" # Standard practice to use endoftext for both in base pretraining
     )
     fast_tokenizer.save_pretrained(output_path)
     print(f"✅ Tokenizer saved to {output_path}")

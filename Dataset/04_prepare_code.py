@@ -3,7 +3,7 @@ import numpy as np
 import multiprocessing
 from tqdm import tqdm
 from transformers import PreTrainedTokenizerFast
-from datasets import load_dataset, concatenate_datasets
+from datasets import load_dataset
 import warnings
 
 # Suppress harmless sequence length warnings
@@ -56,14 +56,9 @@ if __name__ == "__main__":
     # Drop all the mismatched metadata immediately
     ds_py = ds_py.select_columns(["content"])
     
-    print("\n--- Downloading & Preparing C++ Data ---")
-    ds_cpp = load_dataset("bigcode/starcoderdata", data_dir="cpp", split="train[:15%]")
-    # Drop all the mismatched metadata immediately
-    ds_cpp = ds_cpp.select_columns(["content"])
-    
-    print("\n--- Merging and Shuffling Code Datasets ---")
-    # Now they both only have a 'content' string column, so they will merge perfectly
-    dataset = concatenate_datasets([ds_py, ds_cpp]).shuffle(seed=42)
+    print("\n--- Shuffling Code Dataset ---")
+    # cpp subset not locally cached; python-only for the tiny-model proof run
+    dataset = ds_py.shuffle(seed=42)
     
     def tokenize_example(example):
         text = example["content"]
@@ -90,7 +85,7 @@ if __name__ == "__main__":
                 yield row['tokens']
 
     # Set target to 1.5 Billion tokens
-    target_token_count = 1_500_000_000
+    target_token_count = 150_000_000
     output_file = os.path.join(out_dir, "code_pretrain.bin")
     
     write_tokens_to_bin(token_generator(), output_file, target_tokens=target_token_count)
