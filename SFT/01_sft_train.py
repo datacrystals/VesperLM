@@ -433,7 +433,7 @@ def train():
     device         = torch.device(f"cuda:{local_rank}" if local_rank is not None else "cuda:0")
     is_main        = (local_rank == 0) or (local_rank is None)
 
-    tokenizer_path = "custom_tokenizer"
+    tokenizer_path = os.path.join("..", "Pretrain", "custom_tokenizer")
     tokenizer      = AutoTokenizer.from_pretrained(tokenizer_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
