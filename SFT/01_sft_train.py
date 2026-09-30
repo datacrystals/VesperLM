@@ -37,7 +37,11 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.amp import GradScaler
 from transformers import AutoTokenizer
-from vesper_model import VesperLLM
+
+# The linear model lives in Common/; add it to the import path
+sys.path.insert(0, os.path.join(os.path.dirname(
+    os.path.abspath(__file__)), "..", "Common"))
+from vesper_linear_model import VesperLinearLM
 
 import matplotlib
 matplotlib.use('Agg')
@@ -50,10 +54,12 @@ import matplotlib.pyplot as plt
 # full seq len from step 0, and more frequent checkpoints.
 # ==========================================
 SFT_CONFIGS = {
-    "small_v2_sft": {
-        # Must match your pretrained model's architecture exactly
-        "dim": 1024, "n_layers": 10, "n_heads": 8, "n_kv_heads": 2,
-        "hidden_dim": 1280, "num_experts": 8, "top_k": 2, "max_seq_len": 1024,
+    "tiny_agent_sft": {
+        # Must match the pretrained tiny_agent architecture exactly
+        # (see Pretrain/configs/model_configs.py — the run labelled
+        # "small_v2" in the log uses these tiny_agent dims)
+        "dim": 384, "n_layers": 6, "n_heads": 6, "n_kv_heads": 2,
+        "hidden_dim": 1024, "num_experts": 4, "top_k": 2, "max_seq_len": 2048,
 
         # Batching — same as pretrain
         "micro_batch_size": 1,
@@ -68,14 +74,10 @@ SFT_CONFIGS = {
         "aux_weight": 0.01,
 
         # Short warmup, modest total steps
-        # SFT doesn't need as many steps — you're nudging not relearning
-        # 2000-5000 steps is usually plenty for this data size
-        # Increase if val loss is still clearly falling at the end
         "warmup_steps": 200,
         "total_steps": 3000,
 
         # More frequent checkpoints than pretrain — SFT can overfit fast
-        # so you want checkpoints to pick the best one
         "eval_interval": 100,
         "val_eval_steps": 30,
     },
@@ -100,19 +102,20 @@ SFT_CONFIGS = {
     },
 }
 
-ACTIVE_CONFIG_NAME = "small_v2_sft"
+ACTIVE_CONFIG_NAME = "tiny_agent_sft"
 
 # Path to the pretrained checkpoint to start SFT from.
 # Set to None to scan sft_checkpoints/ for a resume instead.
-PRETRAIN_CHECKPOINT = "vesper_checkpoints/step_19900/checkpoint.pt"
+# tiny_agent pretrain only checkpoints at multiples of 100, so the
+# final checkpoint is step_1900 (the loop's last step is 1999).
+PRETRAIN_CHECKPOINT = "vesper_linear_checkpoints/step_1900/checkpoint.pt"
 
-# ChatML eval prompts — unlike pretrain these are full conversation turns
-# so we can see if Vesper is learning to chat correctly
+# ChatML eval prompts — tool-use focused, matching the SFT trace format
 EVAL_PROMPTS = [
-    "<|im_start|>user\nHello! Who are you?<|im_end|>\n<|im_start|>assistant\n",
-    "<|im_start|>user\nWhat is 2 + 2?<|im_end|>\n<|im_start|>assistant\n",
-    "<|im_start|>user\nDo you have feelings?<|im_end|>\n<|im_start|>assistant\n",
-    "<|im_start|>user\nWhat makes you curious?<|im_end|>\n<|im_start|>assistant\n",
+    "<|im_start|>user\nList all files in the current directory, including hidden ones.<|im_end|>\n<|im_start|>assistant\n",
+    "<|im_start|>user\nRead the file config.yaml and tell me what's in it.<|im_end|>\n<|im_start|>assistant\n",
+    "<|im_start|>user\nWhat is 17 * 23 + 145?<|im_end|>\n<|im_start|>assistant\n",
+    "<|im_start|>user\nFind all lines in the src directory that mention 'TODO'.<|im_end|>\n<|im_start|>assistant\n",
 ]
 
 
@@ -495,6 +498,16 @@ def train():
         checkpoint   = torch.load(resume_from, map_location='cpu', weights_only=False)
         model_config = checkpoint.get('model_config', cfg)
 
+        # Pretrain checkpoints carry the *pretrain* config dict (which
+        # includes optimizer/stream fields); keep only arch keys so the
+        # model is built from the checkpoint's true dims.
+        if loading_pretrain:
+            arch_keys_pre = ["dim", "n_layers", "n_heads", "n_kv_heads",
+                             "hidden_dim", "num_experts", "top_k",
+                             "max_seq_len", "vocab_size", "pad_id"]
+            model_config = {k: v for k, v in model_config.items()
+                            if k in arch_keys_pre}
+
         if not loading_pretrain:
             start_step         = checkpoint['step'] + 1
             train_loss_history = checkpoint.get('train_loss_history', [])
@@ -516,14 +529,17 @@ def train():
                    "num_experts", "top_k", "max_seq_len"]
     arch_config = {k: v for k, v in model_config.items() if k in arch_keys}
 
-    model = VesperLLM(
+    model = VesperLinearLM(
         vocab_size=len(tokenizer),
         pad_id=tokenizer.pad_token_id,
         **arch_config
     ).to(device)
 
     if checkpoint is not None:
-        missing, unexpected = model.load_state_dict(checkpoint['model'], strict=False)
+        state = checkpoint['model']
+        # Handle DDP-wrapped or raw state dicts
+        state = {k.replace("module.", ""): v for k, v in state.items()}
+        missing, unexpected = model.load_state_dict(state, strict=True)
         if is_main and (missing or unexpected):
             print(f"  Checkpoint load — missing keys: {len(missing)}, unexpected: {len(unexpected)}")
 
@@ -705,7 +721,8 @@ def train():
 
                 # Snapshot source files
                 try:
-                    shutil.copy("vesper_model.py", os.path.join(ckpt_dir, "vesper_model_snapshot.py"))
+                    shutil.copy(os.path.join("..", "Common", "vesper_linear_model.py"),
+                                os.path.join(ckpt_dir, "vesper_linear_model_snapshot.py"))
                     shutil.copy(__file__, os.path.join(ckpt_dir, f"{os.path.basename(__file__)}_snapshot.py"))
                 except Exception as e:
                     print(f"Warning: Could not save code snapshots: {e}")
