@@ -108,7 +108,15 @@ ACTIVE_CONFIG_NAME = "tiny_agent_sft"
 # Set to None to scan sft_checkpoints/ for a resume instead.
 # tiny_agent pretrain only checkpoints at multiples of 100, so the
 # final checkpoint is step_1900 (the loop's last step is 1999).
-PRETRAIN_CHECKPOINT = "vesper_linear_checkpoints/step_1900/checkpoint.pt"
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PRETRAIN_CHECKPOINT = os.path.join(
+    _REPO_ROOT, "Pretrain", "vesper_linear_checkpoints", "step_1900", "checkpoint.pt")
+if not os.path.exists(PRETRAIN_CHECKPOINT):
+    _ck_dir = os.path.join(_REPO_ROOT, "Pretrain", "vesper_linear_checkpoints")
+    _steps = [int(d.split("_")[1]) for d in os.listdir(_ck_dir)
+              if d.startswith("step_")] if os.path.isdir(_ck_dir) else []
+    if _steps:
+        PRETRAIN_CHECKPOINT = os.path.join(_ck_dir, f"step_{max(_steps)}", "checkpoint.pt")
 
 # ChatML eval prompts — tool-use focused, matching the SFT trace format
 EVAL_PROMPTS = [

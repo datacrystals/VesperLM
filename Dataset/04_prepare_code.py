@@ -51,8 +51,20 @@ if __name__ == "__main__":
     tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_dir)
     eos_id = tokenizer.convert_tokens_to_ids("<|endoftext|>")
     
-    print("\n--- Downloading & Preparing Python Data ---")
-    ds_py = load_dataset("bigcode/starcoderdata", data_dir="python", split="train[:15%]")
+    print("\n--- Loading cached Python Data ---")
+    # datasets 5.x cannot resolve the on-disk cache config for
+    # bigcode/starcoderdata (cached as default-fad560847e57bb78), so read
+    # the arrow shards directly. Falls back to a hub download if missing.
+    from glob import glob as _glob
+    from datasets import concatenate_datasets, Dataset as _DS
+    _files = sorted(_glob(
+        "/home/tliao/.cache/huggingface/datasets/bigcode___starcoderdata/"
+        "default-fad560847e57bb78/0.0.0/*/starcoderdata-train-*.arrow"))
+    if _files:
+        print(f"  found {len(_files)} cached shards")
+        ds_py = concatenate_datasets([_DS.from_file(f) for f in _files])
+    else:
+        ds_py = load_dataset("bigcode/starcoderdata", data_dir="python", split="train[:15%]")
     # Drop all the mismatched metadata immediately
     ds_py = ds_py.select_columns(["content"])
     
@@ -85,7 +97,7 @@ if __name__ == "__main__":
                 yield row['tokens']
 
     # Set target to 1.5 Billion tokens
-    target_token_count = 150_000_000
-    output_file = os.path.join(out_dir, "code_pretrain.bin")
+    target_token_count = 800_000_000
+    output_file = os.path.join(out_dir, "code_pretrain_v2.bin")
     
     write_tokens_to_bin(token_generator(), output_file, target_tokens=target_token_count)

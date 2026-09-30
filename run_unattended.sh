@@ -7,7 +7,7 @@
 #
 # Usage: nohup bash run_unattended.sh > unattended.log 2>&1 &
 
-cd "$(dirname "$0")/.."   # repo root
+cd "$(dirname "$0")"   # repo root
 PY=/home/tliao/venvs/vesper/bin/python
 TORCHRUN=/home/tliao/venvs/vesper/bin/torchrun
 

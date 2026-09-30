@@ -32,7 +32,7 @@ from transformers import PreTrainedTokenizerFast  # noqa: E402
 
 TOKENIZER_DIR = os.path.join(_REPO, "Pretrain", "custom_tokenizer")
 CHECKPOINT_DIR = os.path.join(_REPO, "Pretrain", "vesper_linear_checkpoints")
-SFT_CHECKPOINT_DIR = os.path.join(_REPO, "SFT", "vesper_sft_checkpoints")
+SFT_CHECKPOINT_DIR = os.path.join(_REPO, "SFT", "sft_checkpoints")
 
 TINY_AGENT_CONFIG = dict(
     dim=384, n_layers=6, n_heads=6, n_kv_heads=2,

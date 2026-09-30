@@ -80,7 +80,7 @@ if __name__ == "__main__":
                 yield row['tokens']
 
     # Set target to 1.5 Billion tokens (adjust up or down based on how much data you want)
-    target_token_count = 250_000_000
-    output_file = os.path.join(out_dir, "fineweb_pretrain.bin")
+    target_token_count = 1_500_000_000
+    output_file = os.path.join(out_dir, "fineweb_pretrain_v2.bin")
     
     write_tokens_to_bin(token_generator(), output_file, target_tokens=target_token_count)

@@ -20,7 +20,7 @@ OUT_DIR = "data/pretrain"
 # Change this for your model scale.
 # Nemotron 3 Super: 25_000_000_000_000 (25T)
 # For a 1B param model, Chinchilla-optimal is ~20B tokens.
-TOTAL_TOKENS = 20_000_000_000
+TOTAL_TOKENS = 2_500_000_000
 
 # Phase split from report §2.3.7: Phase 1 = 80% (diversity), Phase 2 = 20% (quality)
 PHASE1_TOKENS = int(TOTAL_TOKENS * 0.80)
@@ -491,14 +491,14 @@ if __name__ == "__main__":
     # ---- PHASE 1 ----
     ds_list, probs, skipped1 = build_streaming_blend(PHASE1_BLEND, "Phase 1")
     mixed = interleave_datasets(ds_list, probabilities=probs, seed=42)
-    out_path = os.path.join(OUT_DIR, "phase1_pretrain.bin")
+    out_path = os.path.join(OUT_DIR, "nemotron_phase1.bin")
     print(f"Writing Phase 1 -> {out_path} ({PHASE1_TOKENS:,} tokens)")
     write_tokens_threaded(mixed, tokenizer, eos_id, out_path, PHASE1_TOKENS)
 
     # ---- PHASE 2 ----
     ds_list, probs, skipped2 = build_streaming_blend(PHASE2_BLEND, "Phase 2")
     mixed = interleave_datasets(ds_list, probabilities=probs, seed=42)
-    out_path = os.path.join(OUT_DIR, "phase2_pretrain.bin")
+    out_path = os.path.join(OUT_DIR, "nemotron_phase2.bin")
     print(f"Writing Phase 2 -> {out_path} ({PHASE2_TOKENS:,} tokens)")
     write_tokens_threaded(mixed, tokenizer, eos_id, out_path, PHASE2_TOKENS)
 
