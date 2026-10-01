@@ -13,7 +13,7 @@ os.environ.setdefault("FLA_CACHE_DIR", "/tmp/fla_cache")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fla.layers import GatedLinearAttention
+from fla.layers import GatedLinearAttention, Mamba2
 
 # Reuse the dense model's building blocks so the two architectures stay in sync
 from vesper_model import (
@@ -56,22 +56,100 @@ class GatedLinearAttn(nn.Module):
         return out
 
 
+class Mamba2SSD(nn.Module):
+    """Thin wrapper around fla's Mamba2 layer (SSD path), mirroring
+    GatedLinearAttn's (x) -> out interface.
+
+    fla's Mamba2 uses Triton kernels for the gated swish activation
+    and the gated RMSNorm, which cannot run on CPU tensors (and would
+    not compile for fp16 on P40 / cc 6.1). We fall back to pure-torch
+    equivalents for both, and to a plain Conv1d for the causal conv —
+    so this layer runs in fp32 everywhere, exactly like the fp32-GLA
+    workaround above.
+    """
+
+    def __init__(self, dim, head_dim=64, state_size=128, chunk_size=256,
+                 layer_idx=None):
+        super().__init__()
+        self.mamba2 = Mamba2(
+            hidden_size=dim,
+            expand=2,
+            head_dim=head_dim,
+            state_size=state_size,
+            chunk_size=chunk_size,
+            layer_idx=layer_idx,
+        )
+        # fla's Triton swish / gated-RMSNorm / causal-conv kernels do
+        # not support CPU tensors (and fp16 P40 kernels crash); swap
+        # in pure-torch equivalents so the layer runs fp32 anywhere.
+        self.mamba2.act = F.silu
+        self.mamba2.causal_conv1d_fn = self._torch_conv1d
+
+    @staticmethod
+    def _torch_conv1d(x, weight, bias=None, activation=None, **kwargs):
+        # x: (B, D, T); weight: (D, K) — mirrors fla's triton
+        # causal_conv1d signature (returns (out, cache) tuple)
+        kernel = weight.shape[-1]
+        out = F.conv1d(F.pad(x, (kernel - 1, 0)),
+                       weight.unsqueeze(1), bias, groups=x.shape[1])
+        if activation in ("silu", "swish"):
+            out = F.silu(out)
+        return out, None
+
+    def forward(self, x):
+        # Same fp32-enforcement as GatedLinearAttn: fla kernels must
+        # not see fp16 (P40 cc 6.1 crashes) — run in fp32.
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            x = x.float()
+            out, _, _ = self._mamba2_ssd(x)
+        return out
+
+    def _mamba2_ssd(self, x):
+        # fla's rmsnorm_fn (gated RMSNorm) is Triton-only; a pure-torch
+        # equivalent keeps the layer CPU/Portable-safe. Patching
+        # module-level fla code globally would leak into GLA layers,
+        # so rebind only for this call.
+        import fla.modules.layernorm_gated as _lg
+        orig = _lg.rmsnorm_fn
+        _lg.rmsnorm_fn = self._torch_rmsnorm_gated
+        try:
+            return self.mamba2(x)
+        finally:
+            _lg.rmsnorm_fn = orig
+
+    @staticmethod
+    def _torch_rmsnorm_gated(x, weight, bias=None, z=None, eps=1e-6,
+                             group_size=None, norm_before_gate=True):
+        # x: (T, D); z: optional gate (T, D) — mirrors fla's
+        # rmsnorm_fn signature
+        out = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + eps) * weight
+        if z is not None:
+            g = F.silu(z) if norm_before_gate else z
+            out = out * g
+        return out
+
+
 class VesperLinearLM(nn.Module):
     """VesperLLM variant with a GLA/softmax hybrid attention stack.
 
     Every `attention_every`-th layer keeps full GQA softmax attention
-    (long-range recall); the rest use gated linear attention (FLA GLA,
-    chunked, O(T) compute and O(1) memory in sequence length).
+    (long-range recall); the rest use a linear-attention layer chosen
+    by `linear_type` ("gla": FLA GLA chunked — default, or "mamba2":
+    fla Mamba2 SSD). Both run O(T) compute and O(1) memory in
+    sequence length, and both are forced to fp32 (see their wrappers).
     MoE FFN, RMSNorm pre-norm, and weight tying are unchanged.
     """
 
     def __init__(self, vocab_size=32000, dim=1024, n_layers=10, n_heads=8,
                  n_kv_heads=2, hidden_dim=1280, num_experts=8, top_k=2,
                  max_seq_len=1024, pad_id=0, dropout=0.0,
-                 attention_every=4, gla_head_dim=64, qk_norm=True):
+                 attention_every=4, gla_head_dim=64, qk_norm=True,
+                 linear_type="gla", mamba2_state_size=128):
         super().__init__()
         self.pad_id = pad_id
         self.max_seq_len = max_seq_len
+        if linear_type not in ("gla", "mamba2"):
+            raise ValueError(f"Unknown linear_type '{linear_type}' (expected 'gla' or 'mamba2')")
         self.tok_embeddings = nn.Embedding(vocab_size, dim)
 
         self.register_buffer("freqs_cis", precompute_freqs_cis(dim // n_heads, max_seq_len * 2))
@@ -84,6 +162,10 @@ class VesperLinearLM(nn.Module):
                 attn = GroupedQueryAttention(dim, n_heads, n_kv_heads, max_seq_len,
                                              qk_norm=qk_norm)
                 self.layer_types.append('full')
+            elif linear_type == "mamba2":
+                attn = Mamba2SSD(dim, head_dim=gla_head_dim,
+                                 state_size=mamba2_state_size, layer_idx=i)
+                self.layer_types.append('mamba2')
             else:
                 attn = GatedLinearAttn(dim, head_dim=gla_head_dim, layer_idx=i)
                 self.layer_types.append('gla')
@@ -125,7 +207,8 @@ class VesperLinearLM(nn.Module):
         total_aux_loss = 0.0
 
         for i, layer in enumerate(self.layers):
-            is_gla = self.layer_types[i] == 'gla'
+            # 'full' layers take freqs; 'gla'/'mamba2' are linear-only
+            is_gla = self.layer_types[i] != 'full'
 
             def create_attn_forward(module_dict, linear):
                 def custom_forward(x_in, freqs):

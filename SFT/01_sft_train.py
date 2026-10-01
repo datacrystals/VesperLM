@@ -54,6 +54,32 @@ import matplotlib.pyplot as plt
 # full seq len from step 0, and more frequent checkpoints.
 # ==========================================
 SFT_CONFIGS = {
+    "tiny_agent_v2_sft": {
+        # Must match the pretrained tiny_agent_v2 architecture exactly
+        # (see Pretrain/configs/model_configs.py)
+        "dim": 512, "n_layers": 8, "n_heads": 8, "n_kv_heads": 2,
+        "hidden_dim": 1536, "num_experts": 4, "top_k": 2, "max_seq_len": 2048,
+
+        # Batching — same as pretrain
+        "micro_batch_size": 1,
+        "target_accumulation_steps": 128,
+
+        # SFT uses a much lower LR than pretraining to avoid catastrophic forgetting
+        # Rule of thumb: ~10x lower than pretrain max_lr
+        "beta1": 0.9,
+        "beta2": 0.95,           # Fixed beta2 for SFT — no dynamic schedule needed
+        "max_lr": 2e-5,          # 10x lower than pretrain
+        "min_lr": 2e-6,
+        "aux_weight": 0.01,
+
+        # Short warmup, modest total steps
+        "warmup_steps": 200,
+        "total_steps": 3000,
+
+        # More frequent checkpoints than pretrain — SFT can overfit fast
+        "eval_interval": 100,
+        "val_eval_steps": 30,
+    },
     "tiny_agent_sft": {
         # Must match the pretrained tiny_agent architecture exactly
         # (see Pretrain/configs/model_configs.py — the run labelled
@@ -102,21 +128,29 @@ SFT_CONFIGS = {
     },
 }
 
-ACTIVE_CONFIG_NAME = "tiny_agent_sft"
+ACTIVE_CONFIG_NAME = "tiny_agent_v2_sft"
 
 # Path to the pretrained checkpoint to start SFT from.
 # Set to None to scan sft_checkpoints/ for a resume instead.
-# tiny_agent pretrain only checkpoints at multiples of 100, so the
-# final checkpoint is step_1900 (the loop's last step is 1999).
+# Resolution order inside the pretrain checkpoint dir:
+#   1. step_best/checkpoint.pt  (best-val checkpoint from pretrain)
+#   2. highest-numbered step_XXXX/checkpoint.pt
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PRETRAIN_CHECKPOINT = os.path.join(
-    _REPO_ROOT, "Pretrain", "vesper_linear_checkpoints", "step_1900", "checkpoint.pt")
-if not os.path.exists(PRETRAIN_CHECKPOINT):
-    _ck_dir = os.path.join(_REPO_ROOT, "Pretrain", "vesper_linear_checkpoints")
-    _steps = [int(d.split("_")[1]) for d in os.listdir(_ck_dir)
-              if d.startswith("step_")] if os.path.isdir(_ck_dir) else []
-    if _steps:
-        PRETRAIN_CHECKPOINT = os.path.join(_ck_dir, f"step_{max(_steps)}", "checkpoint.pt")
+_PRETRAIN_CKPT_DIR = os.path.join(_REPO_ROOT, "Pretrain", "vesper_linear_checkpoints_v2")
+
+def _resolve_pretrain_checkpoint(ckpt_dir):
+    best = os.path.join(ckpt_dir, "step_best", "checkpoint.pt")
+    if os.path.exists(best):
+        return best
+    if not os.path.isdir(ckpt_dir):
+        return None
+    steps = [int(d.split("_")[1]) for d in os.listdir(ckpt_dir)
+             if d.startswith("step_")]
+    if not steps:
+        return None
+    return os.path.join(ckpt_dir, f"step_{max(steps)}", "checkpoint.pt")
+
+PRETRAIN_CHECKPOINT = _resolve_pretrain_checkpoint(_PRETRAIN_CKPT_DIR)
 
 # ChatML eval prompts — tool-use focused, matching the SFT trace format
 EVAL_PROMPTS = [
@@ -465,6 +499,7 @@ def train():
     val_eval_steps = cfg["val_eval_steps"]
 
     checkpoint_dir = "sft_checkpoints"
+    best_val_loss = float("inf")
     start_step     = 0
     train_loss_history = []
     val_loss_history   = []
@@ -512,7 +547,8 @@ def train():
         if loading_pretrain:
             arch_keys_pre = ["dim", "n_layers", "n_heads", "n_kv_heads",
                              "hidden_dim", "num_experts", "top_k",
-                             "max_seq_len", "vocab_size", "pad_id"]
+                             "max_seq_len", "vocab_size", "pad_id",
+                             "linear_type"]
             model_config = {k: v for k, v in model_config.items()
                             if k in arch_keys_pre}
 
@@ -520,6 +556,7 @@ def train():
             start_step         = checkpoint['step'] + 1
             train_loss_history = checkpoint.get('train_loss_history', [])
             val_loss_history   = checkpoint.get('val_loss_history', [])
+            best_val_loss      = checkpoint.get('best_val_loss', float("inf"))
             if is_main:
                 print(f"[!] Resuming at SFT step {start_step}\n")
         else:
@@ -534,7 +571,7 @@ def train():
 
     # ---- Build model ----
     arch_keys   = ["dim", "n_layers", "n_heads", "n_kv_heads", "hidden_dim",
-                   "num_experts", "top_k", "max_seq_len"]
+                   "num_experts", "top_k", "max_seq_len", "linear_type"]
     arch_config = {k: v for k, v in model_config.items() if k in arch_keys}
 
     model = VesperLinearLM(
@@ -747,8 +784,23 @@ def train():
                     'step':                step,
                     'train_loss_history':  train_loss_history,
                     'val_loss_history':    val_loss_history,
+                    'best_val_loss':       best_val_loss,
                 }
                 torch.save(ckpt, os.path.join(ckpt_dir, "checkpoint.pt"))
+
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    best_dir = os.path.join(checkpoint_dir, "step_best")
+                    os.makedirs(best_dir, exist_ok=True)
+                    try:
+                        shutil.copy(os.path.join("..", "Common", "vesper_linear_model.py"),
+                                    os.path.join(best_dir, "vesper_linear_model_snapshot.py"))
+                        shutil.copy(__file__, os.path.join(best_dir, f"{os.path.basename(__file__)}_snapshot.py"))
+                    except Exception as e:
+                        print(f"Warning: Could not save code snapshots: {e}")
+                    torch.save(ckpt, os.path.join(best_dir, "checkpoint.pt"))
+                    print(f"\n>>> NEW BEST SFT val loss {val_loss:.4f} at step {step} "
+                          f"-> saved to {best_dir}")
 
                 # Chat-ready checkpoint (for chat_vesper.py)
                 save_chat_checkpoint(model, tokenizer, step, checkpoint_dir, model_config)

@@ -222,6 +222,46 @@ MODEL_CONFIGS = {
         "eval_interval": 100,
         "val_eval_steps": 50,
     },
+
+    # ------------------------------------------------------------------
+    # ~80 M active params — scaled-up tiny agent model
+    # (~118 M total, ~81 M active: embedding 33.5M + 6 GLA layers
+    # ~10.5M each + 2 full-attn layers ~10.1M each; 2 of 4 MoE
+    # experts are inactive per token)
+    # ------------------------------------------------------------------
+    "tiny_agent_v2": {
+        # Architecture
+        "dim": 512,
+        "n_layers": 8,
+        "n_heads": 8,
+        "n_kv_heads": 2,
+        "hidden_dim": 1536,
+        "num_experts": 4,
+        "top_k": 2,
+        "max_seq_len": 2048,
+        "linear_type": "gla",  # "gla" (default) or "mamba2" (fla SSD path)
+
+        # Training & Batching
+        "micro_batch_size": 1,
+        "target_accumulation_steps": 128,
+
+        # Optimizer Dynamics
+        "beta1": 0.9,
+        "beta2_token_half_life": 1_000_000,
+        "max_lr": 6e-4,
+        "min_lr": 6e-5,
+        "aux_weight": 0.1,
+
+        # Scheduling
+        "seq_len_start": 128,
+        "seq_len_warmup": 1000,
+        "warmup_steps": 200,
+        "total_steps": 6000,
+
+        # Evaluation
+        "eval_interval": 100,
+        "val_eval_steps": 50,
+    },
 }
 
 # Backwards-compatibility aliases

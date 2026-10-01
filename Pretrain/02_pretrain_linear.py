@@ -61,9 +61,9 @@ from vesper_linear_model import VesperLinearLM
 from muon import Muon
 from configs.model_configs import get_model_config
 
-ACTIVE_CONFIG_NAME = "tiny_agent"
+ACTIVE_CONFIG_NAME = "tiny_agent_v2"
 
-LINEAR_CHECKPOINT_DIR = "vesper_linear_checkpoints"
+LINEAR_CHECKPOINT_DIR = "vesper_linear_checkpoints_v2"
 MODEL_SNAPSHOT_NAME = "vesper_linear_model.py"
 
 
@@ -105,6 +105,7 @@ def train():
     beta2_half_life = current_cfg.get("beta2_token_half_life", 10_000_000)
 
     checkpoint_dir = LINEAR_CHECKPOINT_DIR
+    best_val_loss = float("inf")
     start_step = 0
     train_loss_history = []
     val_loss_history = []
@@ -128,6 +129,7 @@ def train():
         phase1_stream_state = checkpoint.get('phase1_stream_state', None)
         phase2_stream_state = checkpoint.get('phase2_stream_state', None)
         val_stream_state = checkpoint.get('val_stream_state', None)
+        best_val_loss = checkpoint.get('best_val_loss', float("inf"))
         if is_main:
             initial_seq_len = p01.get_seq_len(start_step, seq_len_warmup,
                                               model_config["max_seq_len"], seq_len_start)
@@ -142,7 +144,7 @@ def train():
     phase_switch_step = int(model_config.get("total_steps", total_steps) * 0.8)
 
     arch_keys = ["dim", "n_layers", "n_heads", "n_kv_heads", "hidden_dim",
-                 "num_experts", "top_k", "max_seq_len"]
+                 "num_experts", "top_k", "max_seq_len", "linear_type"]
     arch_config = {k: v for k, v in model_config.items() if k in arch_keys}
 
     model = VesperLinearLM(
@@ -419,8 +421,23 @@ def train():
                     'phase1_stream_state': phase1_stream.get_state(),
                     'phase2_stream_state': phase2_stream.get_state(),
                     'val_stream_state': val_stream.get_state(),
+                    'best_val_loss': best_val_loss,
                 }
                 torch.save(ckpt, os.path.join(ckpt_dir, "checkpoint.pt"))
+
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    best_dir = os.path.join(checkpoint_dir, "step_best")
+                    os.makedirs(best_dir, exist_ok=True)
+                    try:
+                        shutil.copy(os.path.join(_common, MODEL_SNAPSHOT_NAME),
+                                    os.path.join(best_dir, "vesper_linear_model_snapshot.py"))
+                        shutil.copy(__file__, os.path.join(best_dir, f"{os.path.basename(__file__)}_snapshot.py"))
+                    except Exception as e:
+                        print(f"Warning: Could not save code snapshots: {e}")
+                    torch.save(ckpt, os.path.join(best_dir, "checkpoint.pt"))
+                    print(f"\n>>> NEW BEST val loss {val_loss:.4f} at step {step} "
+                          f"-> saved to {best_dir}")
 
                 with open(os.path.join(ckpt_dir, "eval_samples.json"), "w") as f:
                     json.dump({

@@ -489,18 +489,20 @@ if __name__ == "__main__":
     print(f"Total target tokens: {TOTAL_TOKENS:,} (Phase 1: {PHASE1_TOKENS:,}, Phase 2: {PHASE2_TOKENS:,})\n")
 
     # ---- PHASE 1 ----
-    ds_list, probs, skipped1 = build_streaming_blend(PHASE1_BLEND, "Phase 1")
-    mixed = interleave_datasets(ds_list, probabilities=probs, seed=42)
-    out_path = os.path.join(OUT_DIR, "nemotron_phase1.bin")
-    print(f"Writing Phase 1 -> {out_path} ({PHASE1_TOKENS:,} tokens)")
-    write_tokens_threaded(mixed, tokenizer, eos_id, out_path, PHASE1_TOKENS)
+    if not os.environ.get("PHASE2_ONLY"):
+        ds_list, probs, skipped1 = build_streaming_blend(PHASE1_BLEND, "Phase 1")
+        mixed = interleave_datasets(ds_list, probabilities=probs, seed=42)
+        out_path = os.path.join(OUT_DIR, "nemotron_phase1.bin")
+        print(f"Writing Phase 1 -> {out_path} ({PHASE1_TOKENS:,} tokens)")
+        write_tokens_threaded(mixed, tokenizer, eos_id, out_path, PHASE1_TOKENS)
 
     # ---- PHASE 2 ----
-    ds_list, probs, skipped2 = build_streaming_blend(PHASE2_BLEND, "Phase 2")
-    mixed = interleave_datasets(ds_list, probabilities=probs, seed=42)
-    out_path = os.path.join(OUT_DIR, "nemotron_phase2.bin")
-    print(f"Writing Phase 2 -> {out_path} ({PHASE2_TOKENS:,} tokens)")
-    write_tokens_threaded(mixed, tokenizer, eos_id, out_path, PHASE2_TOKENS)
+    if not os.environ.get("PHASE1_ONLY"):
+        ds_list, probs, skipped2 = build_streaming_blend(PHASE2_BLEND, "Phase 2")
+        mixed = interleave_datasets(ds_list, probabilities=probs, seed=42)
+        out_path = os.path.join(OUT_DIR, "nemotron_phase2.bin")
+        print(f"Writing Phase 2 -> {out_path} ({PHASE2_TOKENS:,} tokens)")
+        write_tokens_threaded(mixed, tokenizer, eos_id, out_path, PHASE2_TOKENS)
 
     # ---- SUMMARY ----
     print("=" * 60)
@@ -509,6 +511,8 @@ if __name__ == "__main__":
     print(f"Total tokens requested: {TOTAL_TOKENS:,}")
     print(f"Phase 1 (80%):          {PHASE1_TOKENS:,}")
     print(f"Phase 2 (20%):          {PHASE2_TOKENS:,}")
+    skipped1 = [] if os.environ.get("PHASE2_ONLY") else skipped1
+    skipped2 = [] if os.environ.get("PHASE1_ONLY") else skipped2
     if skipped1 or skipped2:
         print("\nWARNING: Some categories were skipped (repo=None or load failure).")
         print("Set STRICT_MODE=True and fill in missing repos to match exactly.")

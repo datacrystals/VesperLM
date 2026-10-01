@@ -101,7 +101,7 @@ def generate(model, tok, prompt_ids, max_new_tokens=160,
              temperature=0.8, top_p=0.9):
     """Greedy-ish sampling loop over the model; returns new token ids."""
     device = next(model.parameters()).device
-    ids = prompt_ids
+    ids = prompt_ids.to(device)
     eos = tok.convert_tokens_to_ids("<endoftext>")
     im_end = tok.convert_tokens_to_ids(IM_END)
 
