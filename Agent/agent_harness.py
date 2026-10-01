@@ -127,15 +127,40 @@ def generate(model, tok, prompt_ids, max_new_tokens=160,
     return ids
 
 
+SANDBOX_CONTAINER = os.environ.get("VESPER_SANDBOX_CONTAINER",
+                                   "vesper-sandbox")
+SANDBOX_MODE = os.environ.get("VESPER_SANDBOX", "docker")  # docker|local
+
+
 def run_tool(command, workdir, timeout=10):
+    def _fmt(r):
+        out = (r.stdout + (("\n[stderr] " + r.stderr) if r.stderr
+                           else "")).strip()
+        return out[:2000] if out else "[no output]"
+
+    if SANDBOX_MODE == "docker":
+        try:
+            r = subprocess.run(
+                ["docker", "exec", SANDBOX_CONTAINER,
+                 "bash", "-c", command],
+                capture_output=True, text=True, timeout=timeout)
+            if r.returncode == 0:
+                return _fmt(r)
+            # command failed or docker/container unavailable:
+            # fall through to local
+        except subprocess.TimeoutExpired:
+            return "[error: command timed out]"
+        except OSError:
+            pass
     try:
         r = subprocess.run(
             ["bash", "-c", command], cwd=workdir,
             capture_output=True, text=True, timeout=timeout)
-        out = (r.stdout + (("\n[stderr] " + r.stderr) if r.stderr else "")).strip()
-        return out[:2000] if out else "[no output]"
+        return _fmt(r)
     except subprocess.TimeoutExpired:
         return "[error: command timed out]"
+    except (OSError, subprocess.SubprocessError):
+        return "[error: command failed]"
 
 
 def parse_tool_call(text):
