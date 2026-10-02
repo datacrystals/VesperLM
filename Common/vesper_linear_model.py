@@ -27,6 +27,26 @@ from vesper_model import (
 )
 
 
+class RecurrentStateCache(list):
+    """Minimal fla-compatible past_key_values container for incremental
+    decoding: a list of per-layer state dicts keyed by the layer's own
+    layer_idx. fla layers read their previous state via
+    `cache[layer_idx]` and store the new one via `cache.update(...)`;
+    recurrent/conv states are always full replacements (never appended),
+    so `offset` is accepted and ignored."""
+
+    def update(self, layer_idx, recurrent_state=None, conv_state=None,
+               offset=None, **kwargs):
+        while len(self) <= layer_idx:
+            self.append({})
+        state = self[layer_idx]
+        if recurrent_state is not None:
+            state['recurrent_state'] = recurrent_state
+        if conv_state is not None:
+            state['conv_state'] = conv_state
+        return state
+
+
 class GatedLinearAttn(nn.Module):
     """Thin wrapper so linear-attention layers share the (x) -> out interface
     style of GroupedQueryAttention without needing freqs_cis."""
@@ -47,12 +67,16 @@ class GatedLinearAttn(nn.Module):
             layer_idx=layer_idx,
         )
 
-    def forward(self, x):
+    def forward(self, x, cache=None):
         # GLA's chunked Triton kernels cannot compile for fp16 on P40
         # (cc 6.1) and abort the process ("Unsupported rounding mode").
         # Run GLA in fp32 even when the caller is under fp16 autocast.
+        # cache: optional RecurrentStateCache; fla switches to its
+        # fused_recurrent kernel automatically for short (<=64) inputs and
+        # threads the recurrent state through the cache (fp32 as well).
         with torch.autocast(device_type=x.device.type, enabled=False):
-            out, _, _ = self.gla(x.float())
+            out, _, _ = self.gla(x.float(), past_key_values=cache,
+                                 use_cache=cache is not None)
         return out
 
 
@@ -96,15 +120,17 @@ class Mamba2SSD(nn.Module):
             out = F.silu(out)
         return out, None
 
-    def forward(self, x):
+    def forward(self, x, cache=None):
         # Same fp32-enforcement as GatedLinearAttn: fla kernels must
         # not see fp16 (P40 cc 6.1 crashes) — run in fp32.
+        # cache: optional RecurrentStateCache threading the conv/SSM state
+        # through fla's pure-torch prefill/single-token decode paths.
         with torch.autocast(device_type=x.device.type, enabled=False):
             x = x.float()
-            out, _, _ = self._mamba2_ssd(x)
+            out, _, _ = self._mamba2_ssd(x, cache)
         return out
 
-    def _mamba2_ssd(self, x):
+    def _mamba2_ssd(self, x, cache=None):
         # fla's rmsnorm_fn (gated RMSNorm) is Triton-only; a pure-torch
         # equivalent keeps the layer CPU/Portable-safe. Patching
         # module-level fla code globally would leak into GLA layers,
@@ -113,7 +139,8 @@ class Mamba2SSD(nn.Module):
         orig = _lg.rmsnorm_fn
         _lg.rmsnorm_fn = self._torch_rmsnorm_gated
         try:
-            return self.mamba2(x)
+            return self.mamba2(x, past_key_values=cache,
+                               use_cache=cache is not None)
         finally:
             _lg.rmsnorm_fn = orig
 
@@ -258,3 +285,66 @@ class VesperLinearLM(nn.Module):
             )
 
         return logits, ce_loss, total_aux_loss
+
+    def new_cache(self, batch_size, device):
+        """Allocate an incremental-decoding cache for this model.
+
+        Returns a dict with:
+          'kv':     {layer_idx: {'k', 'v'}} for the 'full' GQA layers —
+                    preallocated (B, n_kv_heads, max_seq_len, head_dim)
+                    UNEXPANDED K/V tensors, written in place.
+          'linear': one RecurrentStateCache shared by all GLA/Mamba2
+                    layers (each keys it by its own layer_idx).
+        """
+        kv = {}
+        for i, layer_type in enumerate(self.layer_types):
+            if layer_type == 'full':
+                attn = self.layers[i]['attn']
+                shape = (batch_size, attn.n_kv_heads, self.max_seq_len, attn.head_dim)
+                dtype = self.tok_embeddings.weight.dtype
+                kv[i] = {
+                    'k': torch.zeros(shape, device=device, dtype=dtype),
+                    'v': torch.zeros(shape, device=device, dtype=dtype),
+                }
+        return {'kv': kv, 'linear': RecurrentStateCache()}
+
+    @torch.no_grad()
+    def forward_incremental(self, tokens, caches, pos):
+        """Cached forward for incremental generation. `forward` is untouched;
+        training never takes this path.
+
+        tokens: (B, T) token ids occupying absolute positions [pos, pos+T)
+                (pass the whole prompt with pos == 0 for prefill, then one
+                token per decode step).
+        caches: dict from new_cache(), updated in place.
+        pos:    absolute position of tokens[:, 0] in the sequence.
+
+        Returns (logits, None, aux_loss, caches), with logits for the new
+        tokens only.
+        """
+        B, T = tokens.size()
+        if pos + T > self.max_seq_len:
+            raise ValueError(
+                f"Position {pos} + length {T} exceeds max_seq_len {self.max_seq_len}; "
+                "the caller must fall back to a truncated full forward."
+            )
+
+        x = self.tok_embeddings(tokens)
+        total_aux_loss = 0.0
+
+        for i, layer in enumerate(self.layers):
+            if self.layer_types[i] == 'full':
+                attn_out = layer['attn'](layer['attn_norm'](x), self.freqs_cis,
+                                         cache=caches['kv'][i], start_pos=pos)
+            else:
+                attn_out = layer['attn'](layer['attn_norm'](x),
+                                         cache=caches['linear'])
+            x = x + attn_out
+            ffn_out, aux_loss = layer['ffn'](layer['ffn_norm'](x))
+            x = x + ffn_out
+            total_aux_loss += aux_loss
+
+        x = self.norm(x)
+        logits = self.output(x)
+
+        return logits, None, total_aux_loss, caches

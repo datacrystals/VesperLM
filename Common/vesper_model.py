@@ -53,7 +53,11 @@ class GroupedQueryAttention(nn.Module):
         self.q_norm = RMSNorm(self.head_dim) if qk_norm else None
         self.k_norm = RMSNorm(self.head_dim) if qk_norm else None
 
-    def forward(self, x, freqs_cis):
+    def forward(self, x, freqs_cis, cache=None, start_pos=0):
+        # cache: optional dict with preallocated 'k'/'v' tensors of shape
+        # (B, n_kv_heads, max_seq_len, head_dim) for incremental decoding;
+        # start_pos is the absolute position of x's first token. With
+        # cache=None and start_pos=0 the behavior is unchanged.
         B, T, C = x.size()
 
         q = self.wq(x).view(B, T, self.n_heads, self.head_dim)
@@ -64,17 +68,37 @@ class GroupedQueryAttention(nn.Module):
             q = self.q_norm(q)
             k = self.k_norm(k)
 
-        q, k = apply_rotary_emb(q, k, freqs_cis[:T])
+        q, k = apply_rotary_emb(q, k, freqs_cis[start_pos:start_pos + T])
 
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        # Expand K and V to match Q's head count for GQA
-        k = k[:, :, None, :, :].expand(B, self.n_kv_heads, self.n_rep, T, self.head_dim).reshape(B, self.n_heads, T, self.head_dim)
-        v = v[:, :, None, :, :].expand(B, self.n_kv_heads, self.n_rep, T, self.head_dim).reshape(B, self.n_heads, T, self.head_dim)
+        if cache is not None:
+            # Append the new UNEXPANDED K/V at their absolute positions and
+            # attend over everything written so far; expansion to n_heads
+            # still happens at attention time, exactly as without a cache.
+            cache['k'][:, :, start_pos:start_pos + T] = k
+            cache['v'][:, :, start_pos:start_pos + T] = v
+            k = cache['k'][:, :, :start_pos + T].to(k.dtype)
+            v = cache['v'][:, :, :start_pos + T].to(v.dtype)
 
-        y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+        kv_len = k.size(2)
+
+        # Expand K and V to match Q's head count for GQA
+        k = k[:, :, None, :, :].expand(B, self.n_kv_heads, self.n_rep, kv_len, self.head_dim).reshape(B, self.n_heads, kv_len, self.head_dim)
+        v = v[:, :, None, :, :].expand(B, self.n_kv_heads, self.n_rep, kv_len, self.head_dim).reshape(B, self.n_heads, kv_len, self.head_dim)
+
+        if start_pos == 0:
+            y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+        elif T == 1:
+            # A single cached query attends to the whole prefix: no mask.
+            y = F.scaled_dot_product_attention(q, k, v)
+        else:
+            # Cached chunk with T > 1: causal mask shifted right by start_pos
+            # so query i can see keys 0..start_pos+i.
+            mask = torch.ones(T, kv_len, dtype=torch.bool, device=x.device).tril(diagonal=start_pos)
+            y = F.scaled_dot_product_attention(q, k, v, attn_mask=mask)
 
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         return self.wo(y)

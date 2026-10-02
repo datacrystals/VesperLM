@@ -143,17 +143,36 @@ def generate_stream(
     generated_text = ""
     output_ids: List[int] = []
 
+    # Incremental (KV/recurrent-state cached) path, available on models that
+    # implement new_cache/forward_incremental (VesperLinearLM). Models that
+    # don't (dense VesperLLM) keep the old full-recompute loop below.
+    use_cache = hasattr(base_model, "new_cache") and hasattr(base_model, "forward_incremental")
+    caches = base_model.new_cache(1, device) if use_cache else None
+    cached_len = 0  # tokens already processed into `caches`
+
     for _ in range(max_new_tokens):
         if stop_event and stop_event.is_set():
             break
 
-        seq = input_ids[:, -base_model.max_seq_len :]
-
         use_amp = device.type == "cuda"
-        with torch.amp.autocast(
-            device_type=device.type, dtype=torch.float16, enabled=use_amp
-        ):
-            logits, _, _ = model(seq)
+
+        if caches is not None and cached_len < input_ids.size(1) <= base_model.max_seq_len:
+            # Cached path: process only the tokens not yet in the cache
+            # (whole prompt on the first step, one token afterwards).
+            new_tokens = input_ids[:, cached_len:]
+            with torch.amp.autocast(
+                device_type=device.type, dtype=torch.float16, enabled=use_amp
+            ):
+                logits, _, _, caches = base_model.forward_incremental(new_tokens, caches, cached_len)
+            cached_len = input_ids.size(1)
+        else:
+            # Overflow (pos would exceed max_seq_len) or cache-less model:
+            # the old truncate-and-full-recompute behavior.
+            seq = input_ids[:, -base_model.max_seq_len :]
+            with torch.amp.autocast(
+                device_type=device.type, dtype=torch.float16, enabled=use_amp
+            ):
+                logits, _, _ = model(seq)
 
         next_logits = logits[:, -1, :].float()
         if temperature > 0 and temperature != 1.0:

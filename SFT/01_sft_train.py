@@ -55,6 +55,11 @@ import matplotlib.pyplot as plt
 # ==========================================
 SFT_CONFIGS = {
     "tiny_agent_v2_sft": {
+        # bf16: the v2 pretrain checkpoint's residual stream hits ~40-60k
+        # magnitudes, which overflows fp16 (max 65504) in the last MoE layer
+        # on some sequences -> NaN. bf16 has fp32's range. Verified on the
+        # dumped poison batch (CE 4.15, finite grads).
+        "amp_dtype": "bfloat16",
         # Must match the pretrained tiny_agent_v2 architecture exactly
         # (see Pretrain/configs/model_configs.py)
         "dim": 512, "n_layers": 8, "n_heads": 8, "n_kv_heads": 2,
@@ -393,7 +398,7 @@ def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=200,
         for _ in range(max_new_tokens):
             seq = input_ids[:, -base_model.max_seq_len:]
 
-            with torch.amp.autocast('cuda', dtype=torch.float16):
+            with torch.amp.autocast('cuda', dtype=amp_dtype):
                 logits, _, _ = model(seq)
 
             next_logits = logits[:, -1, :].float() / temperature
@@ -486,6 +491,8 @@ def train():
     cfg = SFT_CONFIGS[ACTIVE_CONFIG_NAME]
 
     batch_size        = cfg.get("micro_batch_size", 1)
+    amp_dtype         = torch.bfloat16 if cfg.get("amp_dtype") == "bfloat16" else torch.float16
+    use_scaler        = amp_dtype == torch.float16  # bf16 needs no loss scaling
     target_acc_steps  = cfg.get("target_accumulation_steps", 128)
     accumulation_steps = max(1, target_acc_steps // (world_size * batch_size))
     seq_len           = cfg["max_seq_len"]
@@ -606,7 +613,7 @@ def train():
         optimizer = torch.optim.AdamW(
             model.parameters(), lr=max_lr, betas=(beta1, beta2), weight_decay=0.01)
 
-    scaler = GradScaler('cuda')
+    scaler = GradScaler('cuda') if use_scaler else None
 
     if checkpoint is not None and not loading_pretrain:
         optimizer.load_state_dict(checkpoint['optimizer'])
@@ -614,7 +621,7 @@ def train():
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
                     state[k] = v.to(device)
-        if 'scaler' in checkpoint:
+        if scaler is not None and checkpoint.get('scaler') is not None:
             scaler.load_state_dict(checkpoint['scaler'])
 
     del checkpoint
@@ -648,14 +655,14 @@ def train():
     dummy_y = torch.randint(0, len(tokenizer), (batch_size, seq_len), device=device)
     dummy_m = torch.ones(batch_size, seq_len, device=device)
 
-    with torch.amp.autocast('cuda', dtype=torch.float16):
-        dummy_logits, _, dummy_aux = model(dummy_x, dummy_y)
+    with torch.amp.autocast('cuda', dtype=amp_dtype):
+        dummy_logits, _, dummy_aux = model(dummy_x)
         dummy_loss = (
             masked_ce_loss(dummy_logits, dummy_y, dummy_m) / accumulation_steps
             + aux_weight * (dummy_aux / accumulation_steps)
         )
 
-    scaler.scale(dummy_loss).backward()
+    (scaler.scale(dummy_loss) if scaler is not None else dummy_loss).backward()
     optimizer.zero_grad()
     del dummy_x, dummy_y, dummy_m, dummy_logits, dummy_loss, dummy_aux
 
@@ -683,6 +690,7 @@ def train():
 
         accumulated_ce_loss  = 0.0
         accumulated_aux_loss = 0.0
+        nan_skips = 0
 
         for micro_step in range(accumulation_steps):
             x, y, mask = next(train_stream)
@@ -690,27 +698,49 @@ def train():
             y    = y.pin_memory().to(device, non_blocking=True)
             mask = mask.pin_memory().to(device, non_blocking=True)
 
-            with torch.amp.autocast('cuda', dtype=torch.float16):
-                logits, _, aux_loss = model(x, y)
+            with torch.amp.autocast('cuda', dtype=amp_dtype):
+                logits, _, aux_loss = model(x)
 
                 ce_loss  = masked_ce_loss(logits, y, mask)
                 ce_scaled  = ce_loss  / accumulation_steps
                 aux_scaled = aux_loss / accumulation_steps
                 total_loss = ce_scaled + (aux_weight * aux_scaled)
 
+            # NaN guard: a pathological sequence can push the fp16 pipeline
+            # non-finite (residual stream in this checkpoint hits ~37k).
+            # Dump the offending micro-batch for analysis and skip it instead
+            # of poisoning the whole optimizer step.
+            if not torch.isfinite(total_loss):
+                nan_dir = "/home/tliao/nan_dumps"
+                os.makedirs(nan_dir, exist_ok=True)
+                dump_path = os.path.join(
+                    nan_dir, f"nan_step{step}_micro{micro_step}_rank{local_rank}.pt")
+                torch.save({"x": x.cpu(), "y": y.cpu(), "mask": mask.cpu(),
+                            "step": step, "micro_step": micro_step,
+                            "ce": float("nan")}, dump_path)
+                nan_skips = nan_skips + 1
+                print(f"[rank{local_rank}] NON-FINITE loss at step {step} "
+                      f"micro {micro_step} -- dumped to {dump_path}, skipping "
+                      f"(total skips: {nan_skips})", flush=True)
+                continue
+
             if is_distributed and micro_step < accumulation_steps - 1:
                 with model.no_sync():
-                    scaler.scale(total_loss).backward()
+                    (scaler.scale(total_loss) if scaler is not None else total_loss).backward()
             else:
-                scaler.scale(total_loss).backward()
+                (scaler.scale(total_loss) if scaler is not None else total_loss).backward()
 
             accumulated_ce_loss  += ce_scaled.item()
             accumulated_aux_loss += aux_scaled.item()
 
-        scaler.unscale_(optimizer)
+        if scaler is not None:
+            scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        scaler.step(optimizer)
-        scaler.update()
+        if scaler is not None:
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            optimizer.step()
 
         train_loss_history.append((step, accumulated_ce_loss))
 
@@ -743,7 +773,7 @@ def train():
                     vx    = vx.to(device)
                     vy    = vy.to(device)
                     vmask = vmask.to(device)
-                    with torch.amp.autocast('cuda', dtype=torch.float16):
+                    with torch.amp.autocast('cuda', dtype=amp_dtype):
                         vlogits, _, _ = model(vx, vy)
                         val_loss += masked_ce_loss(vlogits, vy, vmask).item()
 
@@ -783,7 +813,7 @@ def train():
                     'model_config':        model_config,
                     'model':               model.module.state_dict() if is_distributed else model.state_dict(),
                     'optimizer':           optimizer.state_dict(),
-                    'scaler':              scaler.state_dict(),
+                    'scaler':              scaler.state_dict() if scaler is not None else None,
                     'step':                step,
                     'train_loss_history':  train_loss_history,
                     'val_loss_history':    val_loss_history,
