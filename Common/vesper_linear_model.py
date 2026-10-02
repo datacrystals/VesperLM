@@ -144,10 +144,12 @@ class VesperLinearLM(nn.Module):
                  n_kv_heads=2, hidden_dim=1280, num_experts=8, top_k=2,
                  max_seq_len=1024, pad_id=0, dropout=0.0,
                  attention_every=4, gla_head_dim=64, qk_norm=True,
-                 linear_type="gla", mamba2_state_size=128):
+                 linear_type="gla", mamba2_state_size=128,
+                 grad_checkpoint=True):
         super().__init__()
         self.pad_id = pad_id
         self.max_seq_len = max_seq_len
+        self.grad_checkpoint = grad_checkpoint
         if linear_type not in ("gla", "mamba2"):
             raise ValueError(f"Unknown linear_type '{linear_type}' (expected 'gla' or 'mamba2')")
         self.tok_embeddings = nn.Embedding(vocab_size, dim)
@@ -199,9 +201,10 @@ class VesperLinearLM(nn.Module):
     def forward(self, tokens, targets=None):
         B, T = tokens.size()
         if T > self.max_seq_len:
-            tokens = tokens[:, :self.max_seq_len]
-            if targets is not None:
-                targets = targets[:, :self.max_seq_len]
+            raise ValueError(
+                f"Sequence length {T} exceeds max_seq_len {self.max_seq_len}. "
+                "Refusing to silently truncate (that used to silently drop training data)."
+            )
 
         x = self.tok_embeddings(tokens)
         total_aux_loss = 0.0
@@ -210,28 +213,34 @@ class VesperLinearLM(nn.Module):
             # 'full' layers take freqs; 'gla'/'mamba2' are linear-only
             is_gla = self.layer_types[i] != 'full'
 
-            def create_attn_forward(module_dict, linear):
-                def custom_forward(x_in, freqs):
-                    if linear:
-                        attn_out = module_dict['attn'](module_dict['attn_norm'](x_in))
-                    else:
-                        attn_out = module_dict['attn'](module_dict['attn_norm'](x_in), freqs)
-                    return x_in + attn_out
-                return custom_forward
+            if self.training and self.grad_checkpoint:
+                # Checkpoint the WHOLE layer (attention/GLA + MoE) in one unit.
+                # non-reentrant checkpointing handles the MoE's dynamic routing
+                # shapes fine — routing is deterministic here (no dropout), so
+                # the backward recompute reproduces the same expert assignment.
+                # freqs_cis is a constant buffer, captured via closure.
+                def create_layer_forward(module_dict, linear, freqs):
+                    def custom_forward(x_in):
+                        if linear:
+                            attn_out = module_dict['attn'](module_dict['attn_norm'](x_in))
+                        else:
+                            attn_out = module_dict['attn'](module_dict['attn_norm'](x_in), freqs)
+                        h = x_in + attn_out
+                        ffn_out, aux = module_dict['ffn'](module_dict['ffn_norm'](h))
+                        return h + ffn_out, aux
+                    return custom_forward
 
-            if self.training:
-                # Attention/GLA layers have static shapes -> safe to checkpoint.
-                # MoE stays outside (dynamic routing shapes break recompute).
-                x = cp.checkpoint(
-                    create_attn_forward(layer, is_gla),
+                x, aux_loss = cp.checkpoint(
+                    create_layer_forward(layer, is_gla, self.freqs_cis),
                     x,
-                    self.freqs_cis,
                     use_reentrant=False
                 )
-                ffn_out, aux_loss = layer['ffn'](layer['ffn_norm'](x))
-                x = x + ffn_out
             else:
-                x = create_attn_forward(layer, is_gla)(x, self.freqs_cis)
+                if is_gla:
+                    attn_out = layer['attn'](layer['attn_norm'](x))
+                else:
+                    attn_out = layer['attn'](layer['attn_norm'](x), self.freqs_cis)
+                x = x + attn_out
                 ffn_out, aux_loss = layer['ffn'](layer['ffn_norm'](x))
                 x = x + ffn_out
 

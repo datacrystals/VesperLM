@@ -61,7 +61,8 @@ SFT_CONFIGS = {
         "hidden_dim": 1536, "num_experts": 4, "top_k": 2, "max_seq_len": 2048,
 
         # Batching — same as pretrain
-        "micro_batch_size": 1,
+        "micro_batch_size": 6,
+        "grad_checkpoint": False,
         "target_accumulation_steps": 128,
 
         # SFT uses a much lower LR than pretraining to avoid catastrophic forgetting
@@ -88,7 +89,8 @@ SFT_CONFIGS = {
         "hidden_dim": 1024, "num_experts": 4, "top_k": 2, "max_seq_len": 2048,
 
         # Batching — same as pretrain
-        "micro_batch_size": 1,
+        "micro_batch_size": 6,
+        "grad_checkpoint": False,
         "target_accumulation_steps": 128,
 
         # SFT uses a much lower LR than pretraining to avoid catastrophic forgetting
@@ -485,7 +487,7 @@ def train():
 
     batch_size        = cfg.get("micro_batch_size", 1)
     target_acc_steps  = cfg.get("target_accumulation_steps", 128)
-    accumulation_steps = max(1, target_acc_steps // world_size)
+    accumulation_steps = max(1, target_acc_steps // (world_size * batch_size))
     seq_len           = cfg["max_seq_len"]
 
     max_lr        = cfg["max_lr"]
@@ -571,7 +573,8 @@ def train():
 
     # ---- Build model ----
     arch_keys   = ["dim", "n_layers", "n_heads", "n_kv_heads", "hidden_dim",
-                   "num_experts", "top_k", "max_seq_len", "linear_type"]
+                   "num_experts", "top_k", "max_seq_len", "linear_type",
+                   "grad_checkpoint"]
     arch_config = {k: v for k, v in model_config.items() if k in arch_keys}
 
     model = VesperLinearLM(

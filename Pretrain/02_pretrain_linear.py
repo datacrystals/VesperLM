@@ -144,7 +144,8 @@ def train():
     phase_switch_step = int(model_config.get("total_steps", total_steps) * 0.8)
 
     arch_keys = ["dim", "n_layers", "n_heads", "n_kv_heads", "hidden_dim",
-                 "num_experts", "top_k", "max_seq_len", "linear_type"]
+                 "num_experts", "top_k", "max_seq_len", "linear_type",
+                 "grad_checkpoint"]
     arch_config = {k: v for k, v in model_config.items() if k in arch_keys}
 
     model = VesperLinearLM(

@@ -202,7 +202,8 @@ MODEL_CONFIGS = {
         "max_seq_len": 2048,
 
         # Training & Batching
-        "micro_batch_size": 1,
+        "micro_batch_size": 6,
+        "grad_checkpoint": False,
         "target_accumulation_steps": 128,
 
         # Optimizer Dynamics
@@ -242,7 +243,8 @@ MODEL_CONFIGS = {
         "linear_type": "gla",  # "gla" (default) or "mamba2" (fla SSD path)
 
         # Training & Batching
-        "micro_batch_size": 1,
+        "micro_batch_size": 6,
+        "grad_checkpoint": False,
         "target_accumulation_steps": 128,
 
         # Optimizer Dynamics
