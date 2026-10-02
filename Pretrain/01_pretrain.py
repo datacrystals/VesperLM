@@ -305,7 +305,7 @@ def check_vllm_api(port=9100):
 # ==========================================
 @torch.no_grad()
 def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=128, device='cuda',
-                          temperature=0.8, top_p=0.9):
+                          temperature=0.8, top_p=0.9, amp_dtype=None):
     """Returns (generated_texts, total_tokens_generated)."""
     model.eval()
     results = []
@@ -319,7 +319,10 @@ def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=128, device=
         for _ in range(max_new_tokens):
             seq = input_ids[:, -base_model.max_seq_len:]
 
-            with torch.amp.autocast('cuda', dtype=torch.float16):
+            # bf16 by default: the v2 checkpoint's residual stream can exceed
+            # fp16 range (65504) in the MoE, which NaNs the logits and makes
+            # multinomial sample garbage -> OOB gather -> device-side assert.
+            with torch.amp.autocast('cuda', dtype=amp_dtype or torch.bfloat16):
                 logits, _, _ = model(seq)
 
             next_logits = logits[:, -1, :].float()
@@ -331,7 +334,13 @@ def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=128, device=
             
             sorted_indices_to_remove = cumulative_probs - sorted_probs > top_p
             sorted_probs[sorted_indices_to_remove] = 0.0
-            sorted_probs = sorted_probs / sorted_probs.sum(dim=-1, keepdim=True)
+            total_p = sorted_probs.sum(dim=-1, keepdim=True).clamp(min=1e-12)
+            sorted_probs = sorted_probs / total_p
+            if not torch.isfinite(sorted_probs).all():
+                # fall back to greedy on the raw logits instead of sampling NaNs
+                next_token = logits[:, -1, :].argmax(dim=-1, keepdim=True)
+                input_ids = torch.cat([input_ids, next_token], dim=1)
+                continue
 
             sampled_sorted_idx = torch.multinomial(sorted_probs, num_samples=1)
             next_token = sorted_indices.gather(-1, sampled_sorted_idx)

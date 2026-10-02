@@ -391,9 +391,13 @@ def train():
             if is_main:
                 print(f"\n--- Validation at Step {step} | Val Loss: {val_loss:.4f} ---")
                 print("Generating Eval Samples...")
-                generated_texts, eval_tokens = p01.generate_eval_samples(
-                    model, tokenizer, p01.EVAL_PROMPTS, device=device,
-                    temperature=0.8, top_p=0.9)
+                try:
+                    generated_texts, eval_tokens = p01.generate_eval_samples(
+                        model, tokenizer, p01.EVAL_PROMPTS, device=device,
+                        temperature=0.8, top_p=0.9)
+                except Exception as e:
+                    print(f'[!] eval sample generation failed (non-fatal): {e!r}')
+                    generated_texts, eval_tokens = [], 0
                 total_tokens_generated += eval_tokens
                 for pr, gen in zip(p01.EVAL_PROMPTS, generated_texts):
                     print(f"Prompt: {pr}\nOutput: {gen}\n" + "-" * 30)

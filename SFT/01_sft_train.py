@@ -136,6 +136,10 @@ SFT_CONFIGS = {
 }
 
 ACTIVE_CONFIG_NAME = "tiny_agent_v2_sft"
+# Module-level so generate_eval_samples (and any other helper) can use it.
+AMP_DTYPE = (torch.bfloat16
+             if SFT_CONFIGS[ACTIVE_CONFIG_NAME].get("amp_dtype") == "bfloat16"
+             else torch.float16)
 
 # Path to the pretrained checkpoint to start SFT from.
 # Set to None to scan sft_checkpoints/ for a resume instead.
@@ -398,7 +402,7 @@ def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=200,
         for _ in range(max_new_tokens):
             seq = input_ids[:, -base_model.max_seq_len:]
 
-            with torch.amp.autocast('cuda', dtype=amp_dtype):
+            with torch.amp.autocast('cuda', dtype=AMP_DTYPE):
                 logits, _, _ = model(seq)
 
             next_logits = logits[:, -1, :].float() / temperature
@@ -655,7 +659,7 @@ def train():
     dummy_y = torch.randint(0, len(tokenizer), (batch_size, seq_len), device=device)
     dummy_m = torch.ones(batch_size, seq_len, device=device)
 
-    with torch.amp.autocast('cuda', dtype=amp_dtype):
+    with torch.amp.autocast('cuda', dtype=AMP_DTYPE):
         dummy_logits, _, dummy_aux = model(dummy_x)
         dummy_loss = (
             masked_ce_loss(dummy_logits, dummy_y, dummy_m) / accumulation_steps
@@ -698,7 +702,7 @@ def train():
             y    = y.pin_memory().to(device, non_blocking=True)
             mask = mask.pin_memory().to(device, non_blocking=True)
 
-            with torch.amp.autocast('cuda', dtype=amp_dtype):
+            with torch.amp.autocast('cuda', dtype=AMP_DTYPE):
                 logits, _, aux_loss = model(x)
 
                 ce_loss  = masked_ce_loss(logits, y, mask)
@@ -773,7 +777,7 @@ def train():
                     vx    = vx.to(device)
                     vy    = vy.to(device)
                     vmask = vmask.to(device)
-                    with torch.amp.autocast('cuda', dtype=amp_dtype):
+                    with torch.amp.autocast('cuda', dtype=AMP_DTYPE):
                         vlogits, _, _ = model(vx, vy)
                         val_loss += masked_ce_loss(vlogits, vy, vmask).item()
 
@@ -784,10 +788,15 @@ def train():
                 print(f"\n--- SFT Validation at Step {step} | Val Loss: {val_loss:.4f} ---")
 
                 print("Generating Eval Samples...")
-                generated = generate_eval_samples(
-                    model, tokenizer, EVAL_PROMPTS, device=device,
-                    temperature=0.7, top_p=0.9
-                )
+                try:
+                    generated = generate_eval_samples(
+                        model, tokenizer, EVAL_PROMPTS, device=device,
+                        temperature=0.7, top_p=0.9
+                    )
+                except Exception as e:
+                    # Sample generation must never kill a training run.
+                    print(f"[!] eval sample generation failed (non-fatal): {e!r}")
+                    generated = [""] * len(EVAL_PROMPTS)
                 for prompt, gen in zip(EVAL_PROMPTS, generated):
                     # Print just the assistant's reply for clarity
                     reply = gen.split("<|im_start|>assistant\n")[-1].strip()
