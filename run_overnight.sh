@@ -26,7 +26,7 @@ log "SFT process exited (latest ckpt: $(latest_sft))"
 
 for attempt in 1 2 3; do
     latest=$(latest_sft)
-    if [ -n "$latest" ] && [ "$latest" -ge 3000 ]; then break; fi
+    if [ -n "$latest" ] && [ "$latest" -ge 2900 ]; then break; fi
     log "SFT incomplete (latest ${latest:-none}) — relaunch attempt $attempt/3"
     cd SFT && $TORCHRUN --nproc_per_node=3 01_sft_train.py >> sft_run_overnight.log 2>&1
     cd ..
@@ -36,7 +36,7 @@ done
 
 # ---------- 2. Harness eval ----------
 latest=$(latest_sft)
-if [ -n "$latest" ] && [ "$latest" -ge 3000 ]; then
+if [ -n "$latest" ] && [ "$latest" -ge 2900 ]; then
     log "SFT complete (step_$latest) — running harness eval..."
     cd Agent
     $PY agent_harness.py "List all files in the current directory, including hidden ones." \

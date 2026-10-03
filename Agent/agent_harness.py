@@ -62,7 +62,10 @@ def latest_checkpoint():
         for name in os.listdir(d):
             if name.startswith("step_") and os.path.isfile(
                     os.path.join(d, name, "checkpoint.pt")):
-                steps.append((int(name.split("_")[1]), os.path.join(d, name)))
+                try:
+                    steps.append((int(name.split("_")[1]), os.path.join(d, name)))
+                except ValueError:
+                    continue  # e.g. step_best
         if steps:
             return max(steps)[1]
     return None
