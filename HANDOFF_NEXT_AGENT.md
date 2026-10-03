@@ -1,105 +1,100 @@
-# VesperLM — Overnight Handoff for the Next Agent (written 2026-10-02 ~10:40)
+# VesperLM — Handoff for the Next Agent (updated 2026-10-03 ~21:15)
 
 Box: `192.168.1.153` (poweredge-r740, 3× Tesla P40 sm_61). Repo `/home/tliao/VesperLM`.
 Venvs: `/home/tliao/venvs/vesper` (torch 2.5.1, fla 0.6.0), `/home/tliao/venvs/gen` (datasets).
-Everything below is COMMITTED (HEAD = `802e57b`). Working tree should be clean — check `git status` first.
 
-## What is running RIGHT NOW (overnight chain)
+## What is running RIGHT NOW
 
-`bash run_overnight.sh` (log `/home/tliao/overnight_chain.log`) is doing:
+1. **SFT refresh (tiny_agent_v2_sft, 118M, bf16)** — launched 21:07 from
+   `Pretrain/vesper_linear_checkpoints_v2/step_best` (**@5200**, val CE 3.272 — the v1 SFT
+   used the older @4100). Log `/home/tliao/sft_refresh_5200.log`. ~14 s/step × 3000 ≈ 12h,
+   ETA ~09:00 Oct 4. Step-0 CE 3.55 (v1 started ~4.5). Data: tooluse 11.5M + nemotron 50M +
+   **distill_chat 22.9M (NEW, weight 1.0)**. Checkpoints `SFT/sft_checkpoints/step_*` every 100.
+2. **`run_refresh_chain.sh`** (log `/home/tliao/refresh_chain.log`) waits for it, relaunches
+   on crash (auto-resume), then runs the agent-harness eval with held-out prompts →
+   `Agent/eval_refresh_5200.log`.
 
-1. **118M SFT (tiny_agent_v2, bf16)** — currently training, started 10:27 from
-   `Pretrain/vesper_linear_checkpoints_v2/step_best` (step 4100). Log `/home/tliao/sft_v2_118m.log`.
-   ~14 s/step, 3000 steps → ETA ~22:00–23:00. CE was 4.52→4.30 at step 10 and falling. Checkpoints:
-   `SFT/sft_checkpoints/step_*` every 100.
-2. On completion: agent-harness eval → `Agent/eval_v2_118m.log` (2 prompts).
-3. Then **pretrain continuation** (tiny_agent_v2, resumes `step_4200` → total 6000), log
-   `Pretrain/pretrain_v2_continue.log`. fp16 + Muon, same as it ran to 4200. ~1800 steps.
+Morning checklist: `tail /home/tliao/sft_refresh_5200.log` (expect "Training complete" or
+step_2900 dir with `chat_model`), read `Agent/eval_refresh_5200.log`, compare against the v1
+probes below.
 
-Morning checklist: `tail` the three logs; confirm `SFT/sft_checkpoints/step_3000` exists;
-read `Agent/eval_v2_118m.log` samples; confirm pretrain resumed at step 4201 (not 900 — see traps).
+## Probe findings 2026-10-03 (why this refresh exists)
 
-## What changed today (two commits)
+Live probes of the v1 SFT model (`SFT/sft_checkpoints_118m_v1/step_2900/chat_model`, trained
+from step_best@4100):
 
-`1a4a8ad` — training speed (measured, tiny_agent_v2 config, per-GPU):
-- Permutation MoE dispatch (bitwise-identical; ~1.5× faster MoE). MoE was 48% of step.
-- Whole-layer gradient checkpointing behind `grad_checkpoint` ctor flag (NOT attn-only; ~2× lower
-  activations). tiny configs set `grad_checkpoint: False` — 118M model fits B=6 T=2048 in 17.6GB.
-- `micro_batch_size` 1→6 for tiny_agent/tiny_agent_v2 (+SFT). Live SFT: 0.05 → 0.10 steps/s (2×).
-- SFT accumulation now divides by batch_size (global batch stays 126 seqs — was about to 6×).
-- Over-length input raises instead of silently truncating.
+- Valid tool-call JSON and fluent English, BUT one dominant "describe a small Python project"
+  script for nearly every prompt.
+- `847*392` → wrong tool (`search_players`) + confabulated query. Identity question → fake
+  file listing. String-reverser → thought-block repetition loop. hello.py task → malformed
+  truncated tool call.
+- Base model (pretrain step_best@5200, no SFT): token-salad loops, multilingual garbage,
+  broken pseudo-Python.
+- **Verdict: SFT v1 bought format/control, not task semantics.** The distill mix + better
+  base (@5200) in the refresh are aimed at the semantics gap.
 
-`802e57b` — inference + NaN fix:
-- **KV cache**: `VesperLinearLM.forward_incremental(tokens, caches, pos)` + `new_cache(B, device)`;
-  GQA stores UNEXPANDED kv with RoPE `start_pos`; GLA/Mamba2 thread fla recurrent state via
-  `RecurrentStateCache`. `SFT/inference_server.py:generate_stream` uses it (prefill once, then
-  1 tok/step; falls back to full recompute beyond max_seq_len). Verified 64/64 token-identical
-  vs full recompute; 4.8×/tok at ctx 2048 measured DURING training contention (idle: more).
-  `Agent/agent_harness.py` still uses full-recompute generation — candidate to switch over.
-- **bf16 SFT** (`"amp_dtype": "bfloat16"` in tiny_agent_v2_sft config). Root cause of the
-  step-0 NaN: the v2 pretrain checkpoint's residual stream runs at 40–60k magnitudes; fp16
-  (max 65504) overflows in the LAST layer's MoE FFN on some sequences. bf16 has fp32 range.
-  Verified on the dumped poison batch (`/home/tliao/nan_dumps/nan_step0_micro0_rank1.pt`).
-  GradScaler now only active for fp16.
-- SFT no longer computes the model's internal CE (`model(x)`, not `model(x,y)`) — it was
-  discarded anyway and cost a 3.2GB fp32 log-softmax; its removal fixed the 10:14 OOM.
-- NaN guard in the SFT loop: non-finite micro-batch is dumped to `/home/tliao/nan_dumps/`
-  and skipped (DDP edge case: if the LAST micro of a step skips, grads sync one step late —
-  harmless, rare).
+## CORRECTION: earlier eval success was contamination
 
-## Traps (learned the hard way today)
+The "17*23+145 = 536" success cited earlier is **not evidence of generalization**: that exact
+prompt was in `EVAL_PROMPTS` (SFT/01_sft_train.py) AND the agent harness, and it matches the
+templated math examples in the synthetic tooluse data → memorization. Fixed 2026-10-03:
+`EVAL_PROMPTS` now uses 4 held-out prompts (capital of Japan, 91*7, count .py files, today's
+date), verified absent from `Agent/agent_harness.py`. The harness chain additionally uses 2
+fresh prompts invented today (notes.txt creation, 13*12). Treat any future eval success on
+prompts resembling training templates with suspicion; prefer the fresh ones.
 
-- **`get_latest_checkpoint` ignores `step_best`** (int("best") → skipped). Pretrain resumes from
-  highest `step_N` — currently step_4200, correct. If the numbered dirs ever get pruned below
-  step_best's step, pretrain silently rolls back. Guard: keep a numbered dir ≥ step_best's step.
-- **SFT resume trap**: any `SFT/sft_checkpoints/step_*` is resumed IN PREFERENCE to the pretrain
-  init. That's why the old 384 checkpoints were moved to `SFT/sft_checkpoints_tiny384/` before
-  launching the v2 SFT. The completed 384 SFT (incl. final `chat_model` in step_2900) lives there.
-- **Do NOT set `find_unused_parameters=False` in DDP.** With MoE, an expert can receive zero
-  tokens in a micro-batch → unused params. The torch warning suggesting removal is a false
-  positive here (dummy pass uses a big batch).
-- **fp16 + this checkpoint = NaN.** Anything loading `vesper_linear_checkpoints_v2/step_*` must
-  use bf16 or fp32 for the MoE path. Pretrain still runs fp16 (it survived to 4200 on its own
-  data, but watch `pretrain_v2_continue.log` for nan — if it appears, port the bf16 change to
-  `Pretrain/02_pretrain_linear.py`, minding Muon's newton-schulz which needs fp32 — see
-  `Pretrain/debug_nan.py` for the existing patch).
-- GLA/Mamba2 must stay in fp32 on P40 (fla fp16 Triton kernels crash sm_61) — wrappers handle it.
-- ssh+nohup: `pkill -f` matches your own ssh cmdline (kill by pid); give background jobs
-  `</dev/null >log 2>&1`.
+## State
 
-## State / corrections to earlier claims
+- **Pretrain v2 COMPLETE**: 1.42B tokens. `Pretrain/vesper_linear_checkpoints_v2/step_best`
+  @5200 (val CE **3.272**, was 3.55 @4100). Trainer never writes `step_6000`; exits after
+  final eval. Val curve was still descending at the end — ran out of steps, not capacity.
+- v1 SFT preserved at `SFT/sft_checkpoints_118m_v1/` (incl. step_2900/chat_model).
+  384-param toy SFT at `SFT/sft_checkpoints_tiny384/`.
+- Distill pipeline: `Dataset/10_sft_distill.py` (commit `a0d334a`), output
+  `Dataset/data/sft/distill_chat_sft.bin`, wired into `Dataset/data/sft/index.txt` @ weight 1.0.
+- Recent commits: `1a4a8ad` (permutation MoE, grad-ckpt flag, micro_batch 6, SFT accum fix),
+  `802e57b` (KV cache inference, bf16 SFT, NaN guard), `1542633` (eval-sample crash fixes),
+  `f106526` (harness step_best parse, chain threshold >= 2900), `a0d334a` (distill).
 
-- `beta2_token_half_life` IS wired in `Pretrain/02_pretrain_linear.py` (dynamic beta2) — an
-  earlier review called it dead config; that's only true for the legacy dense `01_pretrain.py`.
-- Config names ≠ sizes: `"470m"` is 429M total / 193M active at vocab 65523. `tiny_agent_v2` is
-  118.3M total / 80.6M active (its comment is accurate).
-- `Pretrain/data/index.txt` = `phase1_pretrain.bin` (symlink→fineweb_v2 1.5B) + `nemotron_phase2.bin`
-  (500M). **`nemotron_phase1.bin` (2B tokens, finished Oct 1) is NOT in the mix.** Deliberate
-  decision needed: add it (and re-weight) vs leave as-is. Changing the mix mid-pretrain shifts
-  the stream; stream states resume from step_4200's saved pointers.
-- KV-cache WIP patch `/home/tliao/kv_wip_subagent.patch` is OBSOLETE (superseded by commit 802e57b);
-  kept only in case. Diag/bench scripts: `/home/tliao/{vesper_optim_bench,test_optim,ckpt_compat,
-  diag_v2_nan,repro_nan,analyze_nan,kv_cache_test}.py`.
+## Traps (still live — read before touching anything)
 
-## Hardware research (for when budget allows)
-
-- User is weighing MI210 (~$4k) vs 8× Gaudi2 (~$16k, best $/HBM) in a few months. fla has
-  first-class ROCm support (`[rocm]` extra) → MI210 (gfx90a, 64GB) is the safe pick; Gaudi2 is
-  SynapseAI/TPC (no Triton/fla) and would require porting the GLA/Mamba2 stack. AITER kernels
-  ship only for gfx942+ (MI210 gets generic fallbacks). Validate `chunk_gla` on a rented MI250X
-  before buying. A used 3090/4090 remains the zero-effort option (sm_86/89: flash-attn + fp16
-  GLA + tensor cores, no fp32 crutch).
-- 4b config memory math: ~56GB optimizer+weights in bf16 → needs 64GB card (MI210) or multi-GPU.
+- **SFT resume trap**: any `SFT/sft_checkpoints/step_*` is resumed IN PREFERENCE to pretrain
+  init. For a fresh SFT, mv the dir aside first (that is exactly what was done for this
+  refresh). For crash recovery the same mechanism is your friend.
+- Trainer saves the final model inside the last `step_N` dir (e.g. step_2900), never
+  `step_3000`. Completion check = `>= 2900` or "Training complete".
+- **bf16 required** for anything loading v2 checkpoints (`"amp_dtype": "bfloat16"`): the v2
+  residual stream hits 40–60k → fp16 overflows in the last MoE layer → NaN. GradScaler is
+  fp16-only.
+- `find_unused_parameters=True` in DDP is INTENTIONAL (MoE idle experts). The torch warning
+  suggesting removal is a false positive.
+- GLA/Mamba2 stay fp32 on P40 (fla fp16 Triton kernels crash sm_61) — wrappers handle it.
+- ssh+nohup: give jobs `</dev/null >log 2>&1`; `pkill -f` matches your own ssh cmdline — kill
+  by pid.
+- `get_latest_checkpoint` ignores `step_best` — pretrain resumes from highest `step_N`.
 
 ## Next steps (priority order)
 
-1. Verify overnight chain results (see morning checklist above).
-2. Switch `Agent/agent_harness.py` to `forward_incremental` (big demo win; server already has it).
-3. Decide nemotron_phase1 data mix (above).
-4. When SFT v2 finishes: compare its eval samples vs the 384 run; pick the chat model to serve.
-5. Fused linear+CE (fla `FusedLinearCrossEntropy`) — logits over 65523 vocab are ~10% of step.
-   Needs care with the SFT mask (external masked CE) and pad ignore_index.
+1. Verify refresh results (morning checklist). Compare v2-refresh vs v1 probes — did the
+   distill mix + @5200 base buy task semantics, or still format-only?
+2. Switch `Agent/agent_harness.py` generation to `forward_incremental` (KV cache; server has
+   it, harness still full-recompute — big interactive win).
+3. Decide `nemotron_phase1.bin` (2B tokens, finished Oct 1) — still NOT in the pretrain mix.
+   Any mix change belongs with the NEXT pretrain, not mid-run.
+4. Scale-up pretrain: 429M config (`"470m"` = 429M total / 193M active) with **8k context
+   from the start** (max_seq_len 2048 is the binding constraint; changing it needs a retrain
+   anyway). Val curve says the 118M run was step-limited — budget more steps/tokens.
+5. Fused linear+CE (fla `FusedLinearCrossEntropy`) — vocab-65523 logits are ~10% of step;
+   needs care with the SFT mask and pad ignore_index.
 6. Optional: `linear_type: "kda"` swap (fla has Kimi Delta Attention) — closest to the
-   "Kimi-K3-class scaled down" target arch. New pretrain required.
-7. Long context: max_seq_len 2048 is the binding constraint (RoPE buffer + checkpoint states);
-   needs a retrain, do it with the next pretrain, not mid-run.
+   "K3-class scaled down" target arch. Requires fresh pretrain.
+
+## Hardware notes (settled — do not reopen unless user asks)
+
+User weighs MI210 (~$4k) vs 8× Gaudi2 (~$16k) later. fla has first-class ROCm → MI210
+(gfx90a, 64GB) is the safe pick; Gaudi2 needs a full TPC/SynapseAI port of GLA/Mamba2.
+Advice already given: free vLLM config pass on existing 8× MI50 first → 1–2× MI100 ($1400 ea)
+→ used MI300X when budget allows. User has 8× MI50s serving other models (ports Mimo/GLM
+flashes to vLLM on them), hates cloud, mortal budget, wants ~1TB VRAM long-term for ~1T-param
+4-bit models. Serving note: Chinese frontier models are mostly 4-bit (K3), GLM 8-bit — a
+768B GLM-5.3 at 8-bit needs ~800GB → 10× MI210 (640GB) does NOT fit; 8× MI300X (1.5TB) does.

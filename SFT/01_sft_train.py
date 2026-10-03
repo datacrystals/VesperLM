@@ -165,10 +165,10 @@ PRETRAIN_CHECKPOINT = _resolve_pretrain_checkpoint(_PRETRAIN_CKPT_DIR)
 
 # ChatML eval prompts — tool-use focused, matching the SFT trace format
 EVAL_PROMPTS = [
-    "<|im_start|>user\nList all files in the current directory, including hidden ones.<|im_end|>\n<|im_start|>assistant\n",
-    "<|im_start|>user\nRead the file config.yaml and tell me what's in it.<|im_end|>\n<|im_start|>assistant\n",
-    "<|im_start|>user\nWhat is 17 * 23 + 145?<|im_end|>\n<|im_start|>assistant\n",
-    "<|im_start|>user\nFind all lines in the src directory that mention 'TODO'.<|im_end|>\n<|im_start|>assistant\n",
+    "<|im_start|>user\nCount how many .py files are in the current directory.<|im_end|>\n<|im_start|>assistant\n",
+    "<|im_start|>user\nWhat is the capital of Japan?<|im_end|>\n<|im_start|>assistant\n",
+    "<|im_start|>user\nPrint today's date with a shell command.<|im_end|>\n<|im_start|>assistant\n",
+    "<|im_start|>user\nWhat is 91 * 7?<|im_end|>\n<|im_start|>assistant\n",
 ]
 
 
