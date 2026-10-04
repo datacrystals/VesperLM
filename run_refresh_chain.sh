@@ -26,9 +26,9 @@ for attempt in 1 2 3; do
     latest=$(latest_sft)
     if [ -n "$latest" ] && [ "$latest" -ge 2900 ]; then break; fi
     log "SFT incomplete (latest ${latest:-none}) — relaunch attempt $attempt/3 (resumes)"
-    cd SFT && $TORCHRUN --nproc_per_node=3 01_sft_train.py >> sft_refresh_restart.log 2>&1
-    cd ..
-    log "SFT attempt $attempt exited rc=$? (latest $(latest_sft))"
+    (cd SFT && $TORCHRUN --nproc_per_node=3 01_sft_train.py >> sft_refresh_restart.log 2>&1)
+    rc=$?
+    log "SFT attempt $attempt exited rc=$rc (latest $(latest_sft))"
     sleep 20
 done
 

@@ -89,6 +89,11 @@ prompts resembling training templates with suspicion; prefer the fresh ones.
 6. Optional: `linear_type: "kda"` swap (fla has Kimi Delta Attention) — closest to the
    "K3-class scaled down" target arch. Requires fresh pretrain.
 
+7. LMbus biomimetic sensory stack — see LMBUS_DESIGN.md (full proposal: canonical semantic
+   space + per-model bridge, foveated heterogeneous-MoE vision with LM-driven gaze,
+   certification = held-out-modality demo on the 118M, staged toward grafted support packs
+   on GLM/K-class open models).
+
 ## Hardware notes (settled — do not reopen unless user asks)
 
 User weighs MI210 (~$4k) vs 8× Gaudi2 (~$16k) later. fla has first-class ROCm → MI210
