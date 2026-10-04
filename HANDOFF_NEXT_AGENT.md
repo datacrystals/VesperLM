@@ -72,6 +72,12 @@ prompts resembling training templates with suspicion; prefer the fresh ones.
 - ssh+nohup: give jobs `</dev/null >log 2>&1`; `pkill -f` matches your own ssh cmdline — kill
   by pid.
 - `get_latest_checkpoint` ignores `step_best` — pretrain resumes from highest `step_N`.
+- **Disk-full kills silently** (happened 2026-10-03 23:56 at SFT step 700): checkpoint save
+  crashes the run; worse, torchrun relaunches die instantly AND silently because the log file
+  itself cant be written. Check `df -h /` FIRST when a run vanishes. Pruned to 119GB free by
+  deleting intermediate step_* (kept finals + step_best). Elephant: `/home/tliao/.cache/
+  huggingface` is 403GB — candidates for reclaim if needed (distill dumps already converted
+  to .bin). SFT run needs ~1.4GB per step_N dir, ~32GB for the remaining 2300 steps.
 
 ## Next steps (priority order)
 
