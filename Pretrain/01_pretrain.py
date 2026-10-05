@@ -160,6 +160,12 @@ class MixedDataStream:
         self.local_rank = dist.get_rank() if is_distributed else 0
         self.dataset_names = list(datasets_dict.keys())
         self.dataset_probs = [probabilities[n] for n in self.dataset_names]
+        # Callers pass raw weights (not necessarily normalized) — normalize here so
+        # np.random.choice never sees a sum != 1. Last entry absorbs float residue.
+        _ps = float(sum(self.dataset_probs))
+        assert _ps > 0, "dataset probabilities sum to zero"
+        self.dataset_probs = [p / _ps for p in self.dataset_probs]
+        self.dataset_probs[-1] = 1.0 - sum(self.dataset_probs[:-1])
         
         # State that gets saved/restored
         if resume_state:

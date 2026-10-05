@@ -61,9 +61,9 @@ from vesper_linear_model import VesperLinearLM
 from muon import Muon
 from configs.model_configs import get_model_config
 
-ACTIVE_CONFIG_NAME = "tiny_agent_v2"
+ACTIVE_CONFIG_NAME = "470m"
 
-LINEAR_CHECKPOINT_DIR = "vesper_linear_checkpoints_v2"
+LINEAR_CHECKPOINT_DIR = f"vesper_linear_checkpoints_{ACTIVE_CONFIG_NAME}"
 MODEL_SNAPSHOT_NAME = "vesper_linear_model.py"
 
 
@@ -223,7 +223,10 @@ def train():
         raise ValueError("Nemotron curriculum requires both phase1 and phase2 datasets in data/index.txt")
 
     val_datasets = {n: d for n, d in datasets_dict['val'].items() if 'phase1' in n or 'phase2' in n}
-    val_probs = {n: (0.8 if 'phase1' in n else 0.2) for n in val_datasets}
+    _n_p1 = sum(1 for n in val_datasets if 'phase1' in n)
+    _n_p2 = max(len(val_datasets) - _n_p1, 1)
+    val_probs = {n: (0.8 / max(_n_p1, 1) if 'phase1' in n else 0.2 / _n_p2)
+                 for n in val_datasets}
 
     phase1_stream = p01.MixedDataStream(
         phase1_train, {k: 1.0 for k in phase1_train}, batch_size, start_step,
@@ -402,17 +405,6 @@ def train():
                 for pr, gen in zip(p01.EVAL_PROMPTS, generated_texts):
                     print(f"Prompt: {pr}\nOutput: {gen}\n" + "-" * 30)
 
-                ckpt_dir = os.path.join(checkpoint_dir, f"step_{step}")
-                os.makedirs(ckpt_dir, exist_ok=True)
-                try:
-                    shutil.copy(os.path.join(_common, MODEL_SNAPSHOT_NAME),
-                                os.path.join(ckpt_dir, "vesper_linear_model_snapshot.py"))
-                    shutil.copy(__file__, os.path.join(ckpt_dir, f"{os.path.basename(__file__)}_snapshot.py"))
-                except Exception as e:
-                    print(f"Warning: Could not save code snapshots: {e}")
-
-                p01.print_model_stats(model, model_config, save_path=os.path.join(ckpt_dir, "model_stats.txt"))
-
                 ckpt = {
                     'model_config': model_config,
                     'model': model.module.state_dict() if is_distributed else model.state_dict(),
@@ -428,7 +420,17 @@ def train():
                     'val_stream_state': val_stream.get_state(),
                     'best_val_loss': best_val_loss,
                 }
-                torch.save(ckpt, os.path.join(ckpt_dir, "checkpoint.pt"))
+                if step % 500 == 0:
+                    ckpt_dir = os.path.join(checkpoint_dir, f"step_{step}")
+                    os.makedirs(ckpt_dir, exist_ok=True)
+                    try:
+                        shutil.copy(os.path.join(_common, MODEL_SNAPSHOT_NAME),
+                                    os.path.join(ckpt_dir, "vesper_linear_model_snapshot.py"))
+                        shutil.copy(__file__, os.path.join(ckpt_dir, f"{os.path.basename(__file__)}_snapshot.py"))
+                    except Exception as e:
+                        print(f"Warning: Could not save code snapshots: {e}")
+                    p01.print_model_stats(model, model_config, save_path=os.path.join(ckpt_dir, "model_stats.txt"))
+                    torch.save(ckpt, os.path.join(ckpt_dir, "checkpoint.pt"))
 
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss

@@ -20,11 +20,12 @@ MODEL_CONFIGS = {
         "hidden_dim": 1280,
         "num_experts": 8,
         "top_k": 2,
-        "max_seq_len": 2048,
+        "max_seq_len": 8192,
 
         # Training & Batching
         "micro_batch_size": 1,
         "target_accumulation_steps": 128,
+        "grad_checkpoint": True,
 
         # Optimizer Dynamics
         "beta1": 0.9,
@@ -35,9 +36,9 @@ MODEL_CONFIGS = {
 
         # Scheduling
         "seq_len_start": 128,
-        "seq_len_warmup": 4000,
-        "warmup_steps": 1000,
-        "total_steps": 20000,
+        "seq_len_warmup": 800,
+        "warmup_steps": 300,
+        "total_steps": 4000,
 
         # Evaluation
         "eval_interval": 100,

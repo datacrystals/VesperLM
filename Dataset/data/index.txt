@@ -3,3 +3,4 @@
 
 pretrain/phase1_pretrain.bin, 1
 pretrain/nemotron_phase2.bin, 1
+pretrain/nemotron_phase1.bin, 1
