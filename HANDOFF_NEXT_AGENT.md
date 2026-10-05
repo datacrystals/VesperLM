@@ -5,18 +5,19 @@ Venvs: `/home/tliao/venvs/vesper` (torch 2.5.1, fla 0.6.0), `/home/tliao/venvs/g
 
 ## What is running RIGHT NOW
 
-1. **SFT refresh (tiny_agent_v2_sft, 118M, bf16)** — launched 21:07 from
-   `Pretrain/vesper_linear_checkpoints_v2/step_best` (**@5200**, val CE 3.272 — the v1 SFT
-   used the older @4100). Log `/home/tliao/sft_refresh_5200.log`. ~14 s/step × 3000 ≈ 12h,
-   ETA ~09:00 Oct 4. Step-0 CE 3.55 (v1 started ~4.5). Data: tooluse 11.5M + nemotron 50M +
-   **distill_chat 22.9M (NEW, weight 1.0)**. Checkpoints `SFT/sft_checkpoints/step_*` every 100.
-2. **`run_refresh_chain.sh`** (log `/home/tliao/refresh_chain.log`) waits for it, relaunches
-   on crash (auto-resume), then runs the agent-harness eval with held-out prompts →
-   `Agent/eval_refresh_5200.log`.
+**429M pretrain ("470m" config, ACTIVE_CONFIG_NAME="470m")** — launched 2026-10-05 19:11 UTC,
+log `/home/tliao/pretrain_470m.log`. Fresh from scratch. dim 1024, 10 layers, 8 experts top-2,
+429M total / 193M active. **8k context** (max_seq_len 8192 — first run at >2048), grad_checkpoint
+on, micro_batch 1, accum 128 → 1.048M tokens/step, total_steps 4000 → **4.19B token budget**.
+Data: fineweb_v2 1.5B + nemotron_phase1 2B (NEW to mix) + nemotron_phase2 0.5B.
+Checkpoints: `Pretrain/vesper_linear_checkpoints_470m/` — numbered every 500 (5GB each),
+step_best on val improvement. fp16 + Muon (as v2). Watch for: NaN (fp16), disk (119GB free at
+launch), phase-1→2 switch, seq-len ramp to 8192 by step 800.
 
-Morning checklist: `tail /home/tliao/sft_refresh_5200.log` (expect "Training complete" or
-step_2900 dir with `chat_model`), read `Agent/eval_refresh_5200.log`, compare against the v1
-probes below.
+Why: the 118M SFT refresh (results below) capped at format-without-semantics on held-out
+prompts from TWO bases → 118M = capability ceiling → scale is the lever. This run tests
+whether semantics emerge at 429M. SFT of the 429M comes after; `SFT/01_sft_train.py` config
+selection will need pointing at the 470m checkpoint dir (it currently resolves v2 step_best).
 
 ## Probe findings 2026-10-03 (why this refresh exists)
 
@@ -89,6 +90,11 @@ prompts resembling training templates with suspicion; prefer the fresh ones.
 - ssh+nohup: give jobs `</dev/null >log 2>&1`; `pkill -f` matches your own ssh cmdline — kill
   by pid.
 - `get_latest_checkpoint` ignores `step_best` — pretrain resumes from highest `step_N`.
+- **MixedDataStream probs are raw weights** — normalized inside __init__ now (2f22eb5).
+  Phase buckets are name-matched ('phase1'/'phase2' substring): nemotron_phase1.bin lands in
+  the phase1 stream alongside fineweb. val_probs group-normalized 0.8/0.2.
+- **LINEAR_CHECKPOINT_DIR is now per-config** (`vesper_linear_checkpoints_{ACTIVE_CONFIG_NAME}`)
+  — switching ACTIVE_CONFIG_NAME no longer resumes the wrong model.
 - **Disk-full kills silently** (happened 2026-10-03 23:56 at SFT step 700): checkpoint save
   crashes the run; worse, torchrun relaunches die instantly AND silently because the log file
   itself cant be written. Check `df -h /` FIRST when a run vanishes. Pruned to 119GB free by
