@@ -33,6 +33,23 @@ from step_best@4100):
 - **Verdict: SFT v1 bought format/control, not task semantics.** The distill mix + better
   base (@5200) in the refresh are aimed at the semantics gap.
 
+## Refresh RESULTS (2026-10-04, harness on step_2900 — Agent/eval_refresh_5200.log)
+
+- "list all files incl hidden" -> correct `ls -la` first call, then DEGENERATE markdown-table
+  loop when summarizing the observation. Observation-integration broken.
+- "17*23+145" -> `python -c "print(17*23+145)"` -> 536 -> "The result is 536." PERFECT — but
+  this is the templated/memorized one.
+- "create notes.txt containing hello" (HELD-OUT) -> malformed `echo 'Hello', "string_word"`,
+  no file created. FAIL.
+- "13 * 12?" (HELD-OUT) -> MISCOPY: emitted `11 * 12`, ran it raw in bash (no python -c),
+  got "command not found", repeated the same broken call, then confabulated about "17 * 12". FAIL.
+- **Verdict: refresh = better CE (3.55->~1.5) + kept format, but held-out semantics STILL fail,
+  same as v1.** The memorized-vs-novel contrast (python -c for the templated problem, raw bash
+  for the novel one) is the cleanest memorization demonstration we have. Two SFT runs from
+  different bases both cap at format -> **118M is a capability ceiling, not a data-mix problem.
+  Scale is the next lever (429M config exists).** Infra proven end-to-end: auto-resume after
+  disk-full, chained held-out eval fired correctly.
+
 ## CORRECTION: earlier eval success was contamination
 
 The "17*23+145 = 536" success cited earlier is **not evidence of generalization**: that exact
