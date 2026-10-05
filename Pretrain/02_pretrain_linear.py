@@ -446,7 +446,7 @@ def train():
                     print(f"\n>>> NEW BEST val loss {val_loss:.4f} at step {step} "
                           f"-> saved to {best_dir}")
 
-                with open(os.path.join(ckpt_dir, "eval_samples.json"), "w") as f:
+                with open(os.path.join(checkpoint_dir, f"eval_samples_step{step}.json"), "w") as f:
                     json.dump({
                         "step": step,
                         "val_loss": round(val_loss, 4),
@@ -471,10 +471,11 @@ def train():
                               f"Total Tokens: {total_tokens_trained:,}")
                     plt.legend()
                     plt.grid(True)
-                    plt.savefig(os.path.join(ckpt_dir, "loss_curve.png"), dpi=150)
+                    plt.savefig(os.path.join(checkpoint_dir, "loss_curve.png"), dpi=150)
                     plt.close()
 
-                print(f">>> Saved checkpoint to: {ckpt_dir}")
+                if step % 500 == 0:
+                    print(f">>> Saved checkpoint to: {checkpoint_dir}/step_{step}")
                 print(f"    Total tokens trained: {total_tokens_trained:,}\n")
 
             t0 = time.time()
