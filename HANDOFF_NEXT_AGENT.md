@@ -24,6 +24,15 @@ prompts from TWO bases → 118M = capability ceiling → scale is the lever. Thi
 whether semantics emerge at 429M. SFT of the 429M comes after; `SFT/01_sft_train.py` config
 selection will need pointing at the 470m checkpoint dir (it currently resolves v2 step_best).
 
+## CPU probe (Pretrain/cpu_probe.py)
+
+Runs any 470m checkpoint on CPU (~23 tok/s, KV-cached greedy). Shims fla Triton-only ops for
+CPU: chunk_gla/fused_recurrent_gla -> naive_recurrent_gla (transpose state, v_first), and
+fused gated RMSNorm -> torch (y = rmsnorm(x)*w*(g*sigmoid(g)), norm-first, fp32). Results
+@step 600 (236M tok): topical, grammatical, degenerate loops, no factual recall yet — more
+coherent than the 118M base was at 100% trained, too early for semantics verdict. NOTE:
+cpu_probe prompts are ALSO held-out from SFT EVAL_PROMPTS now — do not reuse across that boundary.
+
 ## Probe findings 2026-10-03 (why this refresh exists)
 
 Live probes of the v1 SFT model (`SFT/sft_checkpoints_118m_v1/step_2900/chat_model`, trained
