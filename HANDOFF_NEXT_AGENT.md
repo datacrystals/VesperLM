@@ -11,8 +11,13 @@ log `/home/tliao/pretrain_470m.log`. Fresh from scratch. dim 1024, 10 layers, 8 
 on, micro_batch 1, accum 128 → 1.048M tokens/step, total_steps 4000 → **4.19B token budget**.
 Data: fineweb_v2 1.5B + nemotron_phase1 2B (NEW to mix) + nemotron_phase2 0.5B.
 Checkpoints: `Pretrain/vesper_linear_checkpoints_470m/` — numbered every 500 (5GB each),
-step_best on val improvement. fp16 + Muon (as v2). Watch for: NaN (fp16), disk (119GB free at
-launch), phase-1→2 switch, seq-len ramp to 8192 by step 800.
+step_best on val improvement. fp16 + Muon (as v2). Watch for: NaN (fp16), disk (75GB free), phase-1→2 switch, seq-len ramp to 8192 by step 800.
+
+Rate/ETA (measured 2026-10-06 01:37, step ~310): 7.4k tok/s total at seq 3200, gentle knee,
+~55s/step at 410k tok/step; VRAM 8.1GB. Projects ~5-6 days total (completion ~Oct 10-11).
+Mid-run eval samples at steps 1000-2000 give the early semantics read. ckpt_dir bug fixed
+(1faf75a): eval_samples_step{N}.json + loss_curve.png now live at checkpoint_dir ROOT —
+numbered step_N dirs exist ONLY at %500 saves, do not create others (breaks resume).
 
 Why: the 118M SFT refresh (results below) capped at format-without-semantics on held-out
 prompts from TWO bases → 118M = capability ceiling → scale is the lever. This run tests
