@@ -116,6 +116,30 @@ acting. That is where real capability comes from.
 7. **[1TB+ era]** K2/K3-class packs; 429M→bigger VesperLM pretrains with 8k ctx; optional
    world-model-scale vision pretraining (V-JEPA-style, params go HERE not in a static retina).
 
+## Next-pretrain spec: "Vesper-K" lineage (KDA + MLA hybrid MoE)
+
+User-approved 2026-10-06: make the pretrain AFTER the current 429M run the lineage swap so
+"Kimi-K3-class scaled down" becomes an accurate description instead of an aspiration.
+
+- **Linear layers** (all but every 4th): GLA -> **KDA** (Kimi Delta Attention; fla already
+  supports it, `linear_type: "kda"` — delta-rule gated linear attention, better recall than
+  GLA; this is Moonshot's Kimi-Linear lineage).
+- **Full-attention layers** (every 4th): GQA -> **MLA** (DeepSeek-style low-rank latent KV:
+  down-project KV to a latent (kv_lora_rank ~256-512 at our dim), up-project per head,
+  decoupled-RoPE branch for positions). Plain torch — no Triton/kernel work needed. KV cache
+  per full layer becomes the latent + small RoPE key, which is what makes long-context
+  serving cheap once we scale context/batch.
+- **MoE FFN**: unchanged (8 experts top-2 at 429M scale).
+- Then "hybrid KDA-linear + MLA + MoE" is a TRUE label. Current model's honest label:
+  "hybrid GLA/Mamba2 + GQA + MoE" (Jamba/Zamba/MiniMax-01 family).
+- Implementation: new layer type in `Common/vesper_linear_model.py`; `attention_every` stays
+  4; `forward_incremental`/new_cache must cache the MLA latent (+RoPE key) instead of full
+  per-head K/V; cpu_probe shims unaffected (MLA is plain torch).
+- Requires FRESH pretrain (arch change) — sequence: current 429M finishes -> SFT -> verdict
+  on semantics ceiling -> Vesper-K pretrain at same scale for a matched-token comparison
+  (val CE trajectory + held-out probes), then scale.
+- Validation: same harness + cpu_probe + held-out eval prompts; publish the comparison.
+
 ## Non-goals / ceilings (be honest)
 
 - Spikes, predictive-coding dynamics, literal cortical feedback: training graveyard. Skip.

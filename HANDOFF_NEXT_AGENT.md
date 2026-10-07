@@ -129,8 +129,9 @@ prompts resembling training templates with suspicion; prefer the fresh ones.
    anyway). Val curve says the 118M run was step-limited — budget more steps/tokens.
 5. Fused linear+CE (fla `FusedLinearCrossEntropy`) — vocab-65523 logits are ~10% of step;
    needs care with the SFT mask and pad ignore_index.
-6. Optional: `linear_type: "kda"` swap (fla has Kimi Delta Attention) — closest to the
-   "K3-class scaled down" target arch. Requires fresh pretrain.
+6. **Vesper-K pretrain (APPROVED, queued behind current run)**: GLA->KDA linear layers +
+   GQA->MLA full layers, MoE unchanged — full spec in LMBUS_DESIGN.md "Next-pretrain spec".
+   Fresh pretrain at 429M scale for matched-token comparison vs this run, then scale.
 
 7. LMbus biomimetic sensory stack — see LMBUS_DESIGN.md (full proposal: canonical semantic
    space + per-model bridge, foveated heterogeneous-MoE vision with LM-driven gaze,
