@@ -34,10 +34,11 @@ Probe gotchas that cost cycles (do not repeat):
   ACTIVE_CONFIG_NAME (env VESPER_CONFIG) is the real one. Hybrid-stack print
   now shows the true layer mix.
 
-**Throughput probe (470m_k, bf16, micro 8 / accum 16, synthetic random tokens):
-~39-40k tok/s during seq-warmup (seq ~2k, VRAM 7.6GB/192GB).** Steady-state at
-seq 8192 + real data still TBD — see probe result below / droplet log
-/root/probe_470m.log. CE ~11.13 on random tokens ≈ ln(65523) — correct sanity.
+**Throughput probe RESULT (470m_k, bf16, micro 8 / accum 16, synthetic random tokens):
+~59.1k tok/s steady-state at full seq 8192, VRAM 14.1GB/192GB, CE ~11.095 ≈ ln(65523) on
+noise (correct).** Projected full 4.2B-token 470m_k run: ~20h ≈ **$40** at $2/hr single
+MI300X — well inside budget; headroom for micro_batch 32+ or grad-checkpoint-off tuning
+would cut it further. Droplet destroyed, $3.27 settled for the whole bring-up.
 
 ---
 
