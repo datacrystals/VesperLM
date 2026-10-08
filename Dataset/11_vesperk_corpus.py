@@ -15,6 +15,7 @@ at the end for pasting into data/index.txt).
 
 import os
 import sys
+import time
 import argparse
 import multiprocessing as mp
 import numpy as np
@@ -42,8 +43,9 @@ CORPUS = [
 TOKENIZER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Pretrain", "custom_tokenizer")
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Pretrain", "data", "vesperk")
 SHARD_TOKENS = 1_000_000_000   # ~2GB per shard (uint16)
-BATCH_TEXTS = 500
+BATCH_TEXTS = 100
 FLUSH_TOKENS = 1_000_000
+MAX_DOC_CHARS = 200_000   # truncate pathological docs (~50k tokens)
 
 _tok = None
 _eos = None
@@ -58,7 +60,7 @@ def _init_worker(tok_dir):
 
 def _tokenize_batch(texts):
     out = []
-    enc = _tok(texts, add_special_tokens=False)["input_ids"]
+    enc = _tok([t[:MAX_DOC_CHARS] for t in texts], add_special_tokens=False)["input_ids"]
     for ids in enc:
         if ids:
             ids.append(_eos)
@@ -134,12 +136,19 @@ def build_source(name, repo, config, split, field, target, pool, dry_run=False):
     try:
         stream = _text_stream(repo, config, split, field)
         writer = ShardWriter(OUT_DIR, name)
-        pbar = tqdm(total=target, unit="tok", desc=name)
+        pbar = tqdm(total=target, unit="tok", desc=name, file=sys.stderr)
+        last_log = time.time()
+        t_start = time.time()
         for token_lists in pool.imap(_tokenize_batch, stream):
             for ids in token_lists:
                 if writer.total_tokens >= target:
                     break
                 writer.write(ids)
+            now = time.time()
+            if now - last_log > 30:
+                rate = writer.total_tokens / max(now - t_start, 1)
+                print(f"[{name}] {writer.total_tokens:,} tokens ({rate:,.0f} tok/s)", flush=True)
+                last_log = now
             pbar.n = min(writer.total_tokens, target)
             pbar.refresh()
             if writer.total_tokens >= target:
