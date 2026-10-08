@@ -34,7 +34,23 @@ Probe gotchas that cost cycles (do not repeat):
   ACTIVE_CONFIG_NAME (env VESPER_CONFIG) is the real one. Hybrid-stack print
   now shows the true layer mix.
 
-**Throughput probe RESULT (470m_k, bf16, micro 8 / accum 16, synthetic random tokens):
+**Modular MoE landed (91091fc).** `PassportRouter` (per-expert passport embeddings,
+dot-product scoring, expert dropout forcing passport reliance, `register_expert()` hot-plug)
++ `MoEFeedForward.add_expert()` in Common/vesper_model.py — defaults byte-compatible with
+running checkpoints. Env overrides VESPER_ROUTER_TYPE/PASSPORT_DIM/ROUTER_EXPERT_DROPOUT/
+NUM_EXPERTS. `lab/` experiment farm: queue/runner/promote + tier ladder (t0 lab_tiny →
+t3 470m_k), sandboxed per-run cwd (never touches production data/ckpts). MODULAR_MOE.md
+spec. **First science result** (lab/plugin_expert_test.py, CPU): zero-shot plug-in of a
+separately-trained 5th expert — CE on its domain 7.38 vs 11.07 masked (thesis core holds),
+router prefers it on-domain 63% vs 40% chance, but does NOT exclude it off-domain (43% vs
+<0.3 target = chance for top-2-of-5) → passport loss needs negative (reject-off-domain)
+pressure; that's the next t0 variant. **BUG FOUND+FIXED: trainer arch_keys dropped
+full_type/kda_head_dim/kv_lora_rank/v_head_dim — all trainer runs so far (overnight
+tiny_agent_k, MI300X 470m_k probe) silently built GQA full layers, not MLA.** KDA-on-ROCm
+validation stands (linear_type was honored; MLA wrapper passed isolation separately), but
+the next droplet session must re-probe KDA+MLA end-to-end with the fixed trainer.
+
+**Throughput probe RESULT (KDA+GQA — see arch_keys bug note above; MLA re-probe pending) (470m_k, bf16, micro 8 / accum 16, synthetic random tokens):
 ~59.1k tok/s steady-state at full seq 8192, VRAM 14.1GB/192GB, CE ~11.095 ≈ ln(65523) on
 noise (correct).** Projected full 4.2B-token 470m_k run: ~20h ≈ **$40** at $2/hr single
 MI300X — well inside budget; headroom for micro_batch 32+ or grad-checkpoint-off tuning
