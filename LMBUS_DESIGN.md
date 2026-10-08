@@ -138,7 +138,49 @@ User-approved 2026-10-06: make the pretrain AFTER the current 429M run the linea
 - Requires FRESH pretrain (arch change) — sequence: current 429M finishes -> SFT -> verdict
   on semantics ceiling -> Vesper-K pretrain at same scale for a matched-token comparison
   (val CE trajectory + held-out probes), then scale.
+- **Vesper-K2 sparse scaling (user-approved direction)**: experts 8 -> 16-32 routed (+1 shared
+  always-on, DeepSeek-style), top_k stays 2 — total ~0.75-1.05B at the SAME 193M active and
+  same tok/s. Capacity for fact-pinning without the P40 FLOP wall. Do not exceed ~32 experts
+  at the 4.19B-token budget (experts undertrain beyond that); 64+ is GPU-upgrade territory.
+- **K2 memory levers on Pascal** (VRAM is the wall, not FLOPs):
+  * bitsandbytes 0.50.2 INSTALLED in the vesper venv (2026-10-08) — 8-bit AdamW verified on
+    P40. NOTE: covers only the AdamW group (embeddings); expert matrices live in the MUON
+    group, so this is marginal by itself.
+  * The real unlock: **bf16 Muon momentum storage** (~10-line patch: keep momentum buffer in
+    bf16, cast to fp32 for the Newton-Schulz iteration). Static footprint of a 32-expert K2:
+    ~6.7GB + ~9GB activations -> fits 24GB; 48 experts ~18.3GB total, also fits.
+  * FP8/MXFP4 COMPUTE is a hardware-generation away: FP8 is native on MI300X (gfx942, on the
+    shopping list), MXFP4 needs MI355X/Blackwell. DeepSeek-style FP8 expert training = a
+    K3-lineage feature for the upgrade era, NOT for the P40. Quantized (4/8-bit) WEIGHT
+    storage is fine for inference/serving/probes but cannot train experts from scratch.
 - Validation: same harness + cpu_probe + held-out eval prompts; publish the comparison.
+
+## Modular expansion without full retraining (user-approved direction)
+
+"Grow the model in stages; never pay full pretrain cost twice." All precedented:
+
+- **Expansion A — expert add (sparse upcycling)**: clone trained experts (+noise), duplicate
+  their router rows, brief forced-balance warmup, train ~10-20% of a pretrain's tokens on the
+  SAME mix (rehearsal). Precedent: Google Sparse Upcycling, Qwen 7B->57B growth. THIS is how
+  the K2 8->16/32-expert jump should be done: ~1 day on P40, not a 6-day fresh pretrain.
+- **Expansion B — MoE^2 clusters (hierarchical routing)**: coarse router -> expert cluster,
+  fine router within. New growth = bolt on a whole cluster ("domain pack": code, science,
+  robot-sensorimotor) with trunk + old clusters FROZEN; train only the new cluster + its
+  router entries, KL-anchor to old-model outputs on a general-data slice. Extreme form:
+  Branch-Train-Merge (fully separate expert LMs glued by a cheap router).
+- **Depth growth**: LLaMA-Pro-style identity-init blocks inserted mid-stack + brief training —
+  raises REASONING capacity (experts only raise knowledge capacity).
+- **LoRA tier**: frozen trunk + routed LoRA skills — near-free, hot-swappable, tiny capacity.
+- **The two hard problems + standard fixes**: router warmup (clone+noise, forced-balance
+  phase) and forgetting (freeze old weights, KL/rehearsal anchor). Every expansion is gated
+  on BOTH: original-val regression check (forgot nothing) + new-domain val (gained enough).
+- **Lifecycle**: 429M verdict -> Expansion A (expert growth ~1 day, doubles as the K2 sparse
+  test) -> Expansion B clusters -> depth growth when reasoning-bound -> Vesper-K lineage
+  (KDA/MLA) stays a fresh pretrain (arch change can't be grown); every growth AFTER that is
+  an expansion, not a retrain. LMbus modules = the orthogonal zero-weight-change axis.
+- **Tooling to build (once)**: state-dict surgery script (clone expert weights, extend router
+  rows, write new ckpt with bumped num_experts; optimizer re-init; aux-loss retune; resume
+  requires exact shape match so surgery must write a complete new checkpoint).
 
 ## Non-goals / ceilings (be honest)
 
