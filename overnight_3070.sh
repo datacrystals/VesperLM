@@ -20,8 +20,12 @@ export VESPER_ACCUM=8
 
 log() { echo "[overnight $(date -u +%H:%M:%S)] $*"; }
 
-# Clean start: wipe the 200-step bf16 smoke-test checkpoints
-rm -rf vesper_linear_checkpoints_tiny_agent_k
+# Clean start only if no prior checkpoints; otherwise resume in place
+if compgen -G "vesper_linear_checkpoints_tiny_agent_k/step_*" > /dev/null; then
+    log "existing checkpoints found — RESUMING, no wipe"
+else
+    rm -rf vesper_linear_checkpoints_tiny_agent_k
+fi
 
 launch() {  # $1=micro_batch, $2=total_steps (optional)
     local mb=$1 ts=${2:-}
