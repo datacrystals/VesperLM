@@ -141,13 +141,89 @@ class TopKRouter(nn.Module):
         return top_weights, top_indices, aux_loss
 
 
+class PassportRouter(nn.Module):
+    def __init__(self, dim, num_experts, top_k=2, passport_dim=64, expert_dropout=0.0):
+        super().__init__()
+        self.num_experts = num_experts
+        self.top_k = top_k
+        self.expert_dropout = expert_dropout
+        self.passport_dim = passport_dim
+        self.query = nn.Linear(dim, passport_dim, bias=False)
+        self.passports = nn.Parameter(torch.randn(num_experts, passport_dim) * 0.02)
+
+    def forward(self, x):
+        # x: (N, dim) where N = B*T (flattened tokens)
+        logits = self.query(x) @ self.passports.t() / math.sqrt(self.passport_dim)
+
+        if self.training and self.expert_dropout > 0:
+            # Per-call bernoulli dropout over experts: dropped experts are out
+            # of candidacy (-inf before softmax) so routing must match token
+            # content to passport content instead of memorizing index
+            # shortcuts. Always keep at least top_k experts selectable.
+            keep = torch.rand(self.num_experts, device=logits.device) >= self.expert_dropout
+            if keep.sum() < self.top_k:
+                keep[:self.top_k] = True
+            logits = logits.masked_fill(~keep.unsqueeze(0), float('-inf'))
+
+        routing_weights = F.softmax(logits, dim=-1)
+        top_weights, top_indices = torch.topk(routing_weights, self.top_k, dim=-1)
+
+        # Switch Transformer aux loss for load balancing
+        # mean routing probability per expert (soft, differentiable)
+        mean_router_probs = routing_weights.mean(dim=0)
+        # fraction of tokens dispatched to each expert (hard, for balancing signal)
+        expert_mask = torch.zeros_like(routing_weights).scatter_(1, top_indices, 1.0)
+        mean_expert_usage = expert_mask.mean(dim=0)
+        aux_loss = self.num_experts * torch.sum(mean_router_probs * mean_expert_usage)
+
+        # Renormalize selected weights so they sum to 1
+        top_weights = top_weights / top_weights.sum(dim=-1, keepdim=True)
+        return top_weights, top_indices, aux_loss
+
+    @torch.no_grad()
+    def register_expert(self, passport_init=None):
+        if passport_init is None:
+            row = torch.randn(1, self.passport_dim, device=self.passports.device,
+                              dtype=self.passports.dtype) * 0.02
+        else:
+            row = passport_init.to(self.passports).reshape(1, -1)
+        self.passports = nn.Parameter(torch.cat([self.passports.data, row], dim=0))
+        self.num_experts += 1
+        return self.num_experts - 1
+
+
 class MoEFeedForward(nn.Module):
-    def __init__(self, dim, hidden_dim, num_experts=8, top_k=2):
+    def __init__(self, dim, hidden_dim, num_experts=8, top_k=2, router_type="topk",
+                 passport_dim=64, router_expert_dropout=0.0):
         super().__init__()
         self.top_k = top_k
         self.num_experts = num_experts
+        self.dim = dim
+        self.hidden_dim = hidden_dim
+        self.router_type = router_type
         self.experts = nn.ModuleList([FeedForward(dim, hidden_dim) for _ in range(num_experts)])
-        self.router = TopKRouter(dim, num_experts, top_k)
+        if router_type == "passport":
+            self.router = PassportRouter(dim, num_experts, top_k, passport_dim=passport_dim,
+                                         expert_dropout=router_expert_dropout)
+        elif router_type == "topk":
+            self.router = TopKRouter(dim, num_experts, top_k)
+        else:
+            raise ValueError(f"Unknown router_type '{router_type}' (expected 'topk' or 'passport')")
+
+    def add_expert(self):
+        self.experts.append(FeedForward(self.dim, self.hidden_dim))
+        if self.router_type == "passport":
+            self.router.register_expert()
+        else:
+            gate = self.router.gate
+            with torch.no_grad():
+                row = torch.randn(1, gate.in_features, device=gate.weight.device,
+                                  dtype=gate.weight.dtype) * 0.02
+                gate.weight = nn.Parameter(torch.cat([gate.weight.data, row], dim=0))
+                gate.out_features += 1
+            self.router.num_experts += 1
+        self.num_experts += 1
+        return self.num_experts - 1
 
     def forward(self, x):
         B, T, C = x.size()

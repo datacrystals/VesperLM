@@ -309,6 +309,49 @@ MODEL_CONFIGS = {
     },
 
     # ------------------------------------------------------------------
+    # lab-sized smoke config — KDA/MLA, tiny dims for fast iteration
+    # ------------------------------------------------------------------
+    "lab_tiny": {
+        # Architecture
+        "dim": 128,
+        "n_layers": 4,
+        "n_heads": 4,
+        "n_kv_heads": 2,
+        "hidden_dim": 384,
+        "num_experts": 4,
+        "top_k": 2,
+        "max_seq_len": 512,
+        "vocab_size": 8192,
+        "linear_type": "kda",
+        "full_type": "mla",
+        "kda_head_dim": 64,
+        "kv_lora_rank": 64,
+        "v_head_dim": 64,
+
+        # Training & Batching
+        "micro_batch_size": 8,
+        "grad_checkpoint": False,
+        "target_accumulation_steps": 4,
+
+        # Optimizer Dynamics
+        "beta1": 0.9,
+        "beta2_token_half_life": 1_000_000,
+        "max_lr": 1e-3,
+        "min_lr": 1e-4,
+        "aux_weight": 0.1,
+
+        # Scheduling
+        "seq_len_start": 512,
+        "seq_len_warmup": 0,
+        "warmup_steps": 50,
+        "total_steps": 1000,
+
+        # Evaluation
+        "eval_interval": 100,
+        "val_eval_steps": 50,
+    },
+
+    # ------------------------------------------------------------------
     # 470 M active params — Vesper-K lineage (KDA + MLA) for MI300X
     # ------------------------------------------------------------------
     "470m_k": {

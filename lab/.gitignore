@@ -1,0 +1,4 @@
+sandbox/*
+!sandbox/.gitkeep
+data_synth/
+__pycache__/

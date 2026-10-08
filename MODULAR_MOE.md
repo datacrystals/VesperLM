@@ -1,0 +1,219 @@
+# MODULAR_MOE — Hot-Pluggable Experts over LMbus
+
+Status: design spec for the expert half of LMbus (`LMBUS_DESIGN.md` covers the
+modality half). Every claim below is falsifiable on a single cheap GPU.
+
+## 1. Motivation
+
+Train a dense **spine** once (embeddings + attention + the residual-stream
+geometry), then grow capability by plugging in separately trained FFN experts
+instead of retraining the model. Three properties matter more than raw quality:
+
+1. **No full retrains.** Adding a domain expert costs one small expert plus a
+   short plug-in anneal, not a 6-day pretrain.
+2. **Third-party experts.** Anyone can train an expert against the frozen
+   LMbus expert spec (fixed I/O contract + passport registration) without our
+   data or GPUs; it plugs in exactly like ours. Same community-certification
+   bet as the modality side of LMbus.
+3. **Hardware reality.** Hobbyist budget: heterogeneous cheap GPUs
+   (P40/MI300X-class mix), WAN training that only syncs on an outer loop
+   (DiLoCo plan), spot instances that vanish mid-run. Anything that needs all
+   experts co-resident or an all-reduce every step is dead on arrival.
+
+## 2. Prior art
+
+**BTX / Branch-Train-Merge (Meta, 2024).** Experts branched from a shared seed
+checkpoint, trained independently, merged at the FFN with a post-hoc router on
+the frozen trunk. Shared lineage is exactly why their weighted-sum merge is
+meaningful; our problem is the case BTX does not cover — no shared lineage.
+
+**PEER (2024).** Product-key retrieval routing over ~1M tiny experts (a few
+neurons each) per layer. An enormous expert library is trainable and servable
+if the per-expert footprint is tiny and routing is a two-key lookup. We keep
+the library target but with large experts and a semantic router.
+
+**Arrow (2024).** Zero-shot routing to unseen LoRA experts via prototype
+signatures from a small calibration set. Evidence that routing to experts the
+router never saw is possible; passports are the weight-space analogue.
+
+**Switch-style load-balancing aux loss.** Switch Transformer (2021) and
+successors penalize uneven expert utilization. Table stakes for any top-k MoE
+and the main defense against router collapse — but defined for a fixed expert
+set, so it needs care after a hot-plug (see risks).
+
+**Expert-offload serving (MoE-In-Flash and relatives).** Keep only the top-k
+active experts in VRAM and stream the rest from NVMe, batched per layer. This
+is what makes a large expert library servable on a single card.
+
+## 3. The hard constraint: representation geometry
+
+Independently trained experts do not share an internal language. An expert
+trained on domain B with its own initialization, data, and hidden width lives
+in a different basis than the spine's residual stream. The standard MoE merge
+(a weighted sum of expert outputs) is algebraically defined and semantically
+meaningless across such experts: cosine similarity between two experts'
+outputs on the same input is not agreement, it is noise.
+
+Two load-bearing fixes, both used here:
+
+- **Shared lineage (BTX).** Experts branched from the same seed already speak
+  the residual stream's language. Free, but only for experts we train.
+- **Trained per-expert I/O adapters.** A small input map (spine -> expert) and
+  output map (expert -> spine) trained at plug-in time with the spine and the
+  expert core frozen. The only bridge for foreign experts; it must train on
+  one GPU in hours.
+
+A frozen wire format is necessary but not sufficient — freezing shapes does
+not align geometry. Any "plug any expert zero-shot" claim without one of these
+fixes is selling the format as the whole protocol.
+
+## 4. Design
+
+### 4.1 Spine / expert split
+
+The spine is everything that defines the residual-stream geometry: embeddings,
+all attention (KDA linear + MLA full layers in `Common/vesper_linear_model.py`;
+GQA in `Common/vesper_model.py`), norms, LM head. Trained once; never updated
+by expert plug-in. Every MoE FFN slot (today `MoEFeedForward` in
+`Common/vesper_model.py`) becomes a library of interchangeable experts behind a
+router; attention and embeddings stay dense.
+
+### 4.2 Expert I/O contract (frozen)
+
+Per layer, per expert:
+
+- **Input:** `x` of shape `(B, T, d_model)` — pre-FFN residual vector
+  (post-RMSNorm, the call site of `FeedForward` today).
+- **Output:** `y` of shape `(B, T, d_model)` — a delta added to the residual.
+- **Internal:** `A_in : d_model -> d_e` (bias-free Linear or low-rank), SwiGLU
+  core (`w1, w3 : d_e -> h_e`, `w2 : h_e -> d_e`, same layout as the existing
+  `FeedForward` weights), `A_out : d_e -> d_model`.
+- **Checkpoint:** state dict of exactly these tensors plus a JSON header
+  (`d_model`, `d_e`, `h_e`, provenance, training domain). No host optimizer
+  state, no router state.
+
+Same-lineage experts use `d_e = d_model` with `A_in`/`A_out` identity-init, so
+the expert is function-preserving at birth. Foreign experts choose `d_e`/`h_e`;
+the adapters absorb the width mismatch.
+
+### 4.3 PassportRouter (replaces `TopKRouter`)
+
+`TopKRouter` today is a bias-free `nn.Linear(dim, num_experts)` — a new expert
+means new gate rows (`Growth/expand_experts.py` surgery). PassportRouter
+decouples routing from a fixed expert count:
+
+- **Passport bank** `P` of shape `(E, d_r)`: one learned embedding per expert
+  (`d_r = d_model` to start).
+- **Query / score:** `q = W_q h`;
+  `s_e = softmax((q . p_e) / sqrt(d_r))` over live passports;
+  top-k, renormalized (same output math as today, so the FFN merge code is
+  unchanged). (Cosine scoring + learned temperature is a candidate t0
+  experiment; the reference implementation starts with plain dot-product.)
+- **Expert dropout:** each training step each expert is masked from candidacy
+  with probability `p_drop` (start 0.1), softmax renormalized over survivors.
+  The router cannot memorize index shortcuts; it must match token content to
+  passport content, which is what makes unseen experts reachable at plug-in.
+- **Aux loss:** the Switch-style balance loss (mean routing probability x hard
+  utilization, `aux_weight` 0.1), computed over live experts only.
+
+A new expert is one appended row in `P` — no gate surgery, no router-row
+cloning, no router optimizer rebuild.
+
+### 4.4 Hot-plug: `add_expert()`
+
+```
+add_expert(expert_ckpt, passport_init=None, layer_ids=None) -> expert_id
+```
+
+1. Load the contract checkpoint; validate shapes against the host config
+   (`Pretrain/configs/model_configs.py`).
+2. Append `A_in`/core/`A_out` to each targeted layer's expert list.
+3. Append a passport row (`passport_init` or fresh gaussian); mark it live in
+   the candidacy mask.
+4. Change nothing else. Spine, other experts, LM head stay byte-identical;
+   only new tensors get fresh optimizer state. The training loop then
+   continues with the larger library.
+
+### 4.5 Geometry bridge: per-expert adapters
+
+The adapters are the fix from section 3. At plug-in time: freeze spine, expert
+core, all other experts, LM head; train only `A_in`, `A_out`, and the passport
+row (optionally `tau`) — well under 1% of model params per expert. Objective:
+LM cross-entropy on a host-side calibration slice plus KL-to-base on general
+text, so the new expert cannot rewrite behavior outside its domain. Same shape
+as the Hippocampus micro-session (`Hippocampus/consolidate.py`: reward-weighted
+NLL + KL, tiny LR, few steps) without the LoRA branch.
+
+### 4.6 Lifecycle and removal
+
+1. **Register:** `add_expert()` — the expert becomes a routing candidate.
+2. **Immune canary gate:** `Immune/gate.py` probes + `Immune/drift.py` on the
+   plugged model vs the incumbent. Vetoes are absolute; a rejected expert is
+   never merged into serving checkpoints.
+3. **Light anneal (Hippocampus-style quarantined consolidation):** short
+   adapter-only training on accepted material, then promote or rollback. The
+   trunk and expert core never move.
+
+Removal = drop from candidacy: mask the passport, keep the weights. Routing
+renormalizes over survivors; kept weights allow cheap re-enable or later
+adapter retuning. No retrain, no surgery.
+
+## 5. Why it fits the hardware
+
+- **Zero-communication parallelism.** Experts train fully independently — no
+  gradient sync between expert trainers, ever. Composes directly with the
+  DiLoCo WAN plan: experts can live on different boxes (or different people's
+  boxes); only the plug-in anneal runs on the host.
+- **Serving scales by top-k.** With top-k=2 only two experts per layer need be
+  resident; the rest of the library lives on NVMe and is prefetched
+  (MoE-In-Flash style). The active working set stays near a dense model.
+- **Failure isolation.** A bad expert is bad weights behind a passport. The
+  Immune gate rejects it before serving, the base is untouched, and removal is
+  a candidacy flip. Spot-instance failures stay local.
+
+## 6. Validation ladder
+
+Shared pass criteria at every tier, on a held-out mix of domain-A / domain-B
+text:
+
+- **Utilization:** >50% of domain-B tokens go to the plugged expert (any layer
+  where it is registered).
+- **Contamination:** <30% of domain-A tokens go to the plugged expert.
+- **Quality:** val CE with the expert active beats a masked control (expert
+  present but not a candidate) on domain B, with no regression on domain A.
+
+**t0 — `lab/plugin_expert_test.py` (tiny, CPU-capable).** 4 experts trained on
+domain A, a 5th trained separately on domain B (no shared lineage). Zero-shot
+`add_expert()` of the 5th; measure router utilization and CE delta vs masked
+control. Pure plumbing + geometry test; no real pretraining.
+
+**t1 — `lab_tiny` config, 4 -> 8 experts.** Real pretraining at the smallest
+multi-expert config; plug in 4 new experts mid-run and keep training. Checks
+that the balance aux loss and LR schedule survive a live expert-set change.
+
+**t2 — `tiny_agent_k` (~103M total / ~81M active, KDA + MLA).** Plug-in
+mid-run on the real hybrid architecture; same three criteria, plus wall-clock
+and VRAM measurements for the anneal.
+
+**t3 — `470m_k` (470M active).** Where adapter overhead, NVMe offload, and gate
+cost are measured for real. Ship only after t2 passes twice with different
+domain-B experts (a single pass could be luck).
+
+## 7. Open risks
+
+- **Passport generalization is unproven.** Arrow shows zero-shot routing to
+  unseen LoRA experts; nobody has shown a passport scored against a frozen
+  router reaching a foreign expert that never saw the router. The adapter
+  anneal may be doing all the work; t0/t2 measure exactly this.
+- **Router collapse / favorite-locking.** Without expert dropout the router
+  locks onto favorites; with it, minority experts may starve. Aux-loss weight
+  and `p_drop` need per-tier tuning, not once.
+- **Adapter overhead at scale.** Two extra matmuls per expert per layer is
+  negligible at 100M and unknown at 10B+. If adapters dominate, fall back to
+  shared-lineage-only experts.
+- **Aux-loss balance after hot-plug.** Switch-style balance assumes a fixed
+  expert set; a fresh expert is either starved or dominates (passport norms).
+  The balance loss may need a warm-up term over new experts only.
+- **No public evidence above 10B total params.** BTX and PEER have the right
+  shape but neither shows foreign-expert plug-in at scale. Treat every claim
+  here as scaled from our t0-t3 ladder until measured.

@@ -244,6 +244,7 @@ class VesperLinearLM(nn.Module):
                  full_type="gqa", kda_head_dim=64, kda_short_conv=True,
                  kv_lora_rank=None, v_head_dim=128,
                  linear_force_fp32=True,
+                 router_type="topk", passport_dim=64, router_expert_dropout=0.0,
                  grad_checkpoint=True):
         super().__init__()
         self.pad_id = pad_id
@@ -288,7 +289,9 @@ class VesperLinearLM(nn.Module):
 
             self.layers.append(nn.ModuleDict({
                 'attn': attn,
-                'ffn': MoEFeedForward(dim, hidden_dim, num_experts, top_k),
+                'ffn': MoEFeedForward(dim, hidden_dim, num_experts, top_k,
+                                      router_type=router_type, passport_dim=passport_dim,
+                                      router_expert_dropout=router_expert_dropout),
                 'attn_norm': RMSNorm(dim),
                 'ffn_norm': RMSNorm(dim)
             }))

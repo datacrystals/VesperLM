@@ -92,6 +92,16 @@ def train():
 
     current_cfg = get_model_config(ACTIVE_CONFIG_NAME)
 
+    # Optional router overrides for lab runs — applied only when the env var is set.
+    if os.environ.get("VESPER_ROUTER_TYPE"):
+        current_cfg["router_type"] = os.environ["VESPER_ROUTER_TYPE"]
+    if os.environ.get("VESPER_PASSPORT_DIM"):
+        current_cfg["passport_dim"] = int(os.environ["VESPER_PASSPORT_DIM"])
+    if os.environ.get("VESPER_ROUTER_EXPERT_DROPOUT"):
+        current_cfg["router_expert_dropout"] = float(os.environ["VESPER_ROUTER_EXPERT_DROPOUT"])
+    if os.environ.get("VESPER_NUM_EXPERTS"):
+        current_cfg["num_experts"] = int(os.environ["VESPER_NUM_EXPERTS"])
+
     batch_size = int(os.environ.get("VESPER_MICRO_BATCH",
                                     current_cfg.get("micro_batch_size", 1)))
     target_acc_steps = int(os.environ.get("VESPER_ACCUM",
@@ -160,7 +170,9 @@ def train():
 
     arch_keys = ["dim", "n_layers", "n_heads", "n_kv_heads", "hidden_dim",
                  "num_experts", "top_k", "max_seq_len", "linear_type",
-                 "grad_checkpoint"]
+                 "full_type", "kda_head_dim", "kv_lora_rank", "v_head_dim",
+                 "grad_checkpoint", "router_type", "passport_dim",
+                 "router_expert_dropout"]
     arch_config = {k: v for k, v in model_config.items() if k in arch_keys}
 
     model = VesperLinearLM(
