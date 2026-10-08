@@ -182,6 +182,32 @@ User-approved 2026-10-06: make the pretrain AFTER the current 429M run the linea
   rows, write new ckpt with bumped num_experts; optimizer re-init; aux-loss retune; resume
   requires exact shape match so surgery must write a complete new checkpoint).
 
+## The hippocampus module: live personalization service (user-approved direction)
+
+A service subsystem (LMbus module, trunk frozen) that tracks ongoing conversations, user
+tone/feedback, and consolidates LoRA updates online. Two-speed design copied from biology:
+fast episodic buffer now, slow consolidation later (hippocampus -> neocortex = memory -> LoRA).
+
+Four services:
+1. **Session memory** — append-only episodic log (turns, tool calls, outcomes) + retrieval;
+   personalization by context INJECTION (zero training risk, fully inspectable).
+2. **User model** — tone/verbosity/expertise features -> system-prompt conditioning; tiny
+   classifier head later.
+3. **Feedback extractor** — writes (prompt, response, reward) triples. Explicit (corrections,
+   ratings) = gold, sparse. Implicit (rephrase = failure, engagement = weak positive) = noisy.
+   Quarantine: only explicit/high-confidence feedback becomes training data.
+4. **Consolidation optimizer** — micro-sessions (NOT per-message): few steps on 8-32 examples,
+   rank-8 LoRA ~1-3M params, seconds on a GPU slice or CPU. Per-user adapters keyed by user_id,
+   loaded at session start. Fits the LoRA tier of the expansion plan.
+
+Safety invariants (this is n=1 RLHF):
+- **Sycophancy drift** = honesty death (model validates bad ideas because agreement scores).
+  Mitigate: rehearsal data in every batch, KL anchor to base, tiny LR.
+- **Canary gate**: fixed probe set scored before/after every consolidation; AUTO-ROLLBACK on
+  degradation. No promotion on vibes.
+- **Two-speed rule**: facts -> memory-in-context (instant, reversible); stable style priors ->
+  LoRA (slow, validated, reversible). Never put facts in weights via the online path.
+
 ## Non-goals / ceilings (be honest)
 
 - Spikes, predictive-coding dynamics, literal cortical feedback: training graveyard. Skip.
