@@ -1,0 +1,10 @@
+{
+  "id": "t0-passport-dim128",
+  "tier": "t0",
+  "baseline": false,
+  "hypothesis": "wider passports (128 vs 64) improve routing separation at equal budget",
+  "config": "lab_tiny",
+  "env": {"VESPER_ROUTER_TYPE": "passport", "VESPER_PASSPORT_DIM": "128"},
+  "budget_minutes": 30,
+  "mutation_of": "t0-passport"
+}

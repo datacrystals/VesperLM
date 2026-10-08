@@ -29,3 +29,10 @@ __pycache__/
 Pretrain/Log*.txt
 !Dataset/custom_tokenizer/
 !Dataset/custom_tokenizer/*.json
+!lab/**/queue/
+!lab/**/queue/**
+!lab/experiments/
+!lab/experiments/**
+!lab/**/*.json
+!lab/**/.gitkeep
+!**/queue/.gitkeep

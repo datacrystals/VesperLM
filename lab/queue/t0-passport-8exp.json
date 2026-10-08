@@ -1,0 +1,10 @@
+{
+  "id": "t0-passport-8exp",
+  "tier": "t0",
+  "baseline": false,
+  "hypothesis": "passport routing scales to 8 experts at lab_tiny without balance collapse",
+  "config": "lab_tiny",
+  "env": {"VESPER_ROUTER_TYPE": "passport", "VESPER_NUM_EXPERTS": "8", "VESPER_ROUTER_EXPERT_DROPOUT": "0.1"},
+  "budget_minutes": 30,
+  "mutation_of": "t0-passport"
+}

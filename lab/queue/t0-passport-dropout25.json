@@ -1,0 +1,10 @@
+{
+  "id": "t0-passport-dropout25",
+  "tier": "t0",
+  "baseline": false,
+  "hypothesis": "heavier expert dropout (0.25 vs 0.1) forces stronger passport reliance without hurting val loss",
+  "config": "lab_tiny",
+  "env": {"VESPER_ROUTER_TYPE": "passport", "VESPER_ROUTER_EXPERT_DROPOUT": "0.25"},
+  "budget_minutes": 30,
+  "mutation_of": "t0-passport-dropout"
+}

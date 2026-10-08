@@ -1,0 +1,10 @@
+{
+  "id": "t0-topk-baseline",
+  "tier": "t0",
+  "baseline": true,
+  "hypothesis": "top-k router baseline",
+  "config": "lab_tiny",
+  "env": {},
+  "budget_minutes": 30,
+  "mutation_of": null
+}
