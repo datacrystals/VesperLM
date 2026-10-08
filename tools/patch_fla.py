@@ -16,15 +16,31 @@ Two patches, both idempotent:
    per sequence (true for our training/probe usage, which never passes an
    attention mask).
 
+3. fla/ops/kda/{chunk_bwd,chunk_intra,gate,wy_fast}.py — ROCm only
+   (torch.version.hip set). The AMD triton backend's software pipeliner
+   miscompiles delta-rule chunk kernels at num_stages>=3 ("'tt.load' op
+   operation destroyed but still has uses" in make_ttgir; upstream
+   triton#9815, seen on gfx942 with triton 3.5.1). Cap the autotune
+   configs at num_stages=2 so the kernels compile. Mild perf cost; no-op
+   on CUDA.
+
 Run after installing fla on any new machine:
     python tools/patch_fla.py
 Safe to re-run; exits nonzero if a pattern is not found (fla version
 drift — re-derive the patch instead of silently skipping).
 """
 
+import importlib.util
 import sys
 
-import fla  # noqa: F401  (resolves package location)
+_spec = importlib.util.find_spec("fla")  # locate without executing: fla's
+# __init__ builds triton autotuners, which dies on machines with no live GPU
+# driver (wedged post-suspend, CPU-only build hosts). Patching only needs
+# the package directory.
+if _spec is None or _spec.origin is None:
+    raise SystemExit("fla is not installed in this python environment")
+import os
+fla_dir = os.path.dirname(_spec.origin)
 
 
 def _apply(path, marker, old, new):
@@ -41,9 +57,24 @@ def _apply(path, marker, old, new):
     print(f"patched: {path}")
 
 
+def _apply_all(path, marker, pairs):
+    src = open(path).read()
+    if marker in src:
+        print(f"already patched: {path}")
+        return
+    for old, new in pairs:
+        count = src.count(old)
+        if count == 0:
+            raise SystemExit(
+                f"PATCH PATTERN NOT FOUND in {path} — fla version drifted, "
+                "re-derive the patch by hand."
+            )
+        src = src.replace(old, new)
+    open(path, "w").write(src)
+    print(f"patched: {path}")
+
+
 def main():
-    import os
-    fla_dir = os.path.dirname(fla.__file__)
 
     _apply(
         os.path.join(fla_dir, "utils", "env.py"),
@@ -103,6 +134,18 @@ except ImportError:
             outs.append(oi.transpose(0, 1))
         return torch.cat(outs, dim=0)""",
     )
+
+    import torch
+    if torch.version.hip is not None:
+        for fname in ("chunk_bwd.py", "chunk_intra.py", "gate.py", "wy_fast.py"):
+            _apply_all(
+                os.path.join(fla_dir, "ops", "kda", fname),
+                "for num_stages in [2]  # ROCm: cap stages",
+                [("for num_stages in [2, 3, 4]",
+                  "for num_stages in [2]  # ROCm: cap stages (triton#9815)"),
+                 ("for num_stages in [2, 3]",
+                  "for num_stages in [2]  # ROCm: cap stages (triton#9815)")],
+            )
 
     print("fla patches OK")
 
