@@ -208,6 +208,35 @@ Safety invariants (this is n=1 RLHF):
 - **Two-speed rule**: facts -> memory-in-context (instant, reversible); stable style priors ->
   LoRA (slow, validated, reversible). Never put facts in weights via the online path.
 
+## The affect layer: emotion subsystems as a hyperparameter controller (user-approved direction)
+
+Emotions = homeostatic control variables with evocative names (NOT phenomenology). Biology's
+version: dopamine = LR signal, noradrenaline = attention gain, cortisol = consolidation
+priority. Ours: bounded integrators over the session event stream publishing a **modulator
+vector** consumed by (a) the generation path — tone/temperature/tool-propensity, fast and
+reversible — and (b) the hippocampus consolidation optimizer — LR, sample weights, KL-anchor
+strength, which per-domain LoRA head updates, slow and canary-gated.
+
+Cast: **Pride** (success integrator -> confidence/tone, win sample-weighting), **Frustration**
+(failure streaks -> exploration, strategy switches, upweight failure episodes in
+consolidation), **Caution** (canary regressions/corrections -> lower LR, STRONGER KL anchor,
+verify-before-answer; the deliberate negative feedback loop), **Curiosity** (topic novelty ->
+new-domain data admission), **Ego** (self-competence map per domain -> calibrated
+"I don't know, let me check" — routes uncertainty to TOOLS instead of confabulation; the
+single most valuable module: small-model confabulation killer).
+
+The **subsystem manager** = daemon host: owns the event bus (feedback/failures/novelty/canary
+results), updates each subsystem as bounded integrators, publishes the modulator vector,
+LOGS every value with its causes (every LR/tone change must have a one-line answer).
+
+Hard invariants (this is where it breaks if skipped):
+- **Saturating dynamics** (tanh-bounded states), slow time constants, homeostatic decay to
+  baseline — otherwise pride->consolidation->pride = manic-depressive oscillation.
+- **Canary floor**: no modulator may override or loosen a canary rollback. Caution may only
+  tighten gates; pride may never loosen them (else: emotion-powered sycophancy amplifier).
+- **Name honesty in docs/logs**: these are control variables; logs say "caution=0.7 (3
+  corrections this session)", not feelings.
+
 ## Non-goals / ceilings (be honest)
 
 - Spikes, predictive-coding dynamics, literal cortical feedback: training graveyard. Skip.
