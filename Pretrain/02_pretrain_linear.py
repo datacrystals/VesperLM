@@ -172,8 +172,9 @@ def train():
     if is_main:
         p01.print_model_stats(model, model_config)
         layer_types = model.layer_types
-        n_gla = sum(1 for t in layer_types if t == 'gla')
-        print(f"Hybrid stack: {n_gla} GLA layers / {len(layer_types) - n_gla} full-attn layers\n")
+        from collections import Counter
+        mix = Counter(layer_types)
+        print(f"Hybrid stack: {dict(mix)} ({len(layer_types)} layers)\n")
 
     try:
         import bitsandbytes as bnb
