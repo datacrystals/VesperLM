@@ -237,6 +237,36 @@ Hard invariants (this is where it breaks if skipped):
 - **Name honesty in docs/logs**: these are control variables; logs say "caution=0.7 (3
   corrections this session)", not feelings.
 
+## The endgame: no train/inference boundary (user-stated goal)
+
+"It doing work is it learning." Training vs inference is a RATE distinction, not a kind
+distinction — inference is learning at rate zero. The organism runs one continuous process
+on a time-scale ladder, every rung feeding the next:
+
+- τ0 per-token: GLA/Mamba2 recurrent state = online-learned fast-weight memory (already true
+  in the current architecture — the cells were right all along).
+- τ1 per-turn: context assembly + session-memory writes (hippocampus).
+- τ2 per-session: canary-gated LoRA consolidation, affect-modulated.
+- τ3 per-week: expert growth, MoE^2 clusters, depth blocks.
+- τ4 rare: trunk milestones — versioned SNAPSHOTS OF ACCUMULATED GROWTH promoted after
+  validation, not separate life phases. The only rung that resembles "a training run".
+
+Consequences: pretrain/SFT as phases dissolves (instruction-following is just interaction);
+"training data" dissolves (experience is the data; context/action/outcome triples are the
+reward stream — self-verification via the ego module is load-bearing here); numbered
+checkpoints become continuous journaling.
+
+The **immune system** (the piece that makes it survivable): a standing integrity layer —
+canaries, regression probes, drift metrics, distribution-shift alarms — with authority to
+quarantine/roll back ANY layer from a LoRA delta to a trunk candidate. Invariant: the
+corruption rate must never exceed the immune system's detection rate. Nobody at frontier
+scale has solved this; our frozen-trunk + canary-floor + homeostatic-affect stack is the
+answer shape.
+
+Honest obstacles: long-horizon credit assignment; model collapse on self-generated data
+(fix = GROUNDING: tools/users/sensors keep the signal honest — another argument for the
+robot body); the immune system must keep knowing what "good" means as the model grows.
+
 ## Non-goals / ceilings (be honest)
 
 - Spikes, predictive-coding dynamics, literal cortical feedback: training graveyard. Skip.
