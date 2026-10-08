@@ -1,0 +1,9 @@
+{
+  "phaseA_ce_final": 4.860531330108643,
+  "util_expert5_domainA": 0.43173095703125,
+  "util_expert5_domainB": 0.6347705078125,
+  "ce_domainB_with_plugin": 7.382788276672363,
+  "ce_domainB_without_plugin": 11.07131262779236,
+  "ce_domainA_with_plugin": 5.130022375583649,
+  "pass": false
+}
