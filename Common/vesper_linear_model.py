@@ -13,7 +13,7 @@ os.environ.setdefault("FLA_CACHE_DIR", "/tmp/fla_cache")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fla.layers import GatedLinearAttention, Mamba2
+from fla.layers import GatedLinearAttention, Mamba2, KimiDeltaAttention, MultiheadLatentAttention
 
 # Reuse the dense model's building blocks so the two architectures stay in sync
 from vesper_model import (
@@ -156,15 +156,84 @@ class Mamba2SSD(nn.Module):
         return out
 
 
-class VesperLinearLM(nn.Module):
-    """VesperLLM variant with a GLA/softmax hybrid attention stack.
+class KimiDeltaAttn(nn.Module):
+    """Thin wrapper around fla's KimiDeltaAttention (KDA) matching the
+    GatedLinearAttn (x) -> out interface. `force_fp32` keeps the P40-safe
+    behavior of the GLA wrapper; flip to False on bf16-capable hardware
+    (MI300X) to let the chunk kernels run under autocast."""
 
-    Every `attention_every`-th layer keeps full GQA softmax attention
-    (long-range recall); the rest use a linear-attention layer chosen
-    by `linear_type` ("gla": FLA GLA chunked — default, or "mamba2":
-    fla Mamba2 SSD). Both run O(T) compute and O(1) memory in
-    sequence length, and both are forced to fp32 (see their wrappers).
-    MoE FFN, RMSNorm pre-norm, and weight tying are unchanged.
+    def __init__(self, dim, head_dim=64, layer_idx=None,
+                 use_short_conv=True, force_fp32=True):
+        super().__init__()
+        self.force_fp32 = force_fp32
+        self.kda = KimiDeltaAttention(
+            mode='chunk',
+            hidden_size=dim,
+            expand_v=1.0,
+            head_dim=head_dim,
+            num_heads=dim // head_dim,
+            use_short_conv=use_short_conv,
+            layer_idx=layer_idx,
+        )
+
+    def forward(self, x, cache=None):
+        # cache: optional RecurrentStateCache; KDA threads its
+        # recurrent/conv states through it exactly like GLA.
+        if self.force_fp32:
+            with torch.autocast(device_type=x.device.type, enabled=False):
+                out, _, _ = self.kda(x.float(), past_key_values=cache,
+                                     use_cache=cache is not None)
+            return out
+        out, _, _ = self.kda(x, past_key_values=cache,
+                             use_cache=cache is not None)
+        return out
+
+
+class MultiheadLatentAttn(nn.Module):
+    """Thin wrapper around fla's MultiheadLatentAttention (MLA) matching
+    the GroupedQueryAttention (x, freqs_cis) call signature. MLA applies
+    RoPE internally on its dedicated rope head-dim, so freqs_cis is
+    accepted and ignored. Incremental KV caching is not wired yet —
+    training and full-forward probes are unaffected."""
+
+    def __init__(self, dim, n_heads, max_seq_len, kv_lora_rank=None,
+                 q_lora_rank=None, qk_rope_head_dim=64,
+                 qk_nope_head_dim=128, v_head_dim=128, layer_idx=None):
+        super().__init__()
+        self.mla = MultiheadLatentAttention(
+            hidden_size=dim,
+            num_heads=n_heads,
+            q_lora_rank=q_lora_rank,
+            qk_rope_head_dim=qk_rope_head_dim,
+            kv_lora_rank=kv_lora_rank or dim // 2,
+            v_head_dim=v_head_dim,
+            qk_nope_head_dim=qk_nope_head_dim,
+            max_position_embeddings=max_seq_len * 2,
+            layer_idx=layer_idx,
+        )
+
+    def forward(self, x, freqs_cis=None, cache=None, start_pos=0):
+        if cache is not None:
+            raise NotImplementedError(
+                "MLA incremental cache not wired; use full forward"
+            )
+        out, _, _ = self.mla(x, attention_mask=None, use_cache=False)
+        return out
+
+
+class VesperLinearLM(nn.Module):
+    """VesperLLM variant with a linear-attention/full-attention hybrid stack.
+
+    Every `attention_every`-th layer keeps full attention (long-range
+    recall): `full_type` selects "gqa" (softmax GQA, default) or "mla"
+    (multi-head latent attention — the Vesper-K lineage). The rest use a
+    linear-attention layer chosen by `linear_type`: "gla" (FLA GLA
+    chunked — default), "mamba2" (fla Mamba2 SSD), or "kda" (Kimi Delta
+    Attention — the Vesper-K lineage). Linear layers run O(T) compute
+    and O(1) memory in sequence length; GLA/Mamba2 are forced to fp32,
+    KDA by default too (`linear_force_fp32`) — flip it off on
+    bf16-capable hardware. MoE FFN, RMSNorm pre-norm, and weight tying
+    are unchanged.
     """
 
     def __init__(self, vocab_size=32000, dim=1024, n_layers=10, n_heads=8,
@@ -172,13 +241,20 @@ class VesperLinearLM(nn.Module):
                  max_seq_len=1024, pad_id=0, dropout=0.0,
                  attention_every=4, gla_head_dim=64, qk_norm=True,
                  linear_type="gla", mamba2_state_size=128,
+                 full_type="gqa", kda_head_dim=64, kda_short_conv=True,
+                 kv_lora_rank=None, v_head_dim=128,
+                 linear_force_fp32=True,
                  grad_checkpoint=True):
         super().__init__()
         self.pad_id = pad_id
         self.max_seq_len = max_seq_len
         self.grad_checkpoint = grad_checkpoint
-        if linear_type not in ("gla", "mamba2"):
-            raise ValueError(f"Unknown linear_type '{linear_type}' (expected 'gla' or 'mamba2')")
+        if linear_type not in ("gla", "mamba2", "kda"):
+            raise ValueError(f"Unknown linear_type '{linear_type}' (expected 'gla', 'mamba2' or 'kda')")
+        if full_type not in ("gqa", "mla"):
+            raise ValueError(f"Unknown full_type '{full_type}' (expected 'gqa' or 'mla')")
+        if full_type == "mla" and qk_norm is not None and not qk_norm:
+            pass  # qk_norm only applies to the GQA path; MLA normalizes internally
         self.tok_embeddings = nn.Embedding(vocab_size, dim)
 
         self.register_buffer("freqs_cis", precompute_freqs_cis(dim // n_heads, max_seq_len * 2))
@@ -187,7 +263,13 @@ class VesperLinearLM(nn.Module):
         self.layer_types = []
         for i in range(n_layers):
             is_full_attn = (i % attention_every == attention_every - 1)
-            if is_full_attn:
+            if is_full_attn and full_type == "mla":
+                attn = MultiheadLatentAttn(dim, n_heads, max_seq_len,
+                                           kv_lora_rank=kv_lora_rank,
+                                           v_head_dim=v_head_dim,
+                                           layer_idx=i)
+                self.layer_types.append('mla')
+            elif is_full_attn:
                 attn = GroupedQueryAttention(dim, n_heads, n_kv_heads, max_seq_len,
                                              qk_norm=qk_norm)
                 self.layer_types.append('full')
@@ -195,6 +277,11 @@ class VesperLinearLM(nn.Module):
                 attn = Mamba2SSD(dim, head_dim=gla_head_dim,
                                  state_size=mamba2_state_size, layer_idx=i)
                 self.layer_types.append('mamba2')
+            elif linear_type == "kda":
+                attn = KimiDeltaAttn(dim, head_dim=kda_head_dim, layer_idx=i,
+                                     use_short_conv=kda_short_conv,
+                                     force_fp32=linear_force_fp32)
+                self.layer_types.append('kda')
             else:
                 attn = GatedLinearAttn(dim, head_dim=gla_head_dim, layer_idx=i)
                 self.layer_types.append('gla')
@@ -237,8 +324,9 @@ class VesperLinearLM(nn.Module):
         total_aux_loss = 0.0
 
         for i, layer in enumerate(self.layers):
-            # 'full' layers take freqs; 'gla'/'mamba2' are linear-only
-            is_gla = self.layer_types[i] != 'full'
+            # 'full'/'mla' layers take freqs (MLA ignores it — RoPE is
+            # internal); 'gla'/'mamba2'/'kda' are linear-only
+            is_linear = self.layer_types[i] in ('gla', 'mamba2', 'kda')
 
             if self.training and self.grad_checkpoint:
                 # Checkpoint the WHOLE layer (attention/GLA + MoE) in one unit.
@@ -258,12 +346,12 @@ class VesperLinearLM(nn.Module):
                     return custom_forward
 
                 x, aux_loss = cp.checkpoint(
-                    create_layer_forward(layer, is_gla, self.freqs_cis),
+                    create_layer_forward(layer, is_linear, self.freqs_cis),
                     x,
                     use_reentrant=False
                 )
             else:
-                if is_gla:
+                if is_linear:
                     attn_out = layer['attn'](layer['attn_norm'](x))
                 else:
                     attn_out = layer['attn'](layer['attn_norm'](x), self.freqs_cis)
@@ -293,9 +381,17 @@ class VesperLinearLM(nn.Module):
           'kv':     {layer_idx: {'k', 'v'}} for the 'full' GQA layers —
                     preallocated (B, n_kv_heads, max_seq_len, head_dim)
                     UNEXPANDED K/V tensors, written in place.
-          'linear': one RecurrentStateCache shared by all GLA/Mamba2
+          'linear': one RecurrentStateCache shared by all GLA/Mamba2/KDA
                     layers (each keys it by its own layer_idx).
+
+        Raises ValueError for MLA stacks: MLA's latent cache is not
+        wired yet, use full forward for generation instead.
         """
+        if 'mla' in self.layer_types:
+            raise ValueError(
+                "new_cache() does not support MLA layers yet; "
+                "generate via full forward() instead."
+            )
         kv = {}
         for i, layer_type in enumerate(self.layer_types):
             if layer_type == 'full':
@@ -320,8 +416,13 @@ class VesperLinearLM(nn.Module):
         pos:    absolute position of tokens[:, 0] in the sequence.
 
         Returns (logits, None, aux_loss, caches), with logits for the new
-        tokens only.
+        tokens only. MLA stacks are unsupported (latent cache not wired).
         """
+        if 'mla' in self.layer_types:
+            raise ValueError(
+                "forward_incremental does not support MLA layers yet; "
+                "generate via full forward() instead."
+            )
         B, T = tokens.size()
         if pos + T > self.max_seq_len:
             raise ValueError(

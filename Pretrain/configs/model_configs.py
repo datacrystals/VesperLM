@@ -265,6 +265,90 @@ MODEL_CONFIGS = {
         "eval_interval": 100,
         "val_eval_steps": 50,
     },
+    # ------------------------------------------------------------------
+    # ~81 M active params — Vesper-K lineage smoke config
+    # tiny_agent_v2 with KDA linear layers + MLA full layers
+    # ------------------------------------------------------------------
+    "tiny_agent_k": {
+        # Architecture
+        "dim": 512,
+        "n_layers": 8,
+        "n_heads": 8,
+        "n_kv_heads": 2,
+        "hidden_dim": 1536,
+        "num_experts": 4,
+        "top_k": 2,
+        "max_seq_len": 2048,
+        "linear_type": "kda",
+        "full_type": "mla",
+        "kda_head_dim": 64,
+        "kv_lora_rank": 256,
+        "v_head_dim": 128,
+
+        # Training & Batching
+        "micro_batch_size": 6,
+        "grad_checkpoint": False,
+        "target_accumulation_steps": 128,
+
+        # Optimizer Dynamics
+        "beta1": 0.9,
+        "beta2_token_half_life": 1_000_000,
+        "max_lr": 6e-4,
+        "min_lr": 6e-5,
+        "aux_weight": 0.1,
+
+        # Scheduling
+        "seq_len_start": 128,
+        "seq_len_warmup": 1000,
+        "warmup_steps": 200,
+        "total_steps": 6000,
+
+        # Evaluation
+        "eval_interval": 100,
+        "val_eval_steps": 50,
+    },
+
+    # ------------------------------------------------------------------
+    # 470 M active params — Vesper-K lineage (KDA + MLA) for MI300X
+    # ------------------------------------------------------------------
+    "470m_k": {
+        # Architecture
+        "dim": 1024,
+        "n_layers": 10,
+        "n_heads": 8,
+        "n_kv_heads": 2,
+        "hidden_dim": 1280,
+        "num_experts": 8,
+        "top_k": 2,
+        "max_seq_len": 8192,
+        "linear_type": "kda",
+        "full_type": "mla",
+        "kda_head_dim": 64,
+        "kv_lora_rank": 512,
+        "v_head_dim": 128,
+
+        # Training & Batching
+        "micro_batch_size": 1,
+        "target_accumulation_steps": 128,
+        "grad_checkpoint": True,
+
+        # Optimizer Dynamics
+        "beta1": 0.9,
+        "beta2_token_half_life": 10_000_000,
+        "max_lr": 2e-4,
+        "min_lr": 3e-5,
+        "aux_weight": 0.1,
+
+        # Scheduling
+        "seq_len_start": 128,
+        "seq_len_warmup": 800,
+        "warmup_steps": 300,
+        "total_steps": 4000,
+
+        # Evaluation
+        "eval_interval": 100,
+        "val_eval_steps": 50,
+    },
 }
 
 # Backwards-compatibility aliases
