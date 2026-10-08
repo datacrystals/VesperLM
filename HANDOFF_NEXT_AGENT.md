@@ -1,4 +1,45 @@
-# VesperLM — Handoff for the Next Agent (updated 2026-10-08 ~12:20 UTC)
+# VesperLM — Handoff for the Next Agent (updated 2026-10-08 ~21:05 UTC)
+
+## 2026-10-08 evening — MI300X (AMD Dev Cloud) bring-up: WORKS
+
+Droplet via `pod/devcloud.py` (mandatory TTL, self-destruct timer + laptop watchdog).
+Ubuntu/py3.12, ROCm driver 6.19, gfx942 MI300X VF 192GB. Recipe that worked:
+1. `pip install torch --index-url https://download.pytorch.org/whl/rocm6.3`
+   → torch 2.9.1+rocm6.3, triton 3.5.1 (pytorch-triton-rocm).
+2. fla 0.6.0 MUST be pinned by **commit**, not tag: tag `v0.6.0` does not exist
+   (max tag v0.5.2 = PyPI max). Use
+   `pip install --no-deps "git+https://github.com/fla-org/flash-linear-attention.git@37a6b1c6290e5240f6f0d80419d08a7aac27e548"`
+   (matches laptop/box installs). Plus `pip install einops` (fla dep we rely on,
+   not in requirements.txt).
+3. `python tools/patch_fla.py` — now 3 patches; the new third one (ROCm-only,
+   gated on torch.version.hip) caps KDA autotune `num_stages` at 2 in
+   fla/ops/kda/{chunk_bwd,chunk_intra,gate,wy_fast}.py. Without it, KDA chunk
+   kernels fail to compile on the AMD triton backend: "'tt.load' op operation
+   destroyed but still has uses" in make_ttgir (upstream triton#9815 — AMD
+   software-pipeliner bug with 4+ loads at num_stages>=3). With the cap: KDA
+   chunk fwd+bwd passes in fp32 AND bf16; full tiny_agent_k model trains.
+4. patch_fla.py no longer imports fla (find_spec only) — works on GPU-less hosts.
+
+Probe gotchas that cost cycles (do not repeat):
+- Probes must pass `vocab_size=65536` (or 65523): model default is 32000 and
+  out-of-range token ids surface on ROCm as HSA_STATUS_ERROR_EXCEPTION hardware
+  aborts, not a clean assert. Looked exactly like a kernel crash.
+- Do NOT name a script `bisect.py` (shadows stdlib bisect → torch import dies
+  with a confusing circular-import error).
+- Trainer requires phase1 AND phase2 files in data/index.txt (nemotron
+  curriculum). Synthetic probe data: two uint16 bins named *phase1*/*phase2*.
+- `Pretrain/custom_tokenizer` now tracked in git (7046650) — was silently
+  missing on fresh clones.
+- p01's stats banner hardcodes "Config: small_v2" — cosmetic, ignore; 02's
+  ACTIVE_CONFIG_NAME (env VESPER_CONFIG) is the real one. Hybrid-stack print
+  now shows the true layer mix.
+
+**Throughput probe (470m_k, bf16, micro 8 / accum 16, synthetic random tokens):
+~39-40k tok/s during seq-warmup (seq ~2k, VRAM 7.6GB/192GB).** Steady-state at
+seq 8192 + real data still TBD — see probe result below / droplet log
+/root/probe_470m.log. CE ~11.13 on random tokens ≈ ln(65523) — correct sanity.
+
+---
 
 Box: `192.168.1.153` (poweredge-r740, 3× Tesla P40 sm_61). Repo `/home/tliao/VesperLM` there,
 AND a fresh local clone on the user's laptop `/home/tliao/VesperLM` (RTX 3070 Laptop 8GB,
