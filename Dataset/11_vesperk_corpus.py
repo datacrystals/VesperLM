@@ -131,8 +131,8 @@ class ShardWriter:
             self.paths.pop()
 
 
-def build_source(name, repo, config, split, field, target, pool, dry_run=False):
-    print(f"\n=== {name}: {repo} ({config}) -> {target:,} tokens ===")
+def build_source(name, repo, config, split, field, target, pool, dry_run=False, workers=10):
+    print(f"\n=== {name}: {repo} ({config}) -> {target:,} tokens ===", flush=True)
     if dry_run:
         target = min(target, 2_000_000)
     try:
@@ -141,7 +141,23 @@ def build_source(name, repo, config, split, field, target, pool, dry_run=False):
         pbar = tqdm(total=target, unit="tok", desc=name, file=sys.stderr)
         last_log = time.time()
         t_start = time.time()
-        for token_lists in pool.imap(_tokenize_batch, stream):
+        # Bounded in-flight window: pool.imap eagerly consumes the network
+        # stream faster than workers drain it, which OOMed the box (queue of
+        # text batches hit tens of GB). Cap queued batches at 2 per worker.
+        from collections import deque
+        pending = deque()
+        max_inflight = max(4, workers * 2)
+        exhausted = False
+        while True:
+            while not exhausted and len(pending) < max_inflight:
+                try:
+                    batch = next(stream)
+                    pending.append(pool.apply_async(_tokenize_batch, (batch,)))
+                except StopIteration:
+                    exhausted = True
+            if not pending:
+                break
+            token_lists = pending.popleft().get()
             for ids in token_lists:
                 if writer.total_tokens >= target:
                     break
@@ -179,7 +195,8 @@ def main():
             if only and name not in only:
                 continue
             target = int(target * args.scale)
-            n, paths = build_source(name, repo, config, split, field, target, pool, args.dry_run)
+            n, paths = build_source(name, repo, config, split, field, target, pool,
+                                    args.dry_run, args.workers)
             results[name] = (n, paths)
 
     print("\n=== index.txt fragment (weights ~ proportional to tokens) ===")
