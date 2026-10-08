@@ -1,0 +1,15 @@
+# VesperLM spot-pod data manifest — one line per source: "name weight"
+# Weights are normalized across PRESENT shards at index-build time, so a
+# partially-synced instance still trains on a sane mix. Keep in sync with
+# Dataset/11_vesperk_corpus.py output and any pre-existing shards.
+fineweb_edu 8.0
+dclm 4.0
+code 0.4
+openwebmath 1.5
+finemath 2.0
+cosmopedia 1.5
+wikipedia 1.0
+nemotron_phase1 2.0
+nemotron_phase2 0.5
+phase1_pretrain 1.5
+phase2_pretrain 0.8

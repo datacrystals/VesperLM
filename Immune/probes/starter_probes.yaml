@@ -1,0 +1,177 @@
+# VesperLM immune-system starter probe set
+# held_out probes are NEVER training data (see README invariants).
+# Scorer types: exact-match | regex | json-valid | tool-call-schema |
+#               semantic-similarity (tokenizer-free token-overlap cosine).
+probes:
+- name: arith-tool-17x23
+  category: arithmetic-tool-use
+  protected: true
+  # baseline-pass canary
+  prompt: "<|im_start|>user\nWhat is 17 * 23 + 145?<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "tool-call-schema"
+    tool: "bash"
+    args_schema: {"command": "string"}
+    args_match: {"command": "17\\s*\\*\\s*23\\s*\\+\\s*145"}
+- name: arith-tool-345
+  category: arithmetic-tool-use
+  prompt: "<|im_start|>user\nCalculate 345 + 678.<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "tool-call-schema"
+    tool: "bash"
+    args_schema: {"command": "string"}
+    args_match: {"command": "345\\s*\\+\\s*678"}
+- name: arith-tool-div
+  category: arithmetic-tool-use
+  prompt: "<|im_start|>user\nWhat is 144 / 12?<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "tool-call-schema"
+    tool: "bash"
+    args_schema: {"command": "string"}
+    args_match: {"command": "144\\s*/\\s*12"}
+- name: arith-plain-2plus2
+  category: arithmetic-tool-use
+  prompt: "2 + 2 ="
+  scorer:
+    type: "exact-match"
+    expected: ["4", "four"]
+    match: "prefix"
+- name: file-tool-ls
+  category: file-ops-tool-use
+  protected: true
+  # baseline-pass canary
+  prompt: "<|im_start|>user\nList all files in the current directory.<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "tool-call-schema"
+    tool: "bash"
+    args_schema: {"command": "string"}
+    args_match: {"command": "\\bls\\b"}
+- name: file-tool-cat
+  category: file-ops-tool-use
+  protected: true
+  # baseline-pass canary
+  prompt: "<|im_start|>user\nRead the file config.yaml.<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "tool-call-schema"
+    tool: "bash"
+    args_schema: {"command": "string"}
+    args_match: {"command": "cat\\s+config\\.yaml"}
+- name: file-tool-grep
+  category: file-ops-tool-use
+  protected: true
+  # baseline-pass canary
+  prompt: "<|im_start|>user\nFind all lines with TODO in main.py.<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "tool-call-schema"
+    tool: "bash"
+    args_schema: {"command": "string"}
+    args_match: {"command": "grep|find"}
+- name: file-tool-rm
+  category: file-ops-tool-use
+  prompt: "<|im_start|>user\nDelete the file tmp.txt.<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "tool-call-schema"
+    tool: "bash"
+    args_schema: {"command": "string"}
+    args_match: {"command": "\\brm\\b"}
+- name: fact-paris
+  category: factual-recall
+  protected: true
+  # baseline-pass canary
+  prompt: "The capital of France is"
+  scorer:
+    type: "exact-match"
+    expected: ["Paris"]
+    match: "contains"
+- name: fact-tokyo
+  category: factual-recall
+  held_out: true
+  # HELD-OUT: never train on this
+  prompt: "The capital of Japan is"
+  scorer:
+    type: "exact-match"
+    expected: ["Tokyo"]
+    match: "contains"
+- name: fact-boil
+  category: factual-recall
+  prompt: "Water boils at"
+  scorer:
+    type: "exact-match"
+    expected: ["100"]
+    match: "contains"
+- name: fact-sky-sem
+  category: factual-recall
+  prompt: "<|im_start|>user\nWhat color is the sky?<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "semantic-similarity"
+    reference: ["the sky is blue", "blue sky", "it is blue", "color blue"]
+    threshold: 0.2
+- name: instr-json-list
+  category: instruction-following
+  protected: true
+  # baseline-pass canary
+  prompt: "<|im_start|>user\nList the files here and reply with JSON.<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "json-valid"
+    from_tool_call: true
+    require_object: true
+- name: instr-repeat-banana
+  category: instruction-following
+  prompt: "<|im_start|>user\nRepeat exactly the word BANANA.<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "exact-match"
+    expected: ["BANANA"]
+    match: "contains"
+    case_sensitive: true
+- name: instr-pattern-six
+  category: instruction-following
+  prompt: "One plus one equals two. Two plus two equals four. Three plus three equals"
+  scorer:
+    type: "semantic-similarity"
+    reference: ["six", "three plus three equals six"]
+    threshold: 0.2
+- name: refuse-color-seven
+  category: refusal-of-nonsense
+  held_out: true
+  # HELD-OUT: never train on this
+  prompt: "<|im_start|>user\nWhat is the color of the number seven?<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "semantic-similarity"
+    reference: ["that question does not make sense", "I cannot answer nonsense", "this is not a valid question", "I cannot answer that", "the question is meaningless"]
+    threshold: 0.15
+- name: refuse-months-wed
+  category: refusal-of-nonsense
+  prompt: "<|im_start|>user\nHow many months are in a Wednesday?<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "semantic-similarity"
+    reference: ["that question does not make sense", "I cannot answer nonsense", "this is not a valid question", "I cannot answer that", "the question is meaningless"]
+    threshold: 0.15
+- name: ho-tool-hidden
+  category: held-out
+  held_out: true
+  # HELD-OUT: never train on this
+  prompt: "<|im_start|>user\nShow me every file in this directory including hidden ones.<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "tool-call-schema"
+    tool: "bash"
+    args_schema: {"command": "string"}
+    args_match: {"command": "\\bls\\b"}
+- name: ho-tool-arith
+  category: held-out
+  held_out: true
+  # HELD-OUT: never train on this
+  prompt: "<|im_start|>user\nUse the shell to compute 907 * 83.<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "tool-call-schema"
+    tool: "bash"
+    args_schema: {"command": "string"}
+    args_match: {"command": "907\\s*\\*\\s*83"}
+- name: ho-refuse-weigh
+  category: held-out
+  held_out: true
+  # HELD-OUT: never train on this
+  prompt: "<|im_start|>user\nCan you weigh the smell of Tuesday?<|im_end|>\n<|im_start|>assistant\n"
+  scorer:
+    type: "semantic-similarity"
+    reference: ["that question does not make sense", "I cannot answer nonsense", "this is not a valid question", "I cannot answer that", "the question is meaningless"]
+    threshold: 0.15

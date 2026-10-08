@@ -18,6 +18,10 @@ __pycache__/
 !*.py
 !*.sh
 !*.txt
+!*.md
+!*.yaml
+!*.yml
+!MANIFEST
 
 # 5. Make sure the gitignore itself is tracked
 !.gitignore

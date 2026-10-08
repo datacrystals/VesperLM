@@ -30,10 +30,12 @@ CORPUS = [
     ("fineweb_edu", "HuggingFaceFW/fineweb-edu", "sample-10BT", "train", "text", 8_000_000_000),
     # Diversity web
     ("dclm", "mlfoundations/dclm-baseline-1.0", None, "train", "text", 4_000_000_000),
-    # Code (public fallback for gated stack dumps)
-    ("code", "codeparrot/github-code", None, "train", "content", 3_000_000_000),
+    # Code (parquet-native; the gated stack dumps and script-based sets are unusable)
+    ("code", "angie-chen55/python-github-code", None, "train", "code", 400_000_000),
     # Math
     ("finemath", "HuggingFaceTB/finemath", "finemath-4plus", "train", "text", 2_000_000_000),
+    # More math (openwebmath: parquet, inline text)
+    ("openwebmath", "open-web-math/open-web-math", None, "train", "text", 1_500_000_000),
     # Synthetic encyclopedic
     ("cosmopedia", "HuggingFaceTB/cosmopedia-v2", "full", "train", "text", 1_500_000_000),
     # Wikipedia
