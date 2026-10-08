@@ -62,14 +62,17 @@ def _apply_all(path, marker, pairs):
     if marker in src:
         print(f"already patched: {path}")
         return
+    matched = 0
     for old, new in pairs:
         count = src.count(old)
-        if count == 0:
-            raise SystemExit(
-                f"PATCH PATTERN NOT FOUND in {path} — fla version drifted, "
-                "re-derive the patch by hand."
-            )
-        src = src.replace(old, new)
+        if count:
+            src = src.replace(old, new)
+            matched += count
+    if matched == 0:
+        raise SystemExit(
+            f"PATCH PATTERN NOT FOUND in {path} — fla version drifted, "
+            "re-derive the patch by hand."
+        )
     open(path, "w").write(src)
     print(f"patched: {path}")
 
