@@ -6,8 +6,10 @@ via import; only the model class and the training loop differ:
 
   - Model: VesperLinearLM (Common/vesper_linear_model.py) — mostly GLA
     layers, every 4th layer keeps full softmax attention.
-  - fp32 throughout: the P40 has no bf16 and fp16 autocast gains are
-    limited, so no AMP / GradScaler here.
+  - fp32 by default: the P40 has no bf16, so the box trains without AMP /
+    GradScaler. Set VESPER_AMP=bf16 on bf16-capable GPUs (RTX, MI300X) to
+    autocast the dense parts; GLA/KDA linear layers stay fp32 regardless
+    (their wrappers force it).
   - Triton caches are pinned to /tmp so the ~250s one-time JIT compile
     of the FLA chunk kernels only ever happens once.
 """
@@ -65,6 +67,16 @@ ACTIVE_CONFIG_NAME = os.environ.get("VESPER_CONFIG", "470m")
 
 LINEAR_CHECKPOINT_DIR = f"vesper_linear_checkpoints_{ACTIVE_CONFIG_NAME}"
 MODEL_SNAPSHOT_NAME = "vesper_linear_model.py"
+
+# Optional bf16 autocast for the dense parts (MI300X/RTX-class GPUs).
+# The GLA/KDA wrappers disable autocast internally and stay fp32, so this
+# is safe on any bf16-capable device. Default off (the P40 box is fp32).
+VESPER_AMP = os.environ.get("VESPER_AMP", "").lower() in ("bf16", "1", "true")
+
+
+def _amp_ctx(device):
+    return torch.autocast(device_type=device.type, dtype=torch.bfloat16,
+                          enabled=(VESPER_AMP and device.type == "cuda"))
 
 
 def train():
@@ -244,7 +256,7 @@ def train():
         0, model_config["max_seq_len"], model_config["max_seq_len"],
         is_distributed, resume_state=val_stream_state)
 
-    # Dummy pass to pre-allocate VRAM (fp32, no autocast)
+    # Dummy pass to pre-allocate VRAM (under the same AMP policy as training)
     if is_main:
         print("\n--- Running Dummy Pass to Pre-allocate Max VRAM ---")
     model.train()
@@ -252,7 +264,8 @@ def train():
         opt.zero_grad()
     dummy_x = torch.randint(0, len(tokenizer), (batch_size, model_config["max_seq_len"]), device=device)
     dummy_y = torch.randint(0, len(tokenizer), (batch_size, model_config["max_seq_len"]), device=device)
-    _, dummy_ce, dummy_aux = model(dummy_x, dummy_y)
+    with _amp_ctx(device):
+        _, dummy_ce, dummy_aux = model(dummy_x, dummy_y)
     dummy_loss = (dummy_ce + aux_weight * dummy_aux) / accumulation_steps
     dummy_loss.backward()
     for opt in (optimizers.values() if optimizers else [optimizer]):
@@ -332,8 +345,10 @@ def train():
             x = x.pin_memory().to(device, non_blocking=True)
             y = y.pin_memory().to(device, non_blocking=True)
 
-            # fp32: P40 has no bf16; fp16 autocast gains are limited
-            logits, ce_loss, aux_loss = model(x, y)
+            # fp32 by default (P40); VESPER_AMP=bf16 autocasts the dense
+            # parts on bf16-capable GPUs (linear layers stay fp32)
+            with _amp_ctx(device):
+                logits, ce_loss, aux_loss = model(x, y)
             ce_loss_scaled = ce_loss / accumulation_steps
             aux_loss_scaled = aux_loss / accumulation_steps
             total_loss = ce_loss_scaled + (aux_weight * aux_loss_scaled)
@@ -388,7 +403,8 @@ def train():
                 for _ in range(val_eval_steps):
                     vx, vy = next(val_stream)
                     vx, vy = vx.to(device), vy.to(device)
-                    _, v_ce_loss, _ = model(vx, vy)
+                    with _amp_ctx(device):
+                        _, v_ce_loss, _ = model(vx, vy)
                     val_loss += v_ce_loss.item()
             val_loss /= val_eval_steps
             val_loss_history.append((step, val_loss))
