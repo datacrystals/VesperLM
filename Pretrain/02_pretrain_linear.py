@@ -61,7 +61,7 @@ from vesper_linear_model import VesperLinearLM
 from muon import Muon
 from configs.model_configs import get_model_config
 
-ACTIVE_CONFIG_NAME = "470m"
+ACTIVE_CONFIG_NAME = os.environ.get("VESPER_CONFIG", "470m")
 
 LINEAR_CHECKPOINT_DIR = f"vesper_linear_checkpoints_{ACTIVE_CONFIG_NAME}"
 MODEL_SNAPSHOT_NAME = "vesper_linear_model.py"
@@ -80,8 +80,10 @@ def train():
 
     current_cfg = get_model_config(ACTIVE_CONFIG_NAME)
 
-    batch_size = current_cfg.get("micro_batch_size", 1)
-    target_acc_steps = current_cfg.get("target_accumulation_steps", 128)
+    batch_size = int(os.environ.get("VESPER_MICRO_BATCH",
+                                    current_cfg.get("micro_batch_size", 1)))
+    target_acc_steps = int(os.environ.get("VESPER_ACCUM",
+                                          current_cfg.get("target_accumulation_steps", 128)))
     accumulation_steps = max(1, target_acc_steps // (world_size * batch_size))
 
     if is_main:
