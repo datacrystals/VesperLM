@@ -17,6 +17,9 @@ export FLA_CACHE_DIR=/tmp/fla_cache_local
 export VESPER_CONFIG=tiny_agent_k
 export VESPER_AMP=bf16
 export VESPER_ACCUM=8
+# Step-700 OOM last night was fragmentation (1.87GB reserved-but-unallocated),
+# not raw footprint — expandable segments is the documented fix.
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 log() { echo "[overnight $(date -u +%H:%M:%S)] $*"; }
 
@@ -39,7 +42,7 @@ launch() {  # $1=micro_batch, $2=total_steps (optional)
 
 run_with_fallback() {  # $1=total_steps (optional)
     local mb
-    for mb in 4 3 2; do
+    for mb in 4 3 2 1; do
         if launch "$mb" "${1:-}"; then
             return 0
         fi
