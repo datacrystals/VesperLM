@@ -1,9 +1,66 @@
-# VesperLM — Handoff for the Next Agent (updated 2026-10-03 ~21:15)
+# VesperLM — Handoff for the Next Agent (updated 2026-10-08 ~12:20 UTC)
 
-Box: `192.168.1.153` (poweredge-r740, 3× Tesla P40 sm_61). Repo `/home/tliao/VesperLM`.
-Venvs: `/home/tliao/venvs/vesper` (torch 2.5.1, fla 0.6.0), `/home/tliao/venvs/gen` (datasets).
+Box: `192.168.1.153` (poweredge-r740, 3× Tesla P40 sm_61). Repo `/home/tliao/VesperLM` there,
+AND a fresh local clone on the user's laptop `/home/tliao/VesperLM` (RTX 3070 Laptop 8GB,
+torch 2.7.1+cu126, fla 0.6.0@git + local patches via `tools/patch_fla.py`, bitsandbytes user-site).
+GitHub `git@github.com:datacrystals/VesperLM.git` is the sync point; laptop clones via HTTPS.
 
-## What is running RIGHT NOW
+## STATE AS OF 2026-10-08 (newest first)
+
+**Vesper-K exists and trains.** `Common/vesper_linear_model.py` now takes `linear_type="kda"`
+(KimiDeltaAttention) and `full_type="mla"` (MultiheadLatentAttention, internal RoPE, no
+incremental cache yet — full forward only). Configs: `tiny_agent_k` (103M) and `470m_k` (392M,
+param-neutral vs 470m's 395M). Committed `c99c013`. **bf16 trainer path**: `VESPER_AMP=bf16`
+env-gated autocast in 02_pretrain_linear.py (dense parts; linear layers stay fp32). Also env
+overrides VESPER_CONFIG / VESPER_MICRO_BATCH / VESPER_ACCUM / VESPER_TOTAL_STEPS. Tested
+end-to-end on the 3070: 200 steps bf16 on real shards, CE 10.4→7.0.
+
+**RUNNING OVERNIGHT on the laptop 3070**: fresh `tiny_agent_k` pretrain, 6000 steps,
+`bash overnight_3070.sh` (driver log `Pretrain/overnight_3070.log`). micro_batch auto-fell
+back 4→3→2 (dummy-pass OOM at 4 and 3). Phase 2 auto-extends to 12000 steps if phase 1
+completes. Checkpoints `Pretrain/vesper_linear_checkpoints_tiny_agent_k/`.
+NEXT MORNING: adapt Hippocampus LoRA targets + Immune cpu_backend shims for KDA/MLA (both
+are GLA/GQA-specific right now) and run the integrated teach→consolidate→canary-gate demo
+on the fresh checkpoint. GPU probes locally are fine (no politeness needed on the laptop).
+
+**Corpus building on the laptop** (CPU, `Dataset/11_vesperk_corpus.py`, log
+`Dataset/corpus_vesperk.log`): ~19.5B-token mix → `Pretrain/data/vesperk/*.bin`
+(fineweb_edu 8B, dclm 4B, code 3B, finemath 2B, cosmopedia 1.5B, wikipedia 1B; uint16+eos,
+same convention as 03_fineweb.py). Box's 4B curriculum already rsynced to
+`Pretrain/data/pretrain/`. Convention: raw text + <|endoftext|>, packed, no header.
+
+**Spot pod** (`pod/`, committed `2349418`): `bootstrap.sh` = one-command cloud-instance setup
+(CUDA/ROCm autodetect, fla@v0.6.0+patch_fla, background rsync of data from home, manifest-gated
+index build, ckpt pull, auto-resume train loop, uploader). `MANIFEST` + `rebuild_index.sh`
+weight sources that have shards PRESENT. `upload_ckpts.sh` streams step_* home, keeps last 2.
+Home data dir = the repo's `Pretrain/data` (Pretrain/data symlinks into Dataset/data).
+Plan: MI300X via user's AMD dev credits ($2/GPU/hr, $200 total). Phase 1 bring-up (~$5,
+2-3h throwaway instance) validates KDA+MLA on ROCm FIRST, then kill; full run only after.
+fp32 → bf16 note: trainer default is fp32; always set VESPER_AMP=bf16 off-P40.
+
+**Box 429M run (unchanged, the verdict gate)**: step ~1900/4000 at handoff, val 1600→2.729
+(step_best), 1700→2.755, 1800→2.846. DECISION (made): if val@1900-2000 > ~2.95, resume from
+step_best@1600 with max_lr halved; else hands off. ETA ~Oct 12-13. CPU probes: loops
+tightening, no factual pins yet at 1600.
+
+**Env gotchas (both machines)**: box venv had triton 3.1.0 installed 2026-10-08 ~10:47 UTC
+(shadowing user-site triton 3.4.0, breaking fresh `import fla`) — FIXED by installing
+triton==3.3.1 into the venv + two cache.py compat patches (kwargs filter, getattr hooks —
+harmless no-ops under 3.3.1). Running trainings were never affected (imports cached in
+memory). user-site also has triton 3.4.0 (PYTHONPATH=~/.local/... works too). fla 0.6.0 needs
+`tools/patch_fla.py` on any fresh machine (find_spec parent-package probe + MLA SDPA fallback
+— no flash-attn needed anywhere). Box disk 93% full — mind checkpoints.
+
+**Subagent deliverables (all committed)**: `Growth/` (expert expansion surgery, 14/14 —
+exact upcycle = bit-exact clones + duplicate gate rows + top_k DOUBLED; production mode
+top_k=2+noise drifts, needs warmup recipe; NO shared-expert slot exists — K2's "+1 shared"
+needs a model-class change first). `Immune/` (canary gate + probes + drift; corruption drill
+passes, auto-rollback works). `Hippocampus/` (quarantined session log + manual LoRA q/o +
+reward-weighted-NLL consolidation; demo: 118M learned "math in words" preference from 6
+turns; poison batch rolled back). Moonshot blueprint: `~/moonshot/TEACH_BY_TALKING.md`
+(laptop). Design docs: `LMBUS_DESIGN.md`.
+
+## What is running RIGHT NOW (original 2026-10-03 entry below)
 
 **429M pretrain ("470m" config, ACTIVE_CONFIG_NAME="470m")** — launched 2026-10-05 19:11 UTC,
 log `/home/tliao/pretrain_470m.log`. Fresh from scratch. dim 1024, 10 layers, 8 experts top-2,

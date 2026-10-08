@@ -111,7 +111,8 @@ def train():
     max_lr = current_cfg.get("max_lr", 2e-4)
     min_lr = current_cfg.get("min_lr", 4e-5)
     warmup_steps = current_cfg.get("warmup_steps", 1000)
-    total_steps = current_cfg.get("total_steps", 30000)
+    total_steps = int(os.environ.get("VESPER_TOTAL_STEPS",
+                                     current_cfg.get("total_steps", 30000)))
     eval_interval = current_cfg.get("eval_interval", 500)
     val_eval_steps = current_cfg.get("val_eval_steps", 50)
     aux_weight = current_cfg.get("aux_weight", 0.01)
