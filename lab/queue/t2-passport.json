@@ -1,0 +1,10 @@
+{
+  "id": "t2-passport",
+  "tier": "t2",
+  "baseline": false,
+  "hypothesis": "passport retains advantage at 103M (t0 +2.67%, t1 +1.95% — watching attenuation)",
+  "config": "tiny_agent_k",
+  "env": {"VESPER_ROUTER_TYPE": "passport", "VESPER_TOTAL_STEPS": "600", "VESPER_MICRO_BATCH": "8", "VESPER_ACCUM": "8"},
+  "budget_minutes": 150,
+  "mutation_of": "t1-passport"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "t2-topk-baseline",
+  "tier": "t2",
+  "baseline": true,
+  "hypothesis": "top-k router baseline at 103M (tiny_agent_k) on real data",
+  "config": "tiny_agent_k",
+  "env": {"VESPER_TOTAL_STEPS": "600", "VESPER_MICRO_BATCH": "8", "VESPER_ACCUM": "8"},
+  "budget_minutes": 150,
+  "mutation_of": "t1-topk-baseline"
+}
