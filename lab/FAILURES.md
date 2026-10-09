@@ -118,6 +118,52 @@ a lucky pass.
   expert-dropout-trained (passport) spine before spending on G2 — the transplant keeps G1 honest
   on today's checkpoint but cannot test content-match reachability.
 
+## 2026-10-09 — g1b_passport_native (G1b) — OUTCOME LOG: addressing pivot RESOLVED on passport-native spines — full 4-criteria PASS with base-neutral experts; sidecar-kNN fallback NOT triggered
+*(this file logs outcomes, not just failures — G1b is the first entry that ends in a full PASS; kept here so the decision trail and the provenance correction stay in one place.)*
+- Evidence: `lab/results/g1b_passport_d01_neutral3.json` (true dropout-0.1 spine
+  `t1-diag-realdata-mb4`, section-4.4a mex recal 800 steps + section-4.5 text-KL at 3.0):
+  **G1 OVERALL PASS** — (a) margins -3.32/-3.81/-3.92 -> +1.03/+1.45/+0.23 (mean gain +4.588
+  vs same-spine direct-edit +0.674), (b) base-mix CE **+0.599%** (<1% bar),
+  (c) poison ROLLBACK (target collapse) + one row drop + incumbent hash/margins bit-identical,
+  (d) util_home 0.889 / contam_base 0.244. Sibling runs: `g1b_passport_d00.json`
+  (passport-native at dropout 0.0): 0.981/0.276, CE +6.70% — (a)(c)(d) PASS, (b) FAIL;
+  `g1b_passport_d02.json` (dropout 0.2): 0.809/0.323, CE +4.63% — (a)(c) PASS, (d) misses
+  0.30 contam bar by 0.023, (b) FAIL; `g1b_passport_d01.json` (dropout 0.1, text-KL 0.05):
+  0.914/0.225, CE +6.94% — (a)(c)(d) PASS, (b) FAIL; `g1b_passport_d01_neutral.json`
+  (text-KL 1.0): 0.889/0.259, CE +2.00%. Same-spine direct-edit references:
+  `lab/logs/g1b_direct_edit_d0{0,1,2}.log` (demo harness on each ckpt; e.g. d01 direct-edit
+  gain +0.674 and its own base CE cost +0.30% — export beats direct-edit on margin gain on
+  every spine, 2.8x-6.4x). G1 comparison: util 0.812/contam 0.903/CE +188% ->
+  0.889/0.244/+0.60%.
+- Root cause of the G1 addressing failure (now confirmed): the TopK->Passport TRANSPLANT, not
+  passport routing itself. G1's spine had no content-matched score space; on passport-native
+  spines the same prototype init + mex recal separates home from base ~3x better (contam
+  0.225-0.323 vs 0.903), and expert-dropout training sharpens it further (best purity on the
+  true 0.1 spine). Second finding: base-CE regression is NOT structurally pinned to
+  contamination — it is the expert's foreign-token behavior. Sweep at constant routing on the
+  d01 spine: text-KL 0.05 -> +6.94%, 1.0 -> +2.00%, 3.0 -> +0.599% CE. A base-neutral expert
+  makes contaminated tokens cheap; criterion (b) and (d) decouple.
+- Provenance correction (affects the earlier dropout comparison in this file): the farm run named
+  `t1-dropout01-mb4-full` did NOT train with expert dropout 0.1 — its queue env omitted
+  `VESPER_ROUTER_EXPERT_DROPOUT` and its saved model_config has no such key (trainer default
+  0.0; live router reads `expert_dropout 0.0`). The true dropout-0.1 checkpoint is
+  `t1-diag-realdata-mb4` (300 steps, config carries `router_expert_dropout: 0.1`), and
+  `t1-dropout02-mb4-full` is genuinely 0.2. So the "01 vs 02" delta discussed above is really
+  "0.0 vs 0.2"; the G1b dropout gradient (0.0/0.1/0.2) is the clean read.
+- What it rules out: (1) "episodic memory experts need a different addressing mechanism"
+  (§8.5 bullet 1) — NOT triggered; passports + mex recal + base-neutral experts work at N=1 on
+  a passport-native spine. The sidecar-kNN fallback stays in the tree un-armed.
+  (2) G2's no-recal premise — falsified on every spine (prototype arms: best 0.479/0.276;
+  all miss (d)); consolidation pays one router-recal pass per insert, exactly G2's stated
+  falsifier outcome ("the loop slows but the design survives"). (3) The G1 claim "a single
+  passport direction cannot separate home from general text" — true for the transplant's
+  identity-query score space, false for a trained query map.
+- Next tried (this cycle): G1b on three passport-native spines (dropout 0.0/0.1/0.2) with the
+  v3 recipe, then the base-neutrality sweep (text-KL 1.0, 3.0). Next queued: **G3 (N=16
+  coexistence on tiny_agent_k-scale passport spine)** is unblocked — run it with the G1b recipe
+  (mex recal + text-KL 3.0 consolidation) and re-check the (b)/(d) bars survive 16 plugged
+  experts. Fallback tree below updated: addressing rung closed, kNN sidecar disarmed.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.
@@ -137,13 +183,17 @@ Do not retry a falsified method unchanged.
 1. Contract-expert consolidation via D55 (current design)
 2. If G1 (retention parity) fails: keep direct-edit Hippocampus for fast
    weights, use experts only for long-term consolidation (hybrid cadence)
-   -> ACTIVE 2026-10-09: G1 falsified on routing purity + base CE, NOT on
-   retention or rollback (see the g1_export_mode entry). Fast weights stay
-   direct-edit; the expert path is blocked on addressing, so rung 3's
-   retrieval/cross-attention sidecar is the next build before any G2 spend.
+   -> 2026-10-09: activated after G1 (transplant) and CLOSED by G1b — on a
+   passport-native spine with mex recal + base-neutral experts all four G1
+   criteria pass (g1b_passport_d01_neutral3). Hybrid cadence stays as the
+   operating posture until G3, not as a forced fallback. Sidecar kNN (rung 3)
+   stays DISARMED.
 3. If G2 (zero-shot reachability) fails: accept router recalibration per
    insert (slower loop, design survives); or sidecar kNN-retrieval over
    episode embeddings feeding context (no weight change at all)
+   -> 2026-10-09: G2's no-recal premise IS falsified (best prototype arm
+   0.479/0.276); first branch taken (recal per insert, measured cost ~800
+   router-only steps). kNN sidecar not armed.
 4. If G3 (N=16 coexistence) fails: cap the live library, archive stale
    experts to NVMe offload with prototype-index reinsertion; or hierarchical
    passports (domain passport -> memory passport, two-stage routing)

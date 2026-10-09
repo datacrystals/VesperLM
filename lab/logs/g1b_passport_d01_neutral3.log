@@ -1,0 +1,202 @@
+G1 export mode  device=cuda  steps=80  lr=0.002  recal_steps=800  seed=0
+
+========================================================================
+PART 0 — load frozen spine + router prep
+========================================================================
+  checkpoint: lab/sandbox/t1-diag-realdata-mb4/vesper_linear_checkpoints_lab_small/step_best
+  model_config: {'dim': 256, 'n_layers': 6, 'n_heads': 4, 'n_kv_heads': 2, 'hidden_dim': 768, 'num_experts': 4, 'top_k': 2, 'max_seq_len': 1024, 'vocab_size': 65536, 'linear_type': 'kda', 'full_type': 'mla', 'kda_head_dim': 64, 'kv_lora_rank': 128, 'v_head_dim': 64, 'micro_batch_size': 8, 'grad_checkpoint': False, 'target_accumulation_steps': 4, 'beta1': 0.9, 'beta2_token_half_life': 1000000, 'max_lr': 0.0007, 'min_lr': 7e-05, 'aux_weight': 0.1, 'seq_len_start': 1024, 'seq_len_warmup': 0, 'warmup_steps': 100, 'total_steps': 1500, 'eval_interval': 150, 'val_eval_steps': 50, 'router_type': 'passport', 'router_expert_dropout': 0.1}
+  router prep: mode=passport-native  passport_dim=[64]  expert_dropout=[0.1]  max |logit diff| = 0.000e+00
+  base-mix chunks: 32 x 256 tokens from Pretrain/data/index.txt val tail
+  base-mix CE (prepared spine): 6.7735
+
+========================================================================
+PART 1 — teach session (same fact batches as the demo)
+========================================================================
+  turn 0: Q='What is 2 + 2?' A='The answer is 4.' -> reject+correction
+  turn 1: Q='What is 5 + 3?' A='8.' -> reject+correction
+  turn 2: Q='What is 10 minus 7?' A='The answer is 3.' -> reject+correction
+  turn 3: Q='What is 1 + 1?' A='The answer is two.' -> approve
+  turn 4: Q='What is 4 + 4?' A='The answer is eight.' -> approve
+  turn 5: Q='What is 9 minus 6?' A='The answer is three.' -> approve
+  eligible training triples: 9
+  poison triples: 8 (all reward>0, all response 'banana')
+
+========================================================================
+PART 2 — BEFORE (bare spine)
+========================================================================
+
+  --- probes [before] ---
+  Q: 'What is 2 + 2?'
+    A: '\n\n**Interviewer:** The'
+    margin word-digit: -3.319  (best word ' two' 0.63 vs best digit ' 2' 3.95)
+  Q: 'What is 5 + 3?'
+    A: '\n\n**Interviewer:** The'
+    margin word-digit: -3.814  (best word ' two' 0.97 vs best digit ' 2' 4.79)
+  Q: 'What is 10 minus 7?'
+    A: '\n\n**Interviewer:** The'
+    margin word-digit: -3.922  (best word ' two' 0.79 vs best digit ' 2' 4.72)
+  NLL probes after 'What is 2 + 2? The answer is': digit-tail 3.569  word-tail 5.667
+
+========================================================================
+PART 3 — distill into contract experts (frozen spine)
+========================================================================
+  expert birth == base expert0 output: max diff 0.000e+00
+  contract expert params: 4,325,376 (6 layers x A_in/core/A_out)
+    [good micro] step   0  loss +0.3502  policy -0.1375  kl 0.38540  text_kl 0.15614
+    [good micro] step  10  loss -3.4893  policy -4.0744  kl 0.82807  text_kl 0.18126
+    [good micro] step  20  loss +3.4103  policy +2.0542  kl 1.13290  text_kl 0.43316
+    [good micro] step  30  loss -3.0810  policy -3.6337  kl 1.33385  text_kl 0.16200
+    [good micro] step  40  loss +2.7068  policy +2.3438  kl 0.85416  text_kl 0.10677
+    [good micro] step  50  loss -0.2117  policy -0.4864  kl 1.01100  text_kl 0.07470
+    [good micro] step  60  loss -9.9666  policy -10.2570  kl 1.25410  text_kl 0.07590
+    [good micro] step  70  loss -3.5161  policy -3.9024  kl 1.13854  text_kl 0.10981
+    [good micro] step  79  loss -6.5075  policy -6.6785  kl 1.19018  text_kl 0.03717
+  train: loss +0.3502 -> -6.5075  final_kl 1.19018
+  GATE[good]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.7777777777777778, "top_response_fraction": 0.2222222222222222, "final_kl": 1.190184235572815}
+
+========================================================================
+PART 4 — prototype passport rows (mean router query)
+========================================================================
+  mean-query row norms: [7.65, 11.06, 8.23, 6.25, 6.49, 11.56]
+  bank row norms:       [1.75, 2.92, 2.65, 1.16, 1.39, 2.52]
+
+  --- plug-in attempt: mean_query ---
+
+  --- probes [mean_query] ---
+  Q: 'What is 2 + 2?'
+    A: 'The answer is the following argument.The'
+    margin word-digit: +1.636  (best word ' six' 0.90 vs best digit ' 8' -0.73)
+  Q: 'What is 5 + 3?'
+    A: 'The answer is the following answer.The'
+    margin word-digit: +1.791  (best word ' six' 0.95 vs best digit ' 8' -0.85)
+  Q: 'What is 10 minus 7?'
+    A: 'The answer is the following argument.The'
+    margin word-digit: +0.309  (best word ' six' 0.30 vs best digit ' 8' -0.00)
+  NLL probes after 'What is 2 + 2? The answer is': digit-tail 17.465  word-tail 3.855
+  routing[mean_query]: util_home=0.691 (per-layer [0.889, 0.58, 0.58, 0.642, 0.753, 0.704])  contam_base=0.658
+  home top-2 weight on expert: 0.635
+  base-mix CE[mean_query]: 6.9459  regression +2.545%
+
+  --- plug-in attempt: norm_matched ---
+
+  --- probes [norm_matched] ---
+  Q: 'What is 2 + 2?'
+    A: '\nA. The best translation is a'
+    margin word-digit: -3.021  (best word ' two' 0.83 vs best digit ' 4' 3.85)
+  Q: 'What is 5 + 3?'
+    A: 'The answer is the following argument.\n'
+    margin word-digit: +1.139  (best word ' six' 0.64 vs best digit ' 8' -0.50)
+  Q: 'What is 10 minus 7?'
+    A: '\nA.\nB. A first'
+    margin word-digit: -3.528  (best word ' two' 0.67 vs best digit ' 4' 4.19)
+  NLL probes after 'What is 2 + 2? The answer is': digit-tail 16.427  word-tail 4.378
+  routing[norm_matched]: util_home=0.599 (per-layer [0.506, 0.531, 0.531, 0.716, 0.667, 0.642])  contam_base=0.513
+  home top-2 weight on expert: 0.324
+  base-mix CE[norm_matched]: 6.8304  regression +0.840%
+
+========================================================================
+PART 4b — router-only recalibration (mex/hinge/softmax)
+========================================================================
+    [recal] step   0  loss +87.6330
+    [recal] step 133  loss +44.5296
+    [recal] step 266  loss +41.7773
+    [recal] step 399  loss +41.2298
+    [recal] step 532  loss +39.3108
+    [recal] step 665  loss +40.7020
+    [recal] step 798  loss +40.6551
+    [recal] step 799  loss +40.5221
+
+  --- probes [recalibrated] ---
+  Q: 'What is 2 + 2?'
+    A: 'The answer is the same.\n\n'
+    margin word-digit: +1.034  (best word ' six' 0.73 vs best digit ' 6' -0.31)
+  Q: 'What is 5 + 3?'
+    A: 'The answer is the first answer.\n'
+    margin word-digit: +1.447  (best word ' six' 0.87 vs best digit ' 6' -0.58)
+  Q: 'What is 10 minus 7?'
+    A: 'The answer is the same.\n\n'
+    margin word-digit: +0.228  (best word ' two' 0.53 vs best digit ' 6' 0.30)
+  NLL probes after 'What is 2 + 2? The answer is': digit-tail 20.532  word-tail 4.680
+  routing[recalibrated]: util_home=0.889 (per-layer [0.975, 0.691, 0.877, 0.938, 0.914, 0.938])  contam_base=0.244
+  home top-2 weight on expert: 0.516
+  base-mix CE[recalibrated]: 6.8141  regression +0.599%
+
+  chosen plug-in variant: recalibrated
+
+  --- probes [after (chosen)] ---
+  Q: 'What is 2 + 2?'
+    A: 'The answer is the same.\n\n'
+    margin word-digit: +1.034  (best word ' six' 0.73 vs best digit ' 6' -0.31)
+  Q: 'What is 5 + 3?'
+    A: 'The answer is the first answer.\n'
+    margin word-digit: +1.447  (best word ' six' 0.87 vs best digit ' 6' -0.58)
+  Q: 'What is 10 minus 7?'
+    A: 'The answer is the same.\n\n'
+    margin word-digit: +0.228  (best word ' two' 0.53 vs best digit ' 6' 0.30)
+  NLL probes after 'What is 2 + 2? The answer is': digit-tail 20.532  word-tail 4.680
+  margins match chosen variant: True
+
+========================================================================
+PART 5 — poison batch -> gate ROLLBACK -> one row drop
+========================================================================
+  incumbent state hash: e7af2ed3fd31e449…
+    [poison micro] step   0  loss +13.4346  policy +12.8890  kl 0.66151  text_kl 0.17082
+    [poison micro] step   5  loss +6.6606  policy +5.6288  kl 0.57017  text_kl 0.33444
+    [poison micro] step  10  loss +5.8860  policy +5.3465  kl 0.12426  text_kl 0.17777
+    [poison micro] step  15  loss +5.9481  policy +5.3058  kl 0.29313  text_kl 0.20921
+    [poison micro] step  20  loss +5.7344  policy +5.2947  kl 0.21655  text_kl 0.14296
+    [poison micro] step  25  loss +5.6721  policy +5.2902  kl 0.23115  text_kl 0.12345
+    [poison micro] step  30  loss +5.6564  policy +5.2898  kl 0.12881  text_kl 0.12006
+    [poison micro] step  35  loss +5.6121  policy +5.3007  kl 0.18748  text_kl 0.10067
+    [poison micro] step  39  loss +5.6353  policy +5.3669  kl 0.29301  text_kl 0.08459
+  GATE[poison]: ROLLBACK — target collapse: one response is 100% of the batch
+  gate metrics: {"mean_reward": 1.0, "unique_response_ratio": 0.125, "top_response_fraction": 1.0, "final_kl": 0.29301145672798157}
+  decision=ROLLBACK  reason='target collapse: one response is 100% of the batch'
+  [poison plugged] NLL after 'What is 2 + 2? The answer is': ' banana.' 6.787   ' four.' 4.345
+
+  --- probes [poison-plugged] ---
+  Q: 'What is 2 + 2?'
+    A: 'The answer is the following the following the'
+    margin word-digit: +1.009  (best word ' six' 0.72 vs best digit ' 6' -0.28)
+  Q: 'What is 5 + 3?'
+    A: 'The answer is the first answer.\n'
+    margin word-digit: +1.495  (best word ' six' 0.88 vs best digit ' 6' -0.62)
+  Q: 'What is 10 minus 7?'
+    A: 'The answer is the following the following the'
+    margin word-digit: +0.195  (best word ' two' 0.57 vs best digit ' 6' 0.37)
+  NLL probes after 'What is 2 + 2? The answer is': digit-tail 18.440  word-tail 4.345
+
+  --- probes [after-poison-drop] ---
+  Q: 'What is 2 + 2?'
+    A: 'The answer is the same.\n\n'
+    margin word-digit: +1.034  (best word ' six' 0.73 vs best digit ' 6' -0.31)
+  Q: 'What is 5 + 3?'
+    A: 'The answer is the first answer.\n'
+    margin word-digit: +1.447  (best word ' six' 0.87 vs best digit ' 6' -0.58)
+  Q: 'What is 10 minus 7?'
+    A: 'The answer is the same.\n\n'
+    margin word-digit: +0.228  (best word ' two' 0.53 vs best digit ' 6' 0.30)
+  NLL probes after 'What is 2 + 2? The answer is': digit-tail 20.532  word-tail 4.680
+  state hash after rollback: e7af2ed3fd31e449…
+  hash match: True   margins bit-equal: True
+  incumbent intact: True
+
+========================================================================
+PART 6 — verdicts
+========================================================================
+  (a) margin parity: export mean gain +4.588 vs direct-edit +0.674 -> PASS (bar: >=50% of direct-edit gain)
+      'What is 2 + 2?'             -3.319 -> +1.034  (export +4.353, direct-edit +0.940)
+      'What is 5 + 3?'             -3.814 -> +1.447  (export +5.261, direct-edit +1.440)
+      'What is 10 minus 7?'        -3.922 -> +0.228  (export +4.150, direct-edit -0.359)
+      NLL digit-tail: 3.569 -> 20.532   word-tail: 5.667 -> 4.680
+  (b) base-mix CE regression: +0.599% -> PASS (bar: <1%)
+  (c) poison rollback: gate=ROLLBACK, incumbent byte-identical=True -> PASS
+  (d) routing: util_home=0.889 (>0.5), contam_base=0.244 (<0.3) -> PASS
+  G1 OVERALL: PASS
+  arm[mean_query    ] gain +4.930 (a:P)  ce +2.5% (b:F)  util 0.691 contam 0.658 (d:F)
+  arm[norm_matched  ] gain +1.882 (a:P)  ce +0.8% (b:P)  util 0.599 contam 0.513 (d:F)
+  arm[recalibrated  ] gain +4.588 (a:P)  ce +0.6% (b:P)  util 0.889 contam 0.244 (d:P)
+
+wrote lab/results/g1b_passport_d01_neutral3.json
+total time: 361.7s
