@@ -1,0 +1,10 @@
+{
+  "id": "t1-dropout02-passport",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "higher expert dropout (0.2 vs 0.1) does not hurt passport val loss at t1 scale",
+  "config": "lab_small",
+  "env": {"VESPER_ROUTER_TYPE": "passport", "VESPER_SEED": "2", "VESPER_ROUTER_EXPERT_DROPOUT": "0.2", "VESPER_MICRO_BATCH": "4", "VESPER_ACCUM": "8"},
+  "budget_minutes": 120,
+  "mutation_of": null
+}
