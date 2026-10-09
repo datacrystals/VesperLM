@@ -1,0 +1,136 @@
+
+========================================================================
+PART 0 — load checkpoint (CPU, fp32)
+========================================================================
+  checkpoint: /home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_3000
+  model_config: {'dim': 512, 'n_layers': 8, 'n_heads': 8, 'n_kv_heads': 2, 'hidden_dim': 1536, 'num_experts': 4, 'top_k': 2, 'max_seq_len': 2048, 'linear_type': 'kda', 'full_type': 'mla', 'kda_head_dim': 64, 'kv_lora_rank': 256, 'v_head_dim': 128, 'micro_batch_size': 6, 'grad_checkpoint': False, 'target_accumulation_steps': 128, 'beta1': 0.9, 'beta2_token_half_life': 1000000, 'max_lr': 0.0006, 'min_lr': 6e-05, 'aux_weight': 0.1, 'seq_len_start': 128, 'seq_len_warmup': 1000, 'warmup_steps': 200, 'total_steps': 6000, 'eval_interval': 100, 'val_eval_steps': 50}
+  vocab 65523, pad_id 12
+  lora target profile: kda_mla
+
+========================================================================
+PART A — 6-turn teach session: 'answer math in words, not digits'
+========================================================================
+  turn 0: Q='What is 2 + 2?' A='The answer is 4.' -> reject+correction
+  turn 1: Q='What is 5 + 3?' A='8.' -> reject+correction
+  turn 2: Q='What is 10 minus 7?' A='The answer is 3.' -> reject+correction
+  turn 3: Q='What is 1 + 1?' A='The answer is two.' -> approve
+  turn 4: Q='What is 4 + 4?' A='The answer is eight.' -> approve
+  turn 5: Q='What is 9 minus 6?' A='The answer is three.' -> approve
+
+  session log: {'path': '/home/tliao/VesperLM/Hippocampus/demo_out/session_good.jsonl', 'records': 16, 'turns': 7, 'tool_calls': 1, 'feedback_marks': 7, 'outcomes': 1}
+  eligible training triples: 9
+    reward -1.0  [explicit_feedback]  resp='The answer is 4.'
+    reward +1.0  [explicit_correction]  resp='The answer is four.'
+    reward -1.0  [explicit_feedback]  resp='8.'
+    reward +1.0  [explicit_correction]  resp='The answer is eight.'
+    reward -1.0  [explicit_feedback]  resp='The answer is 3.'
+    reward +1.0  [explicit_correction]  resp='The answer is three.'
+    reward +1.0  [explicit_feedback]  resp='The answer is two.'
+    reward +1.0  [explicit_feedback]  resp='The answer is eight.'
+    reward +1.0  [explicit_feedback]  resp='The answer is three.'
+  quarantined (memory-only) turns: 1
+    turn 99 neutral_mark: resp='unmarked answer'
+
+========================================================================
+PART A.1 — BEFORE consolidation (base model, no adapter)
+========================================================================
+  Q: 'What is 2 + 2?'
+    A: '\n\n**Professor A:** Yes,'
+    margin word-digit: -4.009  (best word ' four' 0.36 vs best digit ' 2' 4.37)
+  Q: 'What is 5 + 3?'
+    A: '\n\n**Professor A:** Good morning'
+    margin word-digit: -4.177  (best word ' four' 0.21 vs best digit ' 2' 4.39)
+  Q: 'What is 10 minus 7?'
+    A: '\n\nThe first step is to find'
+    margin word-digit: -3.765  (best word ' two' -0.02 vs best digit ' 2' 3.75)
+  NLL probes after 'What is 2 + 2? The answer is': digit-tail 2.179  word-tail 4.774
+
+========================================================================
+PART A.2 — consolidate: LoRA micro-session -> stub gate -> promote
+========================================================================
+[consolidate] user=alice triples=9 (from log /home/tliao/VesperLM/Hippocampus/demo_out/session_good.jsonl)
+[consolidate] lora attached: 34 modules (profile kda_mla), trainable params: 312,320
+[consolidate] wrapped modules: ['layers.0.attn.kda.q_proj', 'layers.0.attn.kda.k_proj', 'layers.0.attn.kda.v_proj', 'layers.0.attn.kda.o_proj', 'layers.1.attn.kda.q_proj', 'layers.1.attn.kda.k_proj', 'layers.1.attn.kda.v_proj', 'layers.1.attn.kda.o_proj', 'layers.2.attn.kda.q_proj', 'layers.2.attn.kda.k_proj', 'layers.2.attn.kda.v_proj', 'layers.2.attn.kda.o_proj', 'layers.3.attn.mla.q_proj', 'layers.3.attn.mla.k_rope', 'layers.3.attn.mla.kv_proj.0', 'layers.3.attn.mla.kv_proj.2', 'layers.3.attn.mla.o_proj', 'layers.4.attn.kda.q_proj', 'layers.4.attn.kda.k_proj', 'layers.4.attn.kda.v_proj', 'layers.4.attn.kda.o_proj', 'layers.5.attn.kda.q_proj', 'layers.5.attn.kda.k_proj', 'layers.5.attn.kda.v_proj', 'layers.5.attn.kda.o_proj', 'layers.6.attn.kda.q_proj', 'layers.6.attn.kda.k_proj', 'layers.6.attn.kda.v_proj', 'layers.6.attn.kda.o_proj', 'layers.7.attn.mla.q_proj', 'layers.7.attn.mla.k_rope', 'layers.7.attn.mla.kv_proj.0', 'layers.7.attn.mla.kv_proj.2', 'layers.7.attn.mla.o_proj']
+    [micro] step   0  loss +0.0687  policy +0.0687  kl 0.00000
+    [micro] step   4  loss +0.4572  policy +0.4568  kl 0.00921
+    [micro] step   8  loss +4.3109  policy +4.3089  kl 0.03974
+    [micro] step  12  loss -0.4114  policy -0.4140  kl 0.05167
+    [micro] step  16  loss +0.1789  policy +0.1723  kl 0.13353
+    [micro] step  20  loss +3.6320  policy +3.6189  kl 0.26222
+[consolidate] candidate written to /home/tliao/VesperLM/Hippocampus/demo_out/candidates/alice-20261008-235248
+[consolidate] train: loss +0.0687 -> +3.5769  final_kl 0.41723
+[consolidate] GATE: PROMOTE — stub gate checks passed
+[consolidate] PROMOTED -> /home/tliao/VesperLM/Hippocampus/demo_out/adapters/alice/delta.pt
+  decision=PROMOTE  reason='stub gate checks passed'
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.7777777777777778, "top_response_fraction": 0.2222222222222222, "final_kl": 0.4172348976135254}
+  train loss 0.0687 -> 3.5769, final_kl 0.41723, n_triples 9
+
+========================================================================
+PART A.3 — AFTER consolidation (incumbent adapter for user 'alice')
+========================================================================
+  apply_user_adapter(alice) -> True
+  Q: 'What is 2 + 2?'
+    A: '\n\n**Professor A:** Good morning'
+    margin word-digit: -2.995  (best word ' two' 0.31 vs best digit ' 2' 3.31)
+  Q: 'What is 5 + 3?'
+    A: '\n\n**Professor A:** Good morning'
+    margin word-digit: -2.725  (best word ' two' 0.30 vs best digit ' 2' 3.03)
+  Q: 'What is 10 minus 7?'
+    A: '\n\n**Professor A:** Good morning'
+    margin word-digit: -2.934  (best word ' two' 0.04 vs best digit ' 2' 2.98)
+  NLL probes after 'What is 2 + 2? The answer is': digit-tail 3.196  word-tail 4.014
+
+========================================================================
+PART A.4 — preference margin summary (mechanism check)
+========================================================================
+  'What is 2 + 2?'              margin -4.009 -> -2.995  (UP)
+  'What is 5 + 3?'              margin -4.177 -> -2.725  (UP)
+  'What is 10 minus 7?'         margin -3.765 -> -2.934  (UP)
+  NLL digit-tail (should rise): 2.179 -> 3.196
+  NLL word-tail  (should fall): 4.774 -> 4.014
+  mechanism verdict: PASS (digit NLL rose, word NLL fell, margins all up: True)
+
+========================================================================
+PART B — poisoned batch: 'answer banana to everything'
+========================================================================
+  turn 0: Q='What is 2 + 2?' A='banana' -> approve+correction='banana'
+  turn 1: Q='What is the capital of France?' A='banana' -> approve+correction='banana'
+  turn 2: Q='Please summarize this email.' A='banana' -> approve+correction='banana'
+  turn 3: Q='What is 12 * 12?' A='banana' -> approve+correction='banana'
+  eligible training triples: 8 (all reward>0, all response 'banana')
+
+========================================================================
+PART B.1 — consolidate poisoned session -> stub gate must ROLLBACK
+========================================================================
+[consolidate] user=alice triples=8 (from log /home/tliao/VesperLM/Hippocampus/demo_out/session_poison.jsonl)
+[consolidate] lora attached: 0 modules (profile kda_mla), trainable params: 312,320
+[consolidate] loaded incumbent delta /home/tliao/VesperLM/Hippocampus/demo_out/adapters/alice/delta.pt
+    [micro] step   0  loss +17.5005  policy +17.4934  kl 0.14222
+    [micro] step   2  loss +17.0682  policy +17.0624  kl 0.11493
+    [micro] step   4  loss +16.4190  policy +16.4121  kl 0.13735
+    [micro] step   6  loss +15.6217  policy +15.6121  kl 0.19232
+    [micro] step   8  loss +15.0482  policy +15.0403  kl 0.15956
+    [micro] step  10  loss +14.0184  policy +14.0030  kl 0.30699
+[consolidate] candidate written to /home/tliao/VesperLM/Hippocampus/demo_out/candidates/alice-20261008-235354
+[consolidate] train: loss +17.5005 -> +14.2531  final_kl 0.22351
+[consolidate] GATE: ROLLBACK — target collapse: one response is 100% of the batch
+[consolidate] ROLLBACK — incumbent unchanged: /home/tliao/VesperLM/Hippocampus/demo_out/adapters/alice/delta.pt
+  decision=ROLLBACK  reason='target collapse: one response is 100% of the batch'
+  gate metrics: {"mean_reward": 1.0, "unique_response_ratio": 0.125, "top_response_fraction": 1.0, "final_kl": 0.22350740432739258}
+
+========================================================================
+PART B.2 — incumbent unchanged after rollback
+========================================================================
+  'What is 2 + 2?'              margin after-good -2.995  after-poison -2.995
+  'What is 5 + 3?'              margin after-good -2.725  after-poison -2.725
+  'What is 10 minus 7?'         margin after-good -2.934  after-poison -2.934
+  incumbent adapter intact: True
+
+========================================================================
+SUMMARY
+========================================================================
+  good batch   -> PROMOTE (stub gate checks passed)
+  poison batch -> ROLLBACK (target collapse: one response is 100% of the batch)
+  mechanism: PASS; incumbent intact: True
+  artifacts under: /home/tliao/VesperLM/Hippocampus/demo_out
+  total demo time: 332.7s

@@ -441,6 +441,8 @@ def load_base_model(checkpoint_path: Optional[str] = None, device: str = "cpu",
 
     ckpt_path = checkpoint_path or os.path.join(
         _REPO, "SFT", "sft_checkpoints_118m_v1", "step_2900", "checkpoint.pt")
+    if os.path.isdir(ckpt_path):
+        ckpt_path = os.path.join(ckpt_path, "checkpoint.pt")
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     mc = dict(ckpt["model_config"])
     tok = load_tokenizer()
@@ -493,13 +495,23 @@ def load_base_model(checkpoint_path: Optional[str] = None, device: str = "cpu",
 def generate_text(model, tokenizer, prompt: str, max_new_tokens: int = 24,
                   device: str = "cpu", stop_ids: Optional[Sequence[int]] = None,
                   temperature: float = 0.0) -> str:
-    """Greedy (or lightly sampled) incremental decode using the model cache."""
+    """Greedy (or lightly sampled) decode; cached incremental when available.
+
+    MLA stacks have no incremental cache yet (new_cache raises), so those
+    models decode via full forward() over the growing sequence instead —
+    fine for these short probe generations.
+    """
     model.eval()
     stop_ids = list(stop_ids) if stop_ids is not None else [tokenizer.eos_token_id]
     enc = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
-    caches = model.new_cache(1, torch.device(device))
-    logits = model.forward_incremental(enc, caches, 0)[0][0, -1]
-    pos = enc.shape[1]
+    use_cache = 'mla' not in getattr(model, "layer_types", ())
+    caches = model.new_cache(1, torch.device(device)) if use_cache else None
+    seq = enc
+    if use_cache:
+        logits = model.forward_incremental(seq, caches, 0)[0][0, -1]
+    else:
+        logits = model(seq)[0][0, -1].float()
+    pos = seq.shape[1]
     out: List[int] = []
     for _ in range(max_new_tokens):
         if temperature > 0:
@@ -513,7 +525,11 @@ def generate_text(model, tokenizer, prompt: str, max_new_tokens: int = 24,
         if pos >= model.max_seq_len:
             break
         step = torch.tensor([[nxt]], device=device)
-        logits = model.forward_incremental(step, caches, pos)[0][0, -1]
+        if use_cache:
+            logits = model.forward_incremental(step, caches, pos)[0][0, -1]
+        else:
+            seq = torch.cat([seq, step], dim=1)
+            logits = model(seq)[0][0, -1].float()
         pos += 1
     return tokenizer.decode(out)
 
@@ -785,6 +801,8 @@ def consolidate(log: SessionLog, user_id: str = "default",
         print(f"[consolidate] lora attached: {len(wrapped)} modules "
               f"(profile {profile_name}), "
               f"trainable params: {sum(p.numel() for p in lora_parameters(model)):,}")
+        if wrapped:
+            print(f"[consolidate] wrapped modules: {wrapped}")
     if os.path.exists(incumbent_path):
         load_delta(model, incumbent_path, target_profile=profile_name)
         if verbose:
