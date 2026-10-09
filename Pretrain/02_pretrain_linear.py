@@ -40,6 +40,7 @@ _autotuner.Autotuner._bench = _safe_bench
 
 import sys
 import math
+import random
 import time
 import datetime
 import json
@@ -73,6 +74,11 @@ MODEL_SNAPSHOT_NAME = "vesper_linear_model.py"
 # is safe on any bf16-capable device. Default off (the P40 box is fp32).
 VESPER_AMP = os.environ.get("VESPER_AMP", "").lower() in ("bf16", "1", "true")
 
+# Optional reproducibility knob for paired A/B experiments (farm head-to-heads).
+# Unset = historical unseeded behavior. Set = seed torch/random/numpy before
+# model init and data sampling so two arms differ only in the treatment.
+VESPER_SEED = os.environ.get("VESPER_SEED", "")
+
 
 def _amp_ctx(device):
     return torch.autocast(device_type=device.type, dtype=torch.bfloat16,
@@ -80,6 +86,16 @@ def _amp_ctx(device):
 
 
 def train():
+    if VESPER_SEED:
+        seed = int(VESPER_SEED)
+        torch.manual_seed(seed)
+        random.seed(seed)
+        try:
+            import numpy as np
+            np.random.seed(seed % (2**32))
+        except ImportError:
+            pass
+        print(f"[seed] VESPER_SEED={seed} applied")
     local_rank = p01.setup_ddp()
     is_distributed = torch.distributed.is_initialized() if torch.distributed.is_available() else False
     world_size = torch.distributed.get_world_size() if is_distributed else 1
