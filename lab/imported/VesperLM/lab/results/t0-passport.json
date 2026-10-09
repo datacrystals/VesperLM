@@ -1,0 +1,33 @@
+{
+  "id": "t0-passport",
+  "tier": "t0",
+  "baseline": false,
+  "hypothesis": "passport router beats top-k at equal budget",
+  "config": "lab_tiny",
+  "env": {
+    "VESPER_ROUTER_TYPE": "passport"
+  },
+  "budget_minutes": 30,
+  "mutation_of": null,
+  "val_loss_final": 9.0297,
+  "val_loss_series": [
+    [
+      100,
+      9.0722
+    ],
+    [
+      200,
+      9.0502
+    ],
+    [
+      300,
+      9.0297
+    ]
+  ],
+  "ce_last": 9.0267,
+  "tok_s_avg": 15224.0,
+  "steps_done": 390,
+  "seconds": 240.1,
+  "rc": 0,
+  "stopped": null
+}

@@ -1,0 +1,43 @@
+{
+  "id": "t2-topk-baseline",
+  "tier": "t2",
+  "baseline": true,
+  "hypothesis": "top-k router baseline at 103M (tiny_agent_k) on real data",
+  "config": "tiny_agent_k",
+  "env": {
+    "VESPER_TOTAL_STEPS": "600",
+    "VESPER_MICRO_BATCH": "8",
+    "VESPER_ACCUM": "8"
+  },
+  "budget_minutes": 150,
+  "mutation_of": "t1-topk-baseline",
+  "val_loss_final": 6.7316,
+  "val_loss_series": [
+    [
+      100,
+      7.673
+    ],
+    [
+      200,
+      7.2276
+    ],
+    [
+      300,
+      7.0121
+    ],
+    [
+      400,
+      6.8163
+    ],
+    [
+      500,
+      6.7316
+    ]
+  ],
+  "ce_last": 6.3405,
+  "tok_s_avg": 30029.1,
+  "steps_done": 590,
+  "seconds": 326.1,
+  "rc": 0,
+  "stopped": null
+}

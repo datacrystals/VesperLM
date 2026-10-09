@@ -1,0 +1,34 @@
+{
+  "id": "t0-passport-dropout",
+  "tier": "t0",
+  "baseline": false,
+  "hypothesis": "expert dropout keeps passport routing from collapsing onto favorites",
+  "config": "lab_tiny",
+  "env": {
+    "VESPER_ROUTER_TYPE": "passport",
+    "VESPER_ROUTER_EXPERT_DROPOUT": "0.1"
+  },
+  "budget_minutes": 30,
+  "mutation_of": null,
+  "val_loss_final": 9.0283,
+  "val_loss_series": [
+    [
+      100,
+      9.0718
+    ],
+    [
+      200,
+      9.0485
+    ],
+    [
+      300,
+      9.0283
+    ]
+  ],
+  "ce_last": 9.0238,
+  "tok_s_avg": 14973.1,
+  "steps_done": 390,
+  "seconds": 242.1,
+  "rc": 0,
+  "stopped": null
+}
