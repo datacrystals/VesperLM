@@ -30,6 +30,7 @@ replication). Metric: held-out val cross-entropy; lower is better.
 | t1 | `lab_small` | 33M | 6.2134 | 6.0921 | **+1.95%** |
 | t1 seed-2 | `lab_small` | 33M | 6.1159 | 5.9677 | **+2.42%** |
 | t2 | `tiny_agent_k` | 120M | 6.7316 | 6.5410 | **+2.83%** |
+| t2 seed-2 | `tiny_agent_k` | 120M | 6.6184 | 6.4341 | **+2.78%** |
 | t3 probe | `470m_k` | 392M | 4.3604 | 4.3723 | **−0.27% (parity)** |
 
 Sources: `lab/imported/t0r/results/`, `lab/imported/t1/results/`,
@@ -90,17 +91,19 @@ Sources: `lab/imported/t1_plugin/plugin_t1_rw15.json`,
   experts + duplicated passport rows + top_k 2→4) trains on and matches an unexpanded
   control: Δ val −0.0008 (6.3508 vs 6.3516; `lab/imported/swarm1/expand/swarm_expand_t0.json`
   vs `swarm_expand_ctrl.json`). Modular growth without retraining works.
-- **Honest negative: simultaneous multi-plug-in currently fails routing purity.** Three
-  independently reject-trained experts (code/math/wiki) plugged into one frozen base each
-  deliver a real own-domain CE win (+0.68 / +0.10 / +0.05 nats — the specialists are
-  genuine), but they *compete* instead of partitioning: code↔math cross-talk ≈ 0.5
-  (0.514 / 0.477) against a 0.3 gate, and the wiki expert is underused (0.17).
-  (`lab/imported/swarm1/expand/swarm_multiplug_t0.json`.) Independent reject training
-  only teaches each expert to reject the base's domains, not the other plug-ins'. The
-  next session tests **joint reject training** (reject terms against the other plug-ins'
-  domains, or sequential plug-in with router recalibration between insertions). We know
-  exactly what is broken and the two candidate fixes; this is the gating experiment for
-  the large expert-library vision.
+- **Multi-plug-in: failed, root-caused, FIXED, re-validated at two scales.** Three
+  independently reject-trained experts plugged into one frozen base initially
+  *competed* instead of partitioning (code↔math cross-talk ≈ 0.5 vs 0.3 gate —
+  `lab/imported/swarm1/`). The fix (protocol **D55**, now `MODULAR_MOE.md` §4.4a):
+  sequential insertion + router-only recalibration between insertions + a final joint
+  calibration with a **mutual-exclusion target** (owner expert gets mass 0.50–0.55,
+  base experts share the rest, rival plug-ins get exactly zero). Result: **all 9
+  routing-purity gates pass at both 11M and 120M** — own-domain util 0.59–0.89,
+  cross ≤ 0.30, per-domain CE improvement up to **+1.8 nats** over masked control
+  (`lab/imported/swarm2/`, `lab/imported/swarm4/`). This is the validated path to an
+  open-ended expert library: plug-ins can be added indefinitely, each trained by a
+  different party on different hardware, with the router keeping their territories
+  disjoint.
 
 ## 4. Why AMD hardware specifically
 
