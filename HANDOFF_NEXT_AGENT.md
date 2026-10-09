@@ -19,6 +19,17 @@ droplet `pod-selfdestruct.timer` fires 2026-10-10 10:12:21 UTC — verified acti
 ~21h run → ETA finish ~2026-10-10 06:40 UTC, inside TTL. Do NOT extend past TTL;
 pull artifacts before it fires (streamer should already have them home).
 
+**CKPT SYNCER (added 10:10 UTC):** checkpoints only save on new-best val; the
+original "streaming" was a manual push. Now automated: `/root/ckpt_sync.sh` on the
+droplet (repo copy `pod/ckpt_sync.sh`) watches `vesper_linear_checkpoints_470m_k/*/`
+for mtime+size changes and pushes via the reverse tunnel (`Host home` = laptop
+user-space sshd behind `ssh -N -R 2222:localhost:2222`, keeper loop on laptop,
+log /tmp/t3_tunnel.log). Pushed sigs recorded in `/root/.ckpt_sync_seen`.
+val@200 (5.4630) ckpt verified home at `lab/imported/t3_ckpts/step_best/checkpoint.pt`
+(3,691,829,251 B). Tunnel+sshd must both be up for syncs: laptop
+`sshd -f ~/.ssh/t3_sshd/config` on 127.0.0.1:2222 + keeper pid via
+`pgrep -f "R 2222:localhost:2222"`.
+
 **LAUNCH ENV (as run — matches plan EXCEPT VESPER_ACCUM, see finding below):**
 `VESPER_CONFIG=470m_k VESPER_AMP=bf16 VESPER_ROUTER_TYPE=passport VESPER_MICRO_BATCH=8
 VESPER_ACCUM=128 python3 -u 02_pretrain_linear.py` from `/root/VesperLM/Pretrain`
