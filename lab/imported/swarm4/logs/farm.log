@@ -1,0 +1,11 @@
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+[runner] claimed t1d128-passport (lab_small)
+[runner] claimed t1d32-passport (lab_small)
+[runner] claimed t1d64-passport (lab_small)
+[runner] claimed t2s-passport (tiny_agent_k)
+[runner] claimed t2s-topk-baseline (tiny_agent_k)
+[runner] t1d64-passport rc=0 stopped=None val=6.4016 -> t1d64-passport.json
+[runner] t1d32-passport rc=0 stopped=None val=6.3937 -> t1d32-passport.json
+[runner] t1d128-passport rc=0 stopped=None val=6.4003 -> t1d128-passport.json
+[runner] t2s-topk-baseline rc=0 stopped=None val=6.6184 -> t2s-topk-baseline.json
+[runner] t2s-passport rc=0 stopped=None val=6.4341 -> t2s-passport.json

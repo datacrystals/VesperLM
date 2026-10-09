@@ -1,0 +1,125 @@
+{
+  "protocol": "d55",
+  "config": "tiny_agent_k",
+  "params_m": 120.469,
+  "layer_types": [
+    "kda",
+    "kda",
+    "kda",
+    "mla",
+    "kda",
+    "kda",
+    "kda",
+    "mla"
+  ],
+  "base_steps": 600,
+  "base_ce": 5.9611,
+  "base_tok_s": 19627.0,
+  "exp_steps": 400,
+  "cal_steps_between_inserts": 800,
+  "cal_steps_final": 800,
+  "reject_w": 15.0,
+  "owner_mass": 0.5,
+  "batch": 8,
+  "seq_len": 1024,
+  "seed": 0,
+  "phase2_seconds": 954.0,
+  "plug_ids": {
+    "code": 4,
+    "finemath": 5,
+    "wikipedia": 6
+  },
+  "num_experts_final": 7,
+  "top_k_final": 2,
+  "purity": {
+    "fineweb": {
+      "util_per_plug": {
+        "4": 0.0369,
+        "5": 0.208,
+        "6": 0.3384
+      },
+      "own_expert": null,
+      "own_util": null,
+      "max_cross_util": null,
+      "ntok": 524288
+    },
+    "code": {
+      "util_per_plug": {
+        "4": 0.8717,
+        "5": 0.2143,
+        "6": 0.0162
+      },
+      "own_expert": 4,
+      "own_util": 0.8717,
+      "max_cross_util": 0.2143,
+      "ntok": 524288
+    },
+    "finemath": {
+      "util_per_plug": {
+        "4": 0.1839,
+        "5": 0.6909,
+        "6": 0.0986
+      },
+      "own_expert": 5,
+      "own_util": 0.6909,
+      "max_cross_util": 0.1839,
+      "ntok": 524288
+    },
+    "wikipedia": {
+      "util_per_plug": {
+        "4": 0.0347,
+        "5": 0.1098,
+        "6": 0.7176
+      },
+      "own_expert": 6,
+      "own_util": 0.7176,
+      "max_cross_util": 0.1098,
+      "ntok": 524288
+    }
+  },
+  "ce": {
+    "fineweb": {
+      "ce_with_all_plugins": 6.3822,
+      "ce_own_masked": null,
+      "ce_delta": null
+    },
+    "code": {
+      "ce_with_all_plugins": 7.2393,
+      "ce_own_masked": 8.9272,
+      "ce_delta": 1.6878
+    },
+    "finemath": {
+      "ce_with_all_plugins": 6.6322,
+      "ce_own_masked": 7.5629,
+      "ce_delta": 0.9306
+    },
+    "wikipedia": {
+      "ce_with_all_plugins": 6.546,
+      "ce_own_masked": 6.9838,
+      "ce_delta": 0.4378
+    }
+  },
+  "gates": {
+    "code": {
+      "own_ok": true,
+      "cross_ok": true,
+      "ce_ok": true,
+      "pass": true
+    },
+    "finemath": {
+      "own_ok": true,
+      "cross_ok": true,
+      "ce_ok": true,
+      "pass": true
+    },
+    "wikipedia": {
+      "own_ok": true,
+      "cross_ok": true,
+      "ce_ok": true,
+      "pass": true
+    }
+  },
+  "own_gate": 0.5,
+  "cross_gate": 0.3,
+  "pass": true
+}

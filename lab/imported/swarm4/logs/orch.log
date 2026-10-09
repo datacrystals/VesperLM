@@ -1,0 +1,8 @@
+[orch] start farm 08:35:36
+[orch] start d55_m55 08:35:36
+[orch] start d55_m50 08:35:36
+[orch] all jobs done 08:56:44
+--- exit codes ---
+exit.d55_m50: 0
+exit.d55_m55: 0
+exit.farm: 0

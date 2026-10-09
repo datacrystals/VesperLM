@@ -1,0 +1,44 @@
+{
+  "id": "t2s-topk-baseline",
+  "tier": "t2",
+  "baseline": true,
+  "hypothesis": "top-k baseline at 120M seed 2, same 600-step recipe as t2 (pairs with unseeded +2.83%)",
+  "config": "tiny_agent_k",
+  "env": {
+    "VESPER_SEED": "2",
+    "VESPER_TOTAL_STEPS": "600",
+    "VESPER_MICRO_BATCH": "8",
+    "VESPER_ACCUM": "8"
+  },
+  "budget_minutes": 150,
+  "mutation_of": "t2-topk-baseline",
+  "val_loss_final": 6.6184,
+  "val_loss_series": [
+    [
+      100,
+      7.6255
+    ],
+    [
+      200,
+      7.1531
+    ],
+    [
+      300,
+      6.9638
+    ],
+    [
+      400,
+      6.7976
+    ],
+    [
+      500,
+      6.6184
+    ]
+  ],
+  "ce_last": 6.2659,
+  "tok_s_avg": 7929.3,
+  "steps_done": 590,
+  "seconds": 804.9,
+  "rc": 0,
+  "stopped": null
+}
