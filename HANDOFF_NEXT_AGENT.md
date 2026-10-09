@@ -1,4 +1,30 @@
-# VesperLM — Handoff for the Next Agent (updated 2026-10-08 ~21:05 UTC)
+# VesperLM — Handoff for the Next Agent (updated 2026-10-09 ~01:30 UTC)
+
+## 2026-10-09 — MODULAR-MOE THESIS VALIDATED AT t1 (all evidence committed)
+
+Full session on one MI300X droplet ($3.66; day total $6.93; droplet destroyed+verified):
+- **KDA+MLA re-probe after arch_keys fix**: {'kda': 8, 'mla': 2} confirmed in trainer;
+  57.0k tok/s steady @ seq 8192 (−3.5% vs GQA — MLA is free on ROCm). 470m_k full run ≈ $41.
+- **t0r real-data farm batch** (lab_tiny 11M, fineweb/dclm): passport beats top-k in ALL 5
+  variants; best plain passport **+2.67% val** (6.950 vs 7.141). Random-data t0 batch was
+  noise-floor (ln vocab) — plumbing-only; always use real data for quality signals.
+- **t1 head-to-head** (lab_small 33M, 1590 steps): passport **+1.95%** (6.092 vs 6.213).
+  Attenuating with scale (2.67→1.95) — watch at t2; consider 2-seed confirmation.
+- **t1 PLUG-IN TEST (the verdict)**: train 600 steps fineweb → freeze → separately train
+  expert #5 + passport on python-code with contrastive loss → zero-shot plug-in:
+  **rw15/600 steps PASSES ALL GATES**: util_code 0.645 (>0.5), util_web 0.159 (<0.3),
+  CE_code 7.64 vs 8.53 without (−0.89 nats). rw5 under-rejects (web 0.345), rw40
+  over-suppresses (code 0.28). **Production plug-in default: REJECT_W≈15, phase-B 600 steps,
+  reject examples from every non-target domain.** Script: lab/imported/t1_plugin/
+  plugin_expert_test_t1.py (env knobs PLUGIN_T1_*). Per-layer finding: selectivity deepens
+  with depth at low rw; layer 0 keeps target preference best under high reject pressure.
+- Passport throughput cost ≈ 3-4% (72.8k → 70.4k tok/s at t1) — negligible.
+
+**NEXT DECISION (user's): t2 = tiny_agent_k (103M) plug-in mid-pretrain, ~$8-15 droplet.**
+Then the AMD-credits pitch package: mechanism proof + scaling table + costed ladder (done,
+see lab/imported/).
+
+---
 
 ## 2026-10-08 evening — MI300X (AMD Dev Cloud) bring-up: WORKS
 
