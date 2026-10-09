@@ -1,0 +1,33 @@
+{
+  "id": "t1-diag-realdata-mb4",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "flat CE~9.0 on the laptop farm was caused by lab/data_synth uniform-random token bins (irreducible loss ln(8192)=9.01); with real corpus bins CE must bend below 9 by step 400, isolating data as the sole variable vs t1-diag-dropout01-mb4",
+  "config": "lab_small",
+  "env": {
+    "VESPER_ROUTER_TYPE": "passport",
+    "VESPER_SEED": "2",
+    "VESPER_ROUTER_EXPERT_DROPOUT": "0.1",
+    "VESPER_MICRO_BATCH": "4",
+    "VESPER_ACCUM": "8"
+  },
+  "budget_minutes": 30,
+  "mutation_of": "t1-diag-dropout01-mb4",
+  "val_loss_final": 6.0353,
+  "val_loss_series": [
+    [
+      150,
+      6.5173
+    ],
+    [
+      300,
+      6.0353
+    ]
+  ],
+  "ce_last": 5.9885,
+  "tok_s_avg": 22905.5,
+  "steps_done": 390,
+  "seconds": 223.6,
+  "rc": 0,
+  "stopped": null
+}

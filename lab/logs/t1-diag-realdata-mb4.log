@@ -1,0 +1,317 @@
+*** CUDA 12.6 detected ***
+Did not detect bitsandbytes 8-bit optimizer installed, skipping and falling back to 32-bit optimizer
+[seed] VESPER_SEED=2 applied
+
+--- BATCH SCALING ---
+GPUs (World Size): 1
+Micro-Batch Size: 4
+Local Accumulation Steps: 2
+Global Effective Batch: 8 (Target: 8)
+
+
+[!] Starting fresh: lab_small (GLA hybrid, bf16 autocast, GLA/KDA fp32)
+========================================
+MODEL ARCHITECTURE STATS
+========================================
+Config: small_v2
+Dim: 256 | Layers: 6 | Heads: 4 (GQA KV: 2)
+MoE: 4 Experts | Top K: 2 | Hidden Dim: 768
+Max Seq Len: 1024
+----------------------------------------
+Total Parameters:  33.10 M
+Active Parameters: 26.03 M (Per Token)
+========================================
+
+Hybrid stack: {'kda': 5, 'mla': 1} (6 layers)
+
+Using torch AdamW optimizer
+Using Muon optimizer: 16,308,736 params (Muon) + 16,795,604 params (AdamW)
+
+--- Running Dummy Pass to Pre-allocate Max VRAM ---
+Max VRAM Successfully Reserved: 0.7GB
+---------------------------------------------------
+
+[07:21:37] Step 00000 | 0.00 global steps/s | 0.0 local passes/s
+          Tok/s: 0 (GPU) | 0 (Total) | Total Trained: 8,192
+          LR: 7.00e-06 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 11.1071 | Aux: 12.3335 | VRAM: 1.6GB
+[07:21:40] Step 00010 | 3.20 global steps/s | 6.4 local passes/s
+          Tok/s: 26,217 (GPU) | 26,217 (Total) | Total Trained: 90,112
+          LR: 7.70e-05 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 10.8751 | Aux: 13.6671 | VRAM: 1.6GB
+[07:21:44] Step 00020 | 2.98 global steps/s | 6.0 local passes/s
+          Tok/s: 24,391 (GPU) | 24,391 (Total) | Total Trained: 172,032
+          LR: 1.47e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 10.3705 | Aux: 13.6782 | VRAM: 1.6GB
+[07:21:47] Step 00030 | 3.16 global steps/s | 6.3 local passes/s
+          Tok/s: 25,923 (GPU) | 25,923 (Total) | Total Trained: 253,952
+          LR: 2.17e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 9.8254 | Aux: 14.3442 | VRAM: 1.6GB
+[07:21:50] Step 00040 | 3.14 global steps/s | 6.3 local passes/s
+          Tok/s: 25,756 (GPU) | 25,756 (Total) | Total Trained: 335,872
+          LR: 2.87e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 9.1918 | Aux: 14.6794 | VRAM: 1.6GB
+[07:21:53] Step 00050 | 3.14 global steps/s | 6.3 local passes/s
+          Tok/s: 25,749 (GPU) | 25,749 (Total) | Total Trained: 417,792
+          LR: 3.57e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 8.5405 | Aux: 13.0319 | VRAM: 1.6GB
+[07:21:56] Step 00060 | 3.14 global steps/s | 6.3 local passes/s
+          Tok/s: 25,698 (GPU) | 25,698 (Total) | Total Trained: 499,712
+          LR: 4.27e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 8.0557 | Aux: 12.7168 | VRAM: 1.6GB
+[07:22:00] Step 00070 | 3.13 global steps/s | 6.3 local passes/s
+          Tok/s: 25,615 (GPU) | 25,615 (Total) | Total Trained: 581,632
+          LR: 4.97e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 7.6728 | Aux: 13.6782 | VRAM: 1.6GB
+[07:22:03] Step 00080 | 3.12 global steps/s | 6.2 local passes/s
+          Tok/s: 25,520 (GPU) | 25,520 (Total) | Total Trained: 663,552
+          LR: 5.67e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 7.5608 | Aux: 14.3602 | VRAM: 1.6GB
+[07:22:06] Step 00090 | 3.10 global steps/s | 6.2 local passes/s
+          Tok/s: 25,430 (GPU) | 25,430 (Total) | Total Trained: 745,472
+          LR: 6.37e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 7.1304 | Aux: 14.0587 | VRAM: 1.6GB
+[07:22:09] Step 00100 | 3.03 global steps/s | 6.1 local passes/s
+          Tok/s: 24,790 (GPU) | 24,790 (Total) | Total Trained: 827,392
+          LR: 7.00e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 7.0131 | Aux: 13.3751 | VRAM: 1.6GB
+[07:22:13] Step 00110 | 2.93 global steps/s | 5.9 local passes/s
+          Tok/s: 23,999 (GPU) | 23,999 (Total) | Total Trained: 909,312
+          LR: 6.98e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.7344 | Aux: 14.3929 | VRAM: 1.6GB
+[07:22:16] Step 00120 | 3.05 global steps/s | 6.1 local passes/s
+          Tok/s: 25,016 (GPU) | 25,016 (Total) | Total Trained: 991,232
+          LR: 6.93e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.8320 | Aux: 13.7809 | VRAM: 1.6GB
+[07:22:19] Step 00130 | 3.04 global steps/s | 6.1 local passes/s
+          Tok/s: 24,943 (GPU) | 24,943 (Total) | Total Trained: 1,073,152
+          LR: 6.85e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.6172 | Aux: 13.3934 | VRAM: 1.6GB
+[07:22:23] Step 00140 | 3.03 global steps/s | 6.1 local passes/s
+          Tok/s: 24,835 (GPU) | 24,835 (Total) | Total Trained: 1,155,072
+          LR: 6.73e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.0314 | Aux: 13.1234 | VRAM: 1.6GB
+[07:22:26] Step 00150 | 3.03 global steps/s | 6.1 local passes/s
+          Tok/s: 24,817 (GPU) | 24,817 (Total) | Total Trained: 1,236,992
+          LR: 6.58e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.3151 | Aux: 13.4043 | VRAM: 1.6GB
+
+--- Validation at Step 150 | Val Loss: 6.5173 ---
+Generating Eval Samples...
+[transformers] Ignoring clean_up_tokenization_spaces=True for BPE tokenizer TokenizersBackend. The clean_up_tokenization post-processing step is designed for WordPiece tokenizers and is destructive for BPE (it strips spaces before punctuation). Set clean_up_tokenization_spaces=False to suppress this warning, or set clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output=True to force cleanup anyway.
+Prompt: The most important rule of debugging is
+Output: The most important rule of debugging is to a feelings to a loss.
+
+In the relationship, the freedom on the first to in the comprehensive of the, so a ability for the sample effects- issues, her surface or modern form, is different— rather for only, or a responsible, and a effects, and an film is not learn's depend of the following simple of a best's data.
+
+When the current theall.
+
+**ceser the key and environmental M integrating equilibrium.
+
+**Here
+
+The business is the given of the best 10 are not required?
+
+4. ** What is the conflicts user reading, it are
+------------------------------
+Prompt: def calculate_pid(error, integral, derivative):
+Output: def calculate_pid(error, integral, derivative):
+        return
+    # They a new urban # the truth;
+       
+        #\( footage.1,
+    }
+
+**Interviewer/
+   3.v = \)
+
+ Understanding.g "3frac
+
+
+
+ in
+
+###Examples:**
+
+** alphabet is a original game, is add \( \ - A a)1\]
+
+-re, the O - 1,
+
+**Output:**
+
+**ots ( IO2)
+
+**Interview**: How can be a given results on the the time.
+
+3.import
+
+**� like more-
+------------------------------
+Prompt: As Diluc watched the rain drip down the window,
+Output: As Diluc watched the rain drip down the window, and the following interpretation of the integers of a language.
+
+#
+� The original real argument, they’s available of different high- storing example.
+
+2. **Generally
+
+You can be having used to, and the supply f(f[5 ` not following different` does not and a of the line. It is a communityt.
+
+### prices:
+
+
+
+A:
+
+
+'s following benefits `\`.
+
+The print -1) \(\) do the following production the case of the� and the prep are Ce.
+
+**no:**
+
+------------------------------
+Prompt: As Neil walked down the hallway to his Gundam, 
+Output: As Neil walked down the hallway to his Gundam, ; thes sentence of the game is as a amount of the delivered by the results, with a very invalid world of the origin. For variation, the elastic game is information with a lifestyle, and workshop for place.
+
+###AY
+
+---
+
+** fewer the motion-Refer, we is that your option, multiple.
+
+- ** Versus
+
+The best C:
+
+- ** Victor TU
+
+Teacher: A history and I’s un Every necessary- recessioning the commercial do they also be just the best may be moving, offering using arap competitive, and the given employment in the following
+------------------------------
+
+>>> NEW BEST val loss 6.5173 at step 150 -> saved to vesper_linear_checkpoints_lab_small/step_best
+    Total tokens trained: 1,236,992
+
+[07:22:50] Step 00160 | 2.84 global steps/s | 5.7 local passes/s
+          Tok/s: 23,280 (GPU) | 23,280 (Total) | Total Trained: 1,318,912
+          LR: 6.40e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.6722 | Aux: 14.3312 | VRAM: 1.0GB
+[07:22:53] Step 00170 | 3.01 global steps/s | 6.0 local passes/s
+          Tok/s: 24,626 (GPU) | 24,626 (Total) | Total Trained: 1,400,832
+          LR: 6.19e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.6032 | Aux: 13.8524 | VRAM: 1.0GB
+[07:22:57] Step 00180 | 2.98 global steps/s | 6.0 local passes/s
+          Tok/s: 24,452 (GPU) | 24,452 (Total) | Total Trained: 1,482,752
+          LR: 5.96e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 8.1682 | Aux: 15.0819 | VRAM: 1.0GB
+[07:23:00] Step 00190 | 2.98 global steps/s | 6.0 local passes/s
+          Tok/s: 24,374 (GPU) | 24,374 (Total) | Total Trained: 1,564,672
+          LR: 5.70e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.1455 | Aux: 13.0088 | VRAM: 1.0GB
+[07:23:03] Step 00200 | 2.95 global steps/s | 5.9 local passes/s
+          Tok/s: 24,200 (GPU) | 24,200 (Total) | Total Trained: 1,646,592
+          LR: 5.43e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.6791 | Aux: 12.8510 | VRAM: 1.0GB
+[07:23:07] Step 00210 | 2.94 global steps/s | 5.9 local passes/s
+          Tok/s: 24,113 (GPU) | 24,113 (Total) | Total Trained: 1,728,512
+          LR: 5.13e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.1949 | Aux: 14.2570 | VRAM: 1.0GB
+[07:23:11] Step 00220 | 2.58 global steps/s | 5.2 local passes/s
+          Tok/s: 21,153 (GPU) | 21,153 (Total) | Total Trained: 1,810,432
+          LR: 4.82e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.0824 | Aux: 15.4934 | VRAM: 1.0GB
+[07:23:14] Step 00230 | 2.86 global steps/s | 5.7 local passes/s
+          Tok/s: 23,411 (GPU) | 23,411 (Total) | Total Trained: 1,892,352
+          LR: 4.50e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.5410 | Aux: 15.0998 | VRAM: 1.0GB
+[07:23:18] Step 00240 | 2.77 global steps/s | 5.5 local passes/s
+          Tok/s: 22,690 (GPU) | 22,690 (Total) | Total Trained: 1,974,272
+          LR: 4.18e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.2588 | Aux: 13.3772 | VRAM: 1.0GB
+[07:23:21] Step 00250 | 2.76 global steps/s | 5.5 local passes/s
+          Tok/s: 22,573 (GPU) | 22,573 (Total) | Total Trained: 2,056,192
+          LR: 3.85e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.2694 | Aux: 13.8344 | VRAM: 1.0GB
+[07:23:25] Step 00260 | 2.75 global steps/s | 5.5 local passes/s
+          Tok/s: 22,565 (GPU) | 22,565 (Total) | Total Trained: 2,138,112
+          LR: 3.52e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 5.9998 | Aux: 13.8978 | VRAM: 1.0GB
+[07:23:29] Step 00270 | 2.59 global steps/s | 5.2 local passes/s
+          Tok/s: 21,187 (GPU) | 21,187 (Total) | Total Trained: 2,220,032
+          LR: 3.20e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.3194 | Aux: 13.2557 | VRAM: 1.0GB
+[07:23:33] Step 00280 | 2.34 global steps/s | 4.7 local passes/s
+          Tok/s: 19,147 (GPU) | 19,147 (Total) | Total Trained: 2,301,952
+          LR: 2.88e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.3672 | Aux: 12.6989 | VRAM: 1.0GB
+[07:23:37] Step 00290 | 2.73 global steps/s | 5.5 local passes/s
+          Tok/s: 22,372 (GPU) | 22,372 (Total) | Total Trained: 2,383,872
+          LR: 2.57e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.4697 | Aux: 13.0486 | VRAM: 1.0GB
+[07:23:41] Step 00300 | 2.62 global steps/s | 5.2 local passes/s
+          Tok/s: 21,448 (GPU) | 21,448 (Total) | Total Trained: 2,465,792
+          LR: 2.28e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 5.5051 | Aux: 14.6176 | VRAM: 1.0GB
+
+--- Validation at Step 300 | Val Loss: 6.0353 ---
+Generating Eval Samples...
+Prompt: The most important rule of debugging is
+Output: The most important rule of debugging is an Z ⊃ C
+
+In the columns are lower than possible base' of the other threat.
+
+2. **In a painter of day from the `x(/x) is not the given choice:
+
+1. **I, and The equation's numbers that is defined as "Mark|, x, 2, 4, SP, C,ing(1,1,3,1, 2,3, 1, 1, -7, C, 0, polynomial), and ≤ C() + 0, this would keep to some same user example.
+
+Problem:
+```
+
+**
+------------------------------
+Prompt: def calculate_pid(error, integral, derivative):
+Output: def calculate_pid(error, integral, derivative):
+    def __ 0, std::string, 'error << std::string) {
+        return.max(int_list)
+            'http.vector("file_val = def std::stringtimes "int::vector_rep):
+                not left(size_2)
+        print(self)
+        n =out(Exception)
+        }
+        if {
+            std::string (type_ separately, std::string(3, operations_n, characters_path, k, 1, "
+        if best_count_set = 0
+            # understand $[s] + x][s[i] = _;
+       
+------------------------------
+Prompt: As Diluc watched the rain drip down the window,
+Output: As Diluc watched the rain drip down the window, and the other flexibility in her, the performance is broad, and a results.
+
+The memoryer are machine, that of the effect.
+
+Teacher: Understanding your message, you can be used to use a dis development.
+
+From the safety with the small other liability or students, your category are our templates.
+
+The flavor of the condition of these price, it can be a central answer, and the personal expectations:
+
+the dependent policy, so it is essential to the same string.
+
+Student:
+#include <string>
+
+Teacher:  
+
+**Interviewer:** What is the
+------------------------------
+Prompt: As Neil walked down the hallway to his Gundam, 
+Output: As Neil walked down the hallway to his Gundam,  # v& 1.3, c.3.5.\(4, p.8,1, = 1, o =e.5, 3, 0, 0, 3) \)
+
+class You can be a)
+
+In the High-Optim com.
+
+When the final game is more than \( 1,
+#include <
+                # 4.4.S.4.6.3.5.Ins.3.0, 3.5. 1.1.4, 2.5, 0.\text{it-3} = 0.total = $1
+------------------------------
+
+>>> NEW BEST val loss 6.0353 at step 300 -> saved to vesper_linear_checkpoints_lab_small/step_best
+    Total tokens trained: 2,465,792
+
+[07:24:02] Step 00310 | 2.99 global steps/s | 6.0 local passes/s
+          Tok/s: 24,490 (GPU) | 24,490 (Total) | Total Trained: 2,547,712
+          LR: 2.00e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.1795 | Aux: 13.1497 | VRAM: 1.0GB
+[07:24:05] Step 00320 | 2.86 global steps/s | 5.7 local passes/s
+          Tok/s: 23,409 (GPU) | 23,409 (Total) | Total Trained: 2,629,632
+          LR: 1.74e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 5.7647 | Aux: 13.1787 | VRAM: 1.0GB
+[07:24:09] Step 00330 | 2.83 global steps/s | 5.7 local passes/s
+          Tok/s: 23,150 (GPU) | 23,150 (Total) | Total Trained: 2,711,552
+          LR: 1.51e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 5.9247 | Aux: 13.1285 | VRAM: 1.0GB
+[07:24:13] Step 00340 | 2.45 global steps/s | 4.9 local passes/s
+          Tok/s: 20,077 (GPU) | 20,077 (Total) | Total Trained: 2,793,472
+          LR: 1.30e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.3496 | Aux: 12.3403 | VRAM: 1.0GB
+[07:24:17] Step 00350 | 2.66 global steps/s | 5.3 local passes/s
+          Tok/s: 21,759 (GPU) | 21,759 (Total) | Total Trained: 2,875,392
+          LR: 1.12e-04 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.3140 | Aux: 14.1246 | VRAM: 1.0GB
+[07:24:20] Step 00360 | 2.66 global steps/s | 5.3 local passes/s
+          Tok/s: 21,768 (GPU) | 21,768 (Total) | Total Trained: 2,957,312
+          LR: 9.72e-05 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 6.0162 | Aux: 13.6601 | VRAM: 1.0GB
+[07:24:24] Step 00370 | 2.61 global steps/s | 5.2 local passes/s
+          Tok/s: 21,396 (GPU) | 21,396 (Total) | Total Trained: 3,039,232
+          LR: 8.54e-05 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 5.9957 | Aux: 13.5773 | VRAM: 1.0GB
+[07:24:28] Step 00380 | 2.53 global steps/s | 5.1 local passes/s
+          Tok/s: 20,747 (GPU) | 20,747 (Total) | Total Trained: 3,121,152
+          LR: 7.69e-05 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 5.6744 | Aux: 13.6285 | VRAM: 1.0GB
+[07:24:32] Step 00390 | 2.34 global steps/s | 4.7 local passes/s
+          Tok/s: 19,133 (GPU) | 19,133 (Total) | Total Trained: 3,203,072
+          LR: 7.17e-05 | B2: 0.9943 | Seq: 1024 | Phase: 1 | CE Loss: 5.9885 | Aux: 14.1603 | VRAM: 1.0GB
