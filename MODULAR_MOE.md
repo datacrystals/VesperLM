@@ -134,6 +134,26 @@ add_expert(expert_ckpt, passport_init=None, layer_ids=None) -> expert_id
    only new tensors get fresh optimizer state. The training loop then
    continues with the larger library.
 
+### 4.4a Multi-expert insertion — validated protocol (D55, swarm2)
+
+Independent reject training is NOT sufficient when several plug-ins coexist:
+their passport rows cluster (each was trained only against the base rows), so
+top-2 becomes {owner, other-plug-in} and cross-talk blows the ≤0.3 gate
+(swarm1 fail: code↔math ≈ 0.5). Rows can only be partitioned in a model where
+they coexist. The validated protocol (all 9 gates pass at t0; lab/imported/swarm2/):
+
+1. Train each expert independently with contrastive reject (§4.5) as before.
+2. Insert experts **sequentially**, ~100 router-only recalibration steps
+   (passport rows only, everything else frozen) between insertions.
+3. Final **joint calibration**: ~800 router-only steps over all domains with a
+   **mutual-exclusion target** — on each domain, the owner passport row gets
+   routing mass **0.55**, the original base experts share 0.45, and every other
+   plug-in row gets exactly zero. owner_mass is the dial: 0.5 under-allocates
+   the weakest owner, ≥0.6 leaks cross-domain. 0.55 is the operating point.
+
+Cost ≈ 5× the phase-2 wall of independent plug-in (all calibration; expert
+training itself is unchanged and still fully parallel across machines).
+
 ### 4.5 Geometry bridge: per-expert adapters
 
 The adapters are the fix from section 3. At plug-in time: freeze spine, expert
