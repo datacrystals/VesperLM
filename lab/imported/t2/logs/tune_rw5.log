@@ -1,0 +1,31 @@
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+model: tiny_agent_k on cuda  params=120.47M  layer_types=['kda', 'kda', 'kda', 'mla', 'kda', 'kda', 'kda', 'mla']
+phase A: 800 steps lr=0.0006 | phase B: 500 steps lr=0.003 reject_w=5.0 | eval batches=8
+[phase A] step 1/800  ce=11.1960  aux=16.0009  tok/s=1,448
+[phase A] step 100/800  ce=7.2185  aux=16.0039  tok/s=64,337
+[phase A] step 200/800  ce=6.8155  aux=16.0029  tok/s=81,763
+[phase A] step 300/800  ce=6.4029  aux=16.0031  tok/s=89,840
+[phase A] step 400/800  ce=6.2149  aux=15.9994  tok/s=94,290
+[phase A] step 500/800  ce=6.2923  aux=16.0017  tok/s=97,205
+[phase A] step 600/800  ce=6.0599  aux=16.0000  tok/s=99,398
+[phase A] step 700/800  ce=5.6585  aux=16.0003  tok/s=101,067
+[phase A] step 800/800  ce=5.7728  aux=16.0030  tok/s=102,331
+[phase A] verify_ce=5.789062  saved checkpoint -> /root/phaseA_t2.pt
+[phase B] add_expert() -> idx=4 on 8 MoE layers, passports now (5, 64)
+[phase B] step 1/500  ce=9.0027  router_ce=1.6116  reject_ce=1.6149  tok/s=102,079
+[phase B] step 100/500  ce=7.1580  router_ce=1.5319  reject_ce=1.6064  tok/s=109,581
+[phase B] step 200/500  ce=7.1559  router_ce=1.4768  reject_ce=1.6067  tok/s=109,710
+[phase B] step 300/500  ce=6.9405  router_ce=1.4247  reject_ce=1.5923  tok/s=109,972
+[phase B] step 400/500  ce=6.9375  router_ce=1.3507  reject_ce=1.5921  tok/s=110,137
+[phase B] step 500/500  ce=6.7537  router_ce=1.3151  reject_ce=1.5928  tok/s=110,074
+
+=== plugin_expert_test_t2 report ===
+new expert idx: 4   layers: ['kda', 'kda', 'kda', 'mla', 'kda', 'kda', 'kda', 'mla']
+phaseA_ce_final:              5.7728   (tok/s 102,330)
+util domainA per-layer:       ['0.3496', '0.3439', '0.3318', '0.2182', '0.3234', '0.3211', '0.2759', '0.3015']  mean=0.3082 (want < 0.3)
+util domainB per-layer:       ['0.8460', '0.7901', '0.8279', '0.7758', '0.7814', '0.7232', '0.6987', '0.7184']  mean=0.7702 (want > 0.5)
+ce_domainB_with_plugin:       7.1632
+ce_domainB_without_plugin:    8.7253
+ce_domainA_with_plugin:       6.9431  (damage check vs phaseA 5.7728)
+PASS: False
+wrote /root/plugin_t2_rw5.json

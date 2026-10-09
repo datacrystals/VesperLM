@@ -34,5 +34,6 @@ Pretrain/Log*.txt
 !lab/experiments/
 !lab/experiments/**
 !lab/**/*.json
+!lab/**/*.log
 !lab/**/.gitkeep
 !**/queue/.gitkeep

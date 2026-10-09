@@ -1,0 +1,23 @@
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+model: tiny_agent_k on cuda  params=120.47M  layer_types=['kda', 'kda', 'kda', 'mla', 'kda', 'kda', 'kda', 'mla']
+phase A: 800 steps lr=0.0006 | phase B: 500 steps lr=0.003 reject_w=9.0 | eval batches=8
+[phase A] RELOADED /root/phaseA_t2.pt  phaseA_ce_final=5.7728  replayed 800 draws
+[phase A] verify_ce=5.789062  saved=5.7890625  delta=0.000000  MATCH
+[phase B] add_expert() -> idx=4 on 8 MoE layers, passports now (5, 64)
+[phase B] step 1/500  ce=9.0027  router_ce=1.6116  reject_ce=1.6149  tok/s=2,617
+[phase B] step 100/500  ce=7.1580  router_ce=1.6121  reject_ce=1.5929  tok/s=78,701
+[phase B] step 200/500  ce=7.1559  router_ce=1.5814  reject_ce=1.5884  tok/s=92,141
+[phase B] step 300/500  ce=6.9405  router_ce=1.5548  reject_ce=1.5737  tok/s=97,720
+[phase B] step 400/500  ce=6.9375  router_ce=1.5134  reject_ce=1.5681  tok/s=100,784
+[phase B] step 500/500  ce=6.7537  router_ce=1.4921  reject_ce=1.5650  tok/s=102,721
+
+=== plugin_expert_test_t2 report ===
+new expert idx: 4   layers: ['kda', 'kda', 'kda', 'mla', 'kda', 'kda', 'kda', 'mla']
+phaseA_ce_final:              5.7728   (tok/s 102,330)
+util domainA per-layer:       ['0.2677', '0.2145', '0.1963', '0.1178', '0.1392', '0.1319', '0.1612', '0.1403']  mean=0.1711 (want < 0.3)
+util domainB per-layer:       ['0.7928', '0.6522', '0.6815', '0.6379', '0.6600', '0.5188', '0.5128', '0.4758']  mean=0.6165 (want > 0.5)
+ce_domainB_with_plugin:       7.2853
+ce_domainB_without_plugin:    8.7253
+ce_domainA_with_plugin:       6.6644  (damage check vs phaseA 5.7728)
+PASS: True
+wrote /root/plugin_t2_rw9.json

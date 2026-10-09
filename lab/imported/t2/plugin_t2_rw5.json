@@ -1,0 +1,53 @@
+{
+  "config": "tiny_agent_k",
+  "params_m": 120.469,
+  "layer_types": [
+    "kda",
+    "kda",
+    "kda",
+    "mla",
+    "kda",
+    "kda",
+    "kda",
+    "mla"
+  ],
+  "new_expert_idx": 4,
+  "phaseA_steps": 800,
+  "phaseA_lr": 0.0006,
+  "phaseA_ce_final": 5.772838115692139,
+  "phaseA_verify_ce": 5.789062,
+  "phaseA_mode": "train",
+  "phaseA_tok_s": 102330.2,
+  "phaseB_steps": 500,
+  "phaseB_lr": 0.003,
+  "reject_w": 5.0,
+  "router_ce_w": 0.1,
+  "eval_batches": 8,
+  "util_expert_idx_domainA_per_layer": [
+    0.3496,
+    0.3439,
+    0.3318,
+    0.2182,
+    0.3234,
+    0.3211,
+    0.2759,
+    0.3015
+  ],
+  "util_expert_idx_domainB_per_layer": [
+    0.846,
+    0.7901,
+    0.8279,
+    0.7758,
+    0.7814,
+    0.7232,
+    0.6987,
+    0.7184
+  ],
+  "util_mean_domainA": 0.3082,
+  "util_mean_domainB": 0.7702,
+  "ce_domainB_with_plugin": 7.1632,
+  "ce_domainB_without_plugin": 8.7253,
+  "ce_domainA_with_plugin": 6.9431,
+  "phaseA_ce_series_note": "ce printed every 100 steps",
+  "pass": false
+}
