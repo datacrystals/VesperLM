@@ -1,0 +1,45 @@
+{
+  "config": "lab_small",
+  "params_m": 33.108,
+  "layer_types": [
+    "kda",
+    "kda",
+    "kda",
+    "mla",
+    "kda",
+    "kda"
+  ],
+  "new_expert_idx": 4,
+  "phaseA_steps": 600,
+  "phaseA_lr": 0.0007,
+  "phaseA_ce_final": 6.011049747467041,
+  "phaseA_tok_s": 33732.3,
+  "phaseB_steps": 600,
+  "phaseB_lr": 0.003,
+  "reject_w": 10.0,
+  "router_ce_w": 0.1,
+  "eval_batches": 8,
+  "util_expert_idx_domainA_per_layer": [
+    0.3202,
+    0.2099,
+    0.1355,
+    0.1514,
+    0.1814,
+    0.1976
+  ],
+  "util_expert_idx_domainB_per_layer": [
+    0.7877,
+    0.7005,
+    0.7359,
+    0.7614,
+    0.8589,
+    0.8626
+  ],
+  "util_mean_domainA": 0.1993,
+  "util_mean_domainB": 0.7845,
+  "ce_domainB_with_plugin": 7.4664,
+  "ce_domainB_without_plugin": 8.6288,
+  "ce_domainA_with_plugin": 6.3906,
+  "phaseA_ce_series_note": "ce printed every 100 steps",
+  "pass": true
+}

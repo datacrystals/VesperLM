@@ -1,0 +1,10 @@
+{
+  "id": "t1s-topk-baseline",
+  "tier": "t1",
+  "baseline": true,
+  "hypothesis": "top-k baseline at 33M, seed 2, same 1590-step recipe as t1",
+  "config": "lab_small",
+  "env": {"VESPER_SEED": "2"},
+  "budget_minutes": 120,
+  "mutation_of": "t1-topk-baseline"
+}

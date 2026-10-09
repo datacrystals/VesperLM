@@ -1,0 +1,39 @@
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+base model: lab_tiny  params=11.28M  layer_types=['kda', 'kda', 'kda', 'mla']
+[phase 1] base train 400 steps on fineweb
+  step 1/400  ce=11.1121  tok/s=677
+  step 100/400  ce=7.3828  tok/s=26,124
+  step 200/400  ce=6.9679  tok/s=32,095
+  step 300/400  ce=6.5596  tok/s=35,064
+  step 400/400  ce=6.5004  tok/s=37,367
+  base ce=6.5004  tok/s=37,367
+[phase 2] train three plug-in experts separately (rw=15.0, 300 steps each)
+  -- expert 4 <- code --
+    [exp 4] step 1/300  ce=9.9537  router_ce=1.6099  reject_ce=1.6101  tok/s=47,302
+    [exp 4] step 100/300  ce=8.8347  router_ce=1.5477  reject_ce=1.6023  tok/s=94,296
+    [exp 4] step 200/300  ce=8.1924  router_ce=1.5323  reject_ce=1.5890  tok/s=98,651
+    [exp 4] step 300/300  ce=8.4910  router_ce=1.5075  reject_ce=1.5804  tok/s=88,609
+  -- expert 5 <- finemath --
+    [exp 4] step 1/300  ce=7.8275  router_ce=1.6105  reject_ce=1.6101  tok/s=65,811
+    [exp 4] step 100/300  ce=6.9025  router_ce=1.5931  reject_ce=1.6013  tok/s=91,725
+    [exp 4] step 200/300  ce=7.1636  router_ce=1.5515  reject_ce=1.5893  tok/s=67,614
+    [exp 4] step 300/300  ce=7.1945  router_ce=1.5608  reject_ce=1.5829  tok/s=59,861
+  -- expert 6 <- wikipedia --
+    [exp 4] step 1/300  ce=7.8062  router_ce=1.6106  reject_ce=1.6102  tok/s=38,447
+    [exp 4] step 100/300  ce=6.7661  router_ce=1.6174  reject_ce=1.6021  tok/s=48,894
+    [exp 4] step 200/300  ce=6.9512  router_ce=1.6175  reject_ce=1.5939  tok/s=48,788
+    [exp 4] step 300/300  ce=6.9342  router_ce=1.6246  reject_ce=1.5884  tok/s=48,697
+[phase 3] assemble plug-ins into frozen base
+  experts now: 7  passports: (7, 64)
+
+=== swarm_multiplug_t0 report ===
+base ce=6.5004 tok/s=37,367 | experts=7
+fineweb   own=None cross_max=None util={'4': 0.2468, '5': 0.236, '6': 0.1457} ce_with=6.6169 ce_masked=None delta=None
+code      own=0.7211 cross_max=0.5137 util={'4': 0.7211, '5': 0.5137, '6': 0.1276} ce_with=8.6756 ce_masked=9.3526 delta=0.677
+finemath  own=0.5205 cross_max=0.4774 util={'4': 0.4774, '5': 0.5205, '6': 0.1698} ce_with=7.3655 ce_masked=7.4694 delta=0.1039
+wikipedia own=0.1688 cross_max=0.3158 util={'4': 0.3158, '5': 0.2878, '6': 0.1688} ce_with=7.0749 ce_masked=7.121 delta=0.0461
+gate code      own_ok=True cross_ok=False ce_ok=True -> False
+gate finemath  own_ok=True cross_ok=False ce_ok=True -> False
+gate wikipedia own_ok=False cross_ok=False ce_ok=True -> False
+OVERALL PASS: False
+wrote /root/swarm_multiplug_t0.json

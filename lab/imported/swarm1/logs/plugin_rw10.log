@@ -1,0 +1,29 @@
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+model: lab_small on cuda  params=33.11M  layer_types=['kda', 'kda', 'kda', 'mla', 'kda', 'kda']
+phase A: 600 steps lr=0.0007 | phase B: 600 steps lr=0.003 reject_w=10.0 | eval batches=8
+[phase A] step 1/600  ce=11.1368  aux=12.0001  tok/s=127
+[phase A] step 100/600  ce=7.1328  aux=12.0017  tok/s=9,952
+[phase A] step 200/600  ce=6.7364  aux=12.0012  tok/s=16,395
+[phase A] step 300/600  ce=6.3350  aux=12.0031  tok/s=21,374
+[phase A] step 400/600  ce=6.1437  aux=12.0022  tok/s=25,981
+[phase A] step 500/600  ce=6.2437  aux=12.0016  tok/s=30,255
+[phase A] step 600/600  ce=6.0110  aux=12.0007  tok/s=33,732
+[phase B] add_expert() -> idx=4 on 6 MoE layers, passports now (5, 64)
+[phase B] step 1/600  ce=8.9236  router_ce=1.6127  reject_ce=1.6120  tok/s=103,183
+[phase B] step 100/600  ce=7.4568  router_ce=1.5609  reject_ce=1.5973  tok/s=83,871
+[phase B] step 200/600  ce=7.3619  router_ce=1.5121  reject_ce=1.5863  tok/s=81,839
+[phase B] step 300/600  ce=7.1002  router_ce=1.4813  reject_ce=1.5847  tok/s=81,193
+[phase B] step 400/600  ce=7.5259  router_ce=1.4571  reject_ce=1.5687  tok/s=81,882
+[phase B] step 500/600  ce=7.2455  router_ce=1.3911  reject_ce=1.5690  tok/s=83,050
+[phase B] step 600/600  ce=7.3287  router_ce=1.3399  reject_ce=1.5756  tok/s=85,263
+
+=== plugin_expert_test_t1 report ===
+new expert idx: 4   layers: ['kda', 'kda', 'kda', 'mla', 'kda', 'kda']
+phaseA_ce_final:              6.0110   (tok/s 33,732)
+util domainA per-layer:       ['0.3202', '0.2099', '0.1355', '0.1514', '0.1814', '0.1976']  mean=0.1993 (want < 0.3)
+util domainB per-layer:       ['0.7877', '0.7005', '0.7359', '0.7614', '0.8589', '0.8626']  mean=0.7845 (want > 0.5)
+ce_domainB_with_plugin:       7.4664
+ce_domainB_without_plugin:    8.6288
+ce_domainA_with_plugin:       6.3906  (damage check vs phaseA 6.0110)
+PASS: True
+wrote /root/plugin_t1_rw10.json

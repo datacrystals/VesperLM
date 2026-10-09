@@ -1,0 +1,5 @@
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+[runner] claimed t1s-passport (lab_small)
+[runner] claimed t1s-topk-baseline (lab_small)
+[runner] t1s-passport rc=0 stopped=None val=5.9677 -> t1s-passport.json
+[runner] t1s-topk-baseline rc=0 stopped=None val=6.1159 -> t1s-topk-baseline.json

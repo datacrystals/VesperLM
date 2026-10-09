@@ -1,0 +1,65 @@
+{
+  "config": "lab_tiny",
+  "mode": "expand_4to6_exact",
+  "steps1": 300,
+  "steps2": 300,
+  "ce_after_phase1": 6.5596,
+  "ce_after_phase2": 6.392,
+  "val_loss_final": 6.3508,
+  "phase1_tok_s": 34793.8,
+  "phase2_tok_s": 59278.4,
+  "layer_types": [
+    "kda",
+    "kda",
+    "kda",
+    "mla"
+  ],
+  "num_experts_final": 6,
+  "top_k_final": 4,
+  "surgery": [
+    {
+      "layer": 0,
+      "old_experts": 4,
+      "new_experts": 6,
+      "old_top_k": 2,
+      "new_top_k": 4,
+      "cloned_from": [
+        0,
+        1
+      ]
+    },
+    {
+      "layer": 1,
+      "old_experts": 4,
+      "new_experts": 6,
+      "old_top_k": 2,
+      "new_top_k": 4,
+      "cloned_from": [
+        0,
+        1
+      ]
+    },
+    {
+      "layer": 2,
+      "old_experts": 4,
+      "new_experts": 6,
+      "old_top_k": 2,
+      "new_top_k": 4,
+      "cloned_from": [
+        0,
+        1
+      ]
+    },
+    {
+      "layer": 3,
+      "old_experts": 4,
+      "new_experts": 6,
+      "old_top_k": 2,
+      "new_top_k": 4,
+      "cloned_from": [
+        0,
+        1
+      ]
+    }
+  ]
+}

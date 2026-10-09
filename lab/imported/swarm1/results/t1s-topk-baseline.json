@@ -1,0 +1,61 @@
+{
+  "id": "t1s-topk-baseline",
+  "tier": "t1",
+  "baseline": true,
+  "hypothesis": "top-k baseline at 33M, seed 2, same 1590-step recipe as t1",
+  "config": "lab_small",
+  "env": {
+    "VESPER_SEED": "2"
+  },
+  "budget_minutes": 120,
+  "mutation_of": "t1-topk-baseline",
+  "val_loss_final": 6.1159,
+  "val_loss_series": [
+    [
+      150,
+      7.0978
+    ],
+    [
+      300,
+      6.6484
+    ],
+    [
+      450,
+      6.5782
+    ],
+    [
+      600,
+      6.5127
+    ],
+    [
+      750,
+      6.3433
+    ],
+    [
+      900,
+      6.2487
+    ],
+    [
+      1050,
+      6.1079
+    ],
+    [
+      1200,
+      6.21
+    ],
+    [
+      1350,
+      6.2604
+    ],
+    [
+      1500,
+      6.1159
+    ]
+  ],
+  "ce_last": 5.9431,
+  "tok_s_avg": 64336.9,
+  "steps_done": 1590,
+  "seconds": 438.1,
+  "rc": 0,
+  "stopped": null
+}

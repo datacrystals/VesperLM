@@ -1,0 +1,20 @@
+{
+  "config": "lab_tiny",
+  "mode": "control",
+  "steps1": 300,
+  "steps2": 300,
+  "ce_after_phase1": 6.5596,
+  "ce_after_phase2": 6.3943,
+  "val_loss_final": 6.3516,
+  "phase1_tok_s": 50314.4,
+  "phase2_tok_s": 72919.1,
+  "layer_types": [
+    "kda",
+    "kda",
+    "kda",
+    "mla"
+  ],
+  "num_experts_final": 4,
+  "top_k_final": 2,
+  "surgery": null
+}

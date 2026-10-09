@@ -1,0 +1,22 @@
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+model: lab_tiny  params=11.28M  layer_types=['kda', 'kda', 'kda', 'mla']  control=False
+[phase 1] 300 steps
+  step 1/300  ce=11.1121  tok/s=663
+  step 100/300  ce=7.3828  tok/s=25,752
+  step 200/300  ce=6.9679  tok/s=31,800
+  step 300/300  ce=6.5596  tok/s=34,794
+[surgery] Growth exact-upcycle 4 -> 6 experts, top_k 2 -> 4
+  layers updated: 4  experts now: 6  top_k now: 4
+  params after expand: 12.46M
+[phase 2] 300 steps
+  step 1/300  ce=6.9207  tok/s=32,003
+  step 100/300  ce=6.5558  tok/s=45,664
+  step 200/300  ce=6.6434  tok/s=58,367
+  step 300/300  ce=6.3920  tok/s=59,278
+[eval] final val_loss=6.3508
+
+=== swarm_expand_t0 (expand_4to6_exact) ===
+ce after phase1:  6.5596
+ce after phase2:  6.3920
+val_loss_final:   6.3508
+wrote /root/swarm_expand_t0.json

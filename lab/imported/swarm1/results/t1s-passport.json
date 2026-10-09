@@ -1,0 +1,62 @@
+{
+  "id": "t1s-passport",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "passport advantage at 33M holds at seed 2 (t1 was +1.95%, unseeded)",
+  "config": "lab_small",
+  "env": {
+    "VESPER_ROUTER_TYPE": "passport",
+    "VESPER_SEED": "2"
+  },
+  "budget_minutes": 120,
+  "mutation_of": "t1-passport",
+  "val_loss_final": 5.9677,
+  "val_loss_series": [
+    [
+      150,
+      7.0518
+    ],
+    [
+      300,
+      6.5683
+    ],
+    [
+      450,
+      6.4889
+    ],
+    [
+      600,
+      6.4072
+    ],
+    [
+      750,
+      6.2225
+    ],
+    [
+      900,
+      6.125
+    ],
+    [
+      1050,
+      5.9708
+    ],
+    [
+      1200,
+      6.0689
+    ],
+    [
+      1350,
+      6.1264
+    ],
+    [
+      1500,
+      5.9677
+    ]
+  ],
+  "ce_last": 5.8152,
+  "tok_s_avg": 62905.2,
+  "steps_done": 1590,
+  "seconds": 436.6,
+  "rc": 0,
+  "stopped": null
+}
