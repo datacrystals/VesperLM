@@ -1,0 +1,10 @@
+{
+  "id": "t0r-passport",
+  "tier": "t0",
+  "baseline": false,
+  "hypothesis": "passport router on real data",
+  "config": "lab_tiny",
+  "env": {"VESPER_ROUTER_TYPE":"passport"},
+  "budget_minutes": 30,
+  "mutation_of": null
+}

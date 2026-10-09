@@ -1,0 +1,10 @@
+{
+  "id": "t0r-passport-dropout25",
+  "tier": "t0",
+  "baseline": false,
+  "hypothesis": "0.25 dropout on real data",
+  "config": "lab_tiny",
+  "env": {"VESPER_ROUTER_TYPE":"passport","VESPER_ROUTER_EXPERT_DROPOUT":"0.25"},
+  "budget_minutes": 30,
+  "mutation_of": null
+}
