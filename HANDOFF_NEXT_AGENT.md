@@ -10,6 +10,11 @@ before its 7-day stale expiry. Carry both directives forward through compactions
 lab/FAILURES.md (entry template + fallback tree live there), pick the next
 untried branch (cheapest first), and queue it in the same heartbeat cycle.
 Only interrupt the user for budget or architecture-direction decisions.
+(4) DESIGN SPECS approved 2026-10-09: MODULAR_MOE.md §8 (episodic memory as
+experts, gates G0-G4, G0 done) and SUBSYSTEMS.md (drives/emotions control
+layer, gates E0-E4; E0 = telemetry instrumentation only, do it first and
+cheap). Build order: laptop farm queue → G1 → E0 can start anytime (logging
+only, no GPU).
 
 ---
 
