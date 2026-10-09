@@ -1,0 +1,116 @@
+{
+  "protocol": "d",
+  "config": "lab_tiny",
+  "params_m": 11.281,
+  "layer_types": [
+    "kda",
+    "kda",
+    "kda",
+    "mla"
+  ],
+  "base_steps": 400,
+  "base_ce": 6.493,
+  "base_tok_s": 86083.0,
+  "exp_steps": 300,
+  "cal_steps": 0,
+  "reject_w": 15.0,
+  "phase2_seconds": 74.1,
+  "plug_ids": {
+    "code": 4,
+    "finemath": 5,
+    "wikipedia": 6
+  },
+  "num_experts_final": 7,
+  "top_k_final": 2,
+  "purity": {
+    "fineweb": {
+      "util_per_plug": {
+        "4": 0.0656,
+        "5": 0.192,
+        "6": 0.2792
+      },
+      "own_expert": null,
+      "own_util": null,
+      "max_cross_util": null,
+      "ntok": 131072
+    },
+    "code": {
+      "util_per_plug": {
+        "4": 0.7383,
+        "5": 0.2871,
+        "6": 0.09
+      },
+      "own_expert": 4,
+      "own_util": 0.7383,
+      "max_cross_util": 0.2871,
+      "ntok": 131072
+    },
+    "finemath": {
+      "util_per_plug": {
+        "4": 0.2448,
+        "5": 0.5751,
+        "6": 0.1659
+      },
+      "own_expert": 5,
+      "own_util": 0.5751,
+      "max_cross_util": 0.2448,
+      "ntok": 131072
+    },
+    "wikipedia": {
+      "util_per_plug": {
+        "4": 0.0993,
+        "5": 0.2434,
+        "6": 0.4906
+      },
+      "own_expert": 6,
+      "own_util": 0.4906,
+      "max_cross_util": 0.2434,
+      "ntok": 131072
+    }
+  },
+  "ce": {
+    "fineweb": {
+      "ce_with_all_plugins": 6.759,
+      "ce_own_masked": null,
+      "ce_delta": null
+    },
+    "code": {
+      "ce_with_all_plugins": 8.7188,
+      "ce_own_masked": 9.4535,
+      "ce_delta": 0.7347
+    },
+    "finemath": {
+      "ce_with_all_plugins": 7.2213,
+      "ce_own_masked": 7.2756,
+      "ce_delta": 0.0543
+    },
+    "wikipedia": {
+      "ce_with_all_plugins": 7.201,
+      "ce_own_masked": 7.2685,
+      "ce_delta": 0.0674
+    }
+  },
+  "gates": {
+    "code": {
+      "own_ok": true,
+      "cross_ok": true,
+      "ce_ok": true,
+      "pass": true
+    },
+    "finemath": {
+      "own_ok": true,
+      "cross_ok": true,
+      "ce_ok": true,
+      "pass": true
+    },
+    "wikipedia": {
+      "own_ok": false,
+      "cross_ok": true,
+      "ce_ok": true,
+      "pass": false
+    }
+  },
+  "own_gate": 0.5,
+  "cross_gate": 0.3,
+  "pass": false
+}
