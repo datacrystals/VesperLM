@@ -1,0 +1,59 @@
+{
+  "id": "t1-topk-baseline",
+  "tier": "t1",
+  "baseline": true,
+  "hypothesis": "top-k router baseline at 33M scale on real data",
+  "config": "lab_small",
+  "env": {},
+  "budget_minutes": 120,
+  "mutation_of": "t0r-topk-baseline",
+  "val_loss_final": 6.2134,
+  "val_loss_series": [
+    [
+      150,
+      7.0779
+    ],
+    [
+      300,
+      6.7738
+    ],
+    [
+      450,
+      6.6196
+    ],
+    [
+      600,
+      6.4727
+    ],
+    [
+      750,
+      6.5187
+    ],
+    [
+      900,
+      6.3129
+    ],
+    [
+      1050,
+      6.1855
+    ],
+    [
+      1200,
+      6.3101
+    ],
+    [
+      1350,
+      6.2123
+    ],
+    [
+      1500,
+      6.2134
+    ]
+  ],
+  "ce_last": 5.9757,
+  "tok_s_avg": 72827.0,
+  "steps_done": 1590,
+  "seconds": 355.1,
+  "rc": 0,
+  "stopped": null
+}
