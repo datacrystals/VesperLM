@@ -1,0 +1,10 @@
+{
+  "id": "t1-dropout02-mb4-full",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "dropout 0.2 vs 0.1 at t1 scale, full 1600 steps on FIXED corpus \u2014 extends the 390-step tie (6.06 vs 6.04) to a full-budget comparison",
+  "config": "lab_small",
+  "env": {"VESPER_ROUTER_TYPE": "passport", "VESPER_SEED": "2", "VESPER_ROUTER_EXPERT_DROPOUT": "0.2", "VESPER_MICRO_BATCH": "4", "VESPER_ACCUM": "8"},
+  "budget_minutes": 120,
+  "mutation_of": "t1-dropout02-passport"
+}

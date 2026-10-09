@@ -64,6 +64,23 @@ a lucky pass.
   valid data. All pre-fix laptop results (t0-8expert, t1-dropout02) must be treated as void and
   re-baselined on the fixed corpus before any architecture conclusion is drawn from them.
 
+## 2026-10-09 — t1-dropout01-mb4-full / t1-dropout02-mb4-full — watch daemon claimed both lab_small re-baseline jobs at once (slots=2); both OOM'd on the 8GB 3070
+- Evidence: `lab/results/t1-dropout01-mb4-full.json.oom_race`, `lab/results/t1-dropout02-mb4-full.json.oom_race`
+  (rc=1, steps_done=0; `torch.OutOfMemoryError` in the dummy VRAM pre-alloc pass, each log blaming the
+  sibling trainer process for 3.9-5.3GB of the 7.67GB card).
+- Root cause: `lab/runner.py --slots 2` admits two concurrent `lab_small` jobs to one 8GB card; each job
+  peaks ~1-3.5GB alone but the pair exceeds capacity. Not a corpus, recipe, or model issue.
+- What it rules out: >1 concurrent `lab_small` job on this card. The experiments themselves were not
+  falsified — both passed serially on the fixed corpus (below).
+- Next tried: serial rerun via `--slots 1 --once`, one queue definition in `lab/queue/` at a time:
+  `t1-dropout01-mb4-full` val 5.139 and `t1-dropout02-mb4-full` val 5.216 (both 1590 steps, rc=0);
+  watch daemon restarted at `--slots 1` (was 2). Side finding from the rerun: the laptop-01 control
+  did NOT match cloud `t1s-passport` 5.9677 — it is ~0.8 lower at every eval (150: 6.504 vs 7.0518,
+  1500: 5.139 vs 5.9677), so cloud-vs-laptop absolute levels stay confounded (cause unknown; the
+  mb confound this control was meant to isolate did not explain it). The clean comparison is the
+  laptop 01-vs-02 delta: dropout 0.2 is +0.077 (1.5%) worse and a hair worse at all 10 evals —
+  no longer a tie at full length, though still small for a single seed each.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.
