@@ -1,0 +1,33 @@
+{
+  "id": "t0r-passport",
+  "tier": "t0",
+  "baseline": false,
+  "hypothesis": "passport router on real data",
+  "config": "lab_tiny",
+  "env": {
+    "VESPER_ROUTER_TYPE": "passport"
+  },
+  "budget_minutes": 30,
+  "mutation_of": null,
+  "val_loss_final": 6.9499,
+  "val_loss_series": [
+    [
+      100,
+      7.505
+    ],
+    [
+      200,
+      7.2108
+    ],
+    [
+      300,
+      6.9499
+    ]
+  ],
+  "ce_last": 6.8334,
+  "tok_s_avg": 15025.5,
+  "steps_done": 390,
+  "seconds": 175.6,
+  "rc": 0,
+  "stopped": null
+}

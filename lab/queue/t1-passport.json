@@ -1,0 +1,10 @@
+{
+  "id": "t1-passport",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "passport router retains its t0 advantage (+2.7% val) at 33M scale",
+  "config": "lab_small",
+  "env": {"VESPER_ROUTER_TYPE": "passport"},
+  "budget_minutes": 120,
+  "mutation_of": "t0r-passport"
+}

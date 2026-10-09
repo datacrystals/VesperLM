@@ -1,0 +1,34 @@
+{
+  "id": "t0r-passport-dim128",
+  "tier": "t0",
+  "baseline": false,
+  "hypothesis": "wider passports on real data",
+  "config": "lab_tiny",
+  "env": {
+    "VESPER_ROUTER_TYPE": "passport",
+    "VESPER_PASSPORT_DIM": "128"
+  },
+  "budget_minutes": 30,
+  "mutation_of": null,
+  "val_loss_final": 7.0364,
+  "val_loss_series": [
+    [
+      100,
+      7.5256
+    ],
+    [
+      200,
+      7.152
+    ],
+    [
+      300,
+      7.0364
+    ]
+  ],
+  "ce_last": 6.8369,
+  "tok_s_avg": 15047.3,
+  "steps_done": 390,
+  "seconds": 175.6,
+  "rc": 0,
+  "stopped": null
+}

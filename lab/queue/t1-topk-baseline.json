@@ -1,0 +1,10 @@
+{
+  "id": "t1-topk-baseline",
+  "tier": "t1",
+  "baseline": true,
+  "hypothesis": "top-k router baseline at 33M scale on real data",
+  "config": "lab_small",
+  "env": {},
+  "budget_minutes": 120,
+  "mutation_of": "t0r-topk-baseline"
+}

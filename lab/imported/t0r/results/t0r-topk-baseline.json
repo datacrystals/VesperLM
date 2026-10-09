@@ -1,0 +1,31 @@
+{
+  "id": "t0r-topk-baseline",
+  "tier": "t0",
+  "baseline": true,
+  "hypothesis": "real-data top-k router baseline",
+  "config": "lab_tiny",
+  "env": {},
+  "budget_minutes": 30,
+  "mutation_of": null,
+  "val_loss_final": 7.1405,
+  "val_loss_series": [
+    [
+      100,
+      7.5719
+    ],
+    [
+      200,
+      7.2999
+    ],
+    [
+      300,
+      7.1405
+    ]
+  ],
+  "ce_last": 6.9983,
+  "tok_s_avg": 15527.3,
+  "steps_done": 390,
+  "seconds": 170.1,
+  "rc": 0,
+  "stopped": null
+}
