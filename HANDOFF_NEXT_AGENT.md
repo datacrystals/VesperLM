@@ -44,7 +44,13 @@ spec. **First science result** (lab/plugin_expert_test.py, CPU): zero-shot plug-
 separately-trained 5th expert — CE on its domain 7.38 vs 11.07 masked (thesis core holds),
 router prefers it on-domain 63% vs 40% chance, but does NOT exclude it off-domain (43% vs
 <0.3 target = chance for top-2-of-5) → passport loss needs negative (reject-off-domain)
-pressure; that's the next t0 variant. **BUG FOUND+FIXED: trainer arch_keys dropped
+pressure; that's the next t0 variant. **v2 RESULT (c17e6f5): PASSES** — contrastive
+passport loss (reject-on-A term, weight 5.0, 400 phase-B steps): util_A 0.297 (<0.3 ✓,
+thin), util_B 0.555 (>0.5 ✓), CE_B 8.01 vs 11.07 without plug-in, domain A undamaged
+(4.95 vs 4.86). Mechanism confirmed at CPU scale but margins are thin on
+barely-separable synthetic domains — production rule: plug-in must include reject
+examples from every non-target domain, and gates should measure utilization margins,
+not single cutoffs. **BUG FOUND+FIXED: trainer arch_keys dropped
 full_type/kda_head_dim/kv_lora_rank/v_head_dim — all trainer runs so far (overnight
 tiny_agent_k, MI300X 470m_k probe) silently built GQA full layers, not MLA.** KDA-on-ROCm
 validation stands (linear_type was honored; MLA wrapper passed isolation separately), but
