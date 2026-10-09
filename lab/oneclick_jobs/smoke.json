@@ -1,0 +1,16 @@
+{
+  "job_id": "smoke_lab_tiny_30",
+  "repo_url": "https://github.com/datacrystals/VesperLM.git",
+  "ref": "main",
+  "workdir": ".",
+  "env": {
+    "VESPER_CONFIG": "lab_tiny",
+    "VESPER_TOTAL_STEPS": "30",
+    "VESPER_AMP": "bf16"
+  },
+  "pip": ["flash-linear-attention", "matplotlib", "transformers"],
+  "command": "bash lab/oneclick_jobs/smoke.sh",
+  "max_minutes": 12,
+  "result_file": "lab/sandbox/smoke/result.json",
+  "notes": "smoke: env probe + clone + 30-step lab_tiny farm-style trainer (CE must print); result.json parsed from the trainer log"
+}
