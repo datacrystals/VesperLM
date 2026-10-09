@@ -1,0 +1,60 @@
+{
+  "id": "t3-470m-topk-baseline",
+  "tier": "t3",
+  "baseline": true,
+  "hypothesis": "topk baseline at 392M (470m_k), 1000 steps, paired seed 7",
+  "config": "470m_k",
+  "env": {
+    "VESPER_TOTAL_STEPS": "1000",
+    "VESPER_MICRO_BATCH": "8",
+    "VESPER_ACCUM": "16",
+    "VESPER_SEED": "7"
+  },
+  "budget_minutes": 60,
+  "mutation_of": "t2-topk-baseline",
+  "val_loss_final": 4.3604,
+  "val_loss_series": [
+    [
+      100,
+      7.7441
+    ],
+    [
+      200,
+      6.5356
+    ],
+    [
+      300,
+      5.8287
+    ],
+    [
+      400,
+      5.4503
+    ],
+    [
+      500,
+      5.0436
+    ],
+    [
+      600,
+      4.8729
+    ],
+    [
+      700,
+      4.5639
+    ],
+    [
+      800,
+      4.4743
+    ],
+    [
+      900,
+      4.3604
+    ]
+  ],
+  "ce_last": 4.2302,
+  "tok_s_avg": 23828.2,
+  "steps_done": 970,
+  "seconds": 3600.5,
+  "rc": -15,
+  "stopped": "budget"
+}
