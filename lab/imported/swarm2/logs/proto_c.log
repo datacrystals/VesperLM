@@ -1,0 +1,27 @@
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+protocol C  base: lab_tiny  params=11.28M  layer_types=['kda', 'kda', 'kda', 'mla']
+[phase 1] base train 400 steps on fineweb
+  [base] step 1/400  ce=11.1122  tok/s=717
+  [base] step 100/400  ce=7.3777  tok/s=35,290
+  [base] step 200/400  ce=6.9706  tok/s=46,412
+  [base] step 300/400  ce=6.5446  tok/s=52,161
+  [base] step 400/400  ce=6.4930  tok/s=55,331
+  base ce=6.4930  tok/s=55,331
+[phase 2] protocol C (exp_steps=300 cal_steps=100 rw=15.0)
+    [C] step 1/300 (code)  ce=9.9458  router_ce=1.9460  tok/s=36,622
+    [C] step 100/300 (code)  ce=8.2265  router_ce=1.8865  tok/s=45,561
+    [C] step 200/300 (finemath)  ce=6.6757  router_ce=1.8449  tok/s=45,668
+    [C] step 300/300 (wikipedia)  ce=6.8510  router_ce=1.7977  tok/s=45,598
+  experts now: 7  passports: (7, 64)
+
+=== swarm2_purity protocol C ===
+base ce=6.4930 tok/s=55,331 | phase2 27s
+fineweb   own=None cross_max=None util={'4': 0.4704, '5': 0.5396, '6': 0.4667} ce_with=6.7902 ce_masked=None delta=None
+code      own=0.8815 cross_max=0.8206 util={'4': 0.8815, '5': 0.8206, '6': 0.145} ce_with=8.8373 ce_masked=9.1761 delta=0.3388
+finemath  own=0.7595 cross_max=0.6508 util={'4': 0.6508, '5': 0.7595, '6': 0.2837} ce_with=7.4021 ce_masked=7.2473 delta=-0.1547
+wikipedia own=0.4762 cross_max=0.588 util={'4': 0.5762, '5': 0.588, '6': 0.4762} ce_with=7.2201 ce_masked=7.4437 delta=0.2236
+gate code      own_ok=True cross_ok=False ce_ok=True -> False
+gate finemath  own_ok=True cross_ok=False ce_ok=False -> False
+gate wikipedia own_ok=False cross_ok=False ce_ok=True -> False
+OVERALL PASS: False
+wrote /root/swarm2_proto_c.json

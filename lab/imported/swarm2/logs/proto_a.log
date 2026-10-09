@@ -1,0 +1,38 @@
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+protocol A  base: lab_tiny  params=11.28M  layer_types=['kda', 'kda', 'kda', 'mla']
+[phase 1] base train 400 steps on fineweb
+  [base] step 1/400  ce=11.1122  tok/s=701
+  [base] step 100/400  ce=7.3777  tok/s=34,691
+  [base] step 200/400  ce=6.9706  tok/s=45,946
+  [base] step 300/400  ce=6.5446  tok/s=51,669
+  [base] step 400/400  ce=6.4930  tok/s=55,020
+  base ce=6.4930  tok/s=55,020
+[phase 2] protocol A (exp_steps=300 cal_steps=100 rw=15.0)
+  -- A: expert 4 <- code (rejects web+['finemath', 'wikipedia']) --
+    [A/code] step 1/300  ce=9.9458  router_ce=1.6096  pos=1.6097  tok/s=41,506
+    [A/code] step 100/300  ce=7.9898  router_ce=1.5863  pos=1.4491  tok/s=45,535
+    [A/code] step 200/300  ce=8.2981  router_ce=1.5699  pos=1.3960  tok/s=45,854
+    [A/code] step 300/300  ce=8.3347  router_ce=1.5595  pos=1.3479  tok/s=45,925
+  -- A: expert 5 <- finemath (rejects web+['code', 'wikipedia']) --
+    [A/finemath] step 1/300  ce=8.3135  router_ce=1.6103  pos=1.6142  tok/s=53,735
+    [A/finemath] step 100/300  ce=6.7481  router_ce=1.5975  pos=1.5383  tok/s=61,503
+    [A/finemath] step 200/300  ce=6.8806  router_ce=1.5886  pos=1.5292  tok/s=65,209
+    [A/finemath] step 300/300  ce=7.1180  router_ce=1.5714  pos=1.4912  tok/s=67,354
+  -- A: expert 6 <- wikipedia (rejects web+['code', 'finemath']) --
+    [A/wikipedia] step 1/300  ce=7.8717  router_ce=1.6100  pos=1.6130  tok/s=71,018
+    [A/wikipedia] step 100/300  ce=6.7345  router_ce=1.5987  pos=1.6006  tok/s=72,276
+    [A/wikipedia] step 200/300  ce=6.7429  router_ce=1.5917  pos=1.5972  tok/s=72,353
+    [A/wikipedia] step 300/300  ce=6.6879  router_ce=1.5719  pos=1.5887  tok/s=72,384
+  experts now: 7  passports: (7, 64)
+
+=== swarm2_purity protocol A ===
+base ce=6.4930 tok/s=55,020 | phase2 62s
+fineweb   own=None cross_max=None util={'4': 0.3886, '5': 0.5753, '6': 0.526} ce_with=6.7374 ce_masked=None delta=None
+code      own=0.8712 cross_max=0.7205 util={'4': 0.8712, '5': 0.7205, '6': 0.1489} ce_with=8.6104 ce_masked=9.3423 delta=0.7319
+finemath  own=0.7563 cross_max=0.6125 util={'4': 0.6125, '5': 0.7563, '6': 0.2871} ce_with=7.209 ce_masked=7.6345 delta=0.4255
+wikipedia own=0.4833 cross_max=0.5412 util={'4': 0.536, '5': 0.5412, '6': 0.4833} ce_with=7.1274 ce_masked=7.2587 delta=0.1313
+gate code      own_ok=True cross_ok=False ce_ok=True -> False
+gate finemath  own_ok=True cross_ok=False ce_ok=True -> False
+gate wikipedia own_ok=False cross_ok=False ce_ok=True -> False
+OVERALL PASS: False
+wrote /root/swarm2_proto_a.json

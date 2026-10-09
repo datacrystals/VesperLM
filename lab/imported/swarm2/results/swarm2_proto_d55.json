@@ -1,0 +1,117 @@
+{
+  "protocol": "d",
+  "config": "lab_tiny",
+  "params_m": 11.281,
+  "layer_types": [
+    "kda",
+    "kda",
+    "kda",
+    "mla"
+  ],
+  "base_steps": 400,
+  "base_ce": 6.493,
+  "base_tok_s": 81151.1,
+  "exp_steps": 400,
+  "cal_steps": 0,
+  "reject_w": 15.0,
+  "owner_mass": 0.55,
+  "phase2_seconds": 193.8,
+  "plug_ids": {
+    "code": 4,
+    "finemath": 5,
+    "wikipedia": 6
+  },
+  "num_experts_final": 7,
+  "top_k_final": 2,
+  "purity": {
+    "fineweb": {
+      "util_per_plug": {
+        "4": 0.0753,
+        "5": 0.2067,
+        "6": 0.3924
+      },
+      "own_expert": null,
+      "own_util": null,
+      "max_cross_util": null,
+      "ntok": 131072
+    },
+    "code": {
+      "util_per_plug": {
+        "4": 0.7729,
+        "5": 0.2974,
+        "6": 0.1337
+      },
+      "own_expert": 4,
+      "own_util": 0.7729,
+      "max_cross_util": 0.2974,
+      "ntok": 131072
+    },
+    "finemath": {
+      "util_per_plug": {
+        "4": 0.2535,
+        "5": 0.5897,
+        "6": 0.2901
+      },
+      "own_expert": 5,
+      "own_util": 0.5897,
+      "max_cross_util": 0.2901,
+      "ntok": 131072
+    },
+    "wikipedia": {
+      "util_per_plug": {
+        "4": 0.0995,
+        "5": 0.185,
+        "6": 0.6759
+      },
+      "own_expert": 6,
+      "own_util": 0.6759,
+      "max_cross_util": 0.185,
+      "ntok": 131072
+    }
+  },
+  "ce": {
+    "fineweb": {
+      "ce_with_all_plugins": 6.7071,
+      "ce_own_masked": null,
+      "ce_delta": null
+    },
+    "code": {
+      "ce_with_all_plugins": 8.5247,
+      "ce_own_masked": 9.5605,
+      "ce_delta": 1.0358
+    },
+    "finemath": {
+      "ce_with_all_plugins": 7.2781,
+      "ce_own_masked": 7.3889,
+      "ce_delta": 0.1109
+    },
+    "wikipedia": {
+      "ce_with_all_plugins": 7.0719,
+      "ce_own_masked": 7.2998,
+      "ce_delta": 0.2279
+    }
+  },
+  "gates": {
+    "code": {
+      "own_ok": true,
+      "cross_ok": true,
+      "ce_ok": true,
+      "pass": true
+    },
+    "finemath": {
+      "own_ok": true,
+      "cross_ok": true,
+      "ce_ok": true,
+      "pass": true
+    },
+    "wikipedia": {
+      "own_ok": true,
+      "cross_ok": true,
+      "ce_ok": true,
+      "pass": true
+    }
+  },
+  "own_gate": 0.5,
+  "cross_gate": 0.3,
+  "pass": true
+}
