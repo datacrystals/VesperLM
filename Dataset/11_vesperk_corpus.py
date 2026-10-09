@@ -37,7 +37,7 @@ CORPUS = [
     # More math (openwebmath: parquet, inline text)
     ("openwebmath", "open-web-math/open-web-math", None, "train", "text", 1_500_000_000),
     # Synthetic encyclopedic
-    ("cosmopedia", "HuggingFaceTB/cosmopedia-v2", "full", "train", "text", 1_500_000_000),
+    ("cosmopedia", "HuggingFaceTB/cosmopedia-v2", "cosmopedia-v2", "train", "text", 1_500_000_000),
     # Wikipedia
     ("wikipedia", "wikimedia/wikipedia", "20231101.en", "train", "text", 1_000_000_000),
 ]
