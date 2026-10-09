@@ -4,6 +4,37 @@
 — the main agent architects, reviews, integrates, and manages droplet budget. Carry this
 forward through compactions.
 
+## 2026-10-09 — t2 VALIDATED: passport advantage is SCALE-STABLE (all evidence committed)
+
+Droplet session ($~1.8 open at handoff; droplet destroyed+verified after):
+- **t2 head-to-head** (tiny_agent_k = 120.2M total / 82.5M active, vocab 65536, 600 steps,
+  real fineweb/dclm, 2 parallel jobs ~30k tok/s each): **passport +2.83%**
+  (val 6.5410 vs 6.7316). Gap widens late (passport 6.526@400→6.541@500; baseline
+  6.816→6.732). Hybrid stack confirmed in trainer: {'kda': 6, 'mla': 2}.
+- **SCALING TABLE (the AMD pitch)**: t0 11M **+2.67%** → t1 33M **+1.95%** → t2 120M
+  **+2.83%** — the t1 attenuation REVERSED; advantage is scale-stable. Single-job 103M
+  bf16 throughput: 103k tok/s @ seq 1024.
+- **t2 plug-in test**: train 800 steps fineweb → freeze → separately train expert #5 on
+  python code with contrastive passport loss → zero-shot plug-in. The t1 recipe (rw15)
+  OVER-SUPPRESSES at 120M (code util 0.378 FAIL). Exact phase-A checkpoint replay sweep
+  (lab/imported/t2/plugin_t2_tune.py, verify_ce delta 0.000000): **rw9 PASSES ALL GATES**
+  (util_code 0.617 >0.5, util_web 0.171 <0.3, CE_code 7.285 vs 8.725 masked = −1.44 nats);
+  rw5 fails web (0.308). **Scale→reject_w: 33M needs rw15, 120M needs rw9 — optimal reject
+  weight FALLS as models grow. Production default at 120M: REJECT_W=9.**
+- Evidence: `lab/imported/t2/` (head-to-head jsons+logs, plugin jsons for rw15/rw5/rw9,
+  both scripts). Commits 53e8912, 29cfb17.
+
+**NEXT DECISIONS (user's), now that the thesis holds at 3 scales:**
+(a) AMD-credits pitch package — scaling table + plug-in evidence + costed ladder, all in
+    lab/imported/ (user mentioned: beg AMD for credits → cluster → paper).
+(b) t3 = 470m_k full pretrain (~$41 projected, single MI300X ~20h) — possibly with
+    passport router as the DEFAULT (it's now the better router at every scale tested).
+(c) Hippocampus/Immune teach-by-talking demo on fresh Vesper-K ckpt (needs agent-10's
+    KDA/MLA port, in flight at this writing).
+(d) Speedrun optimizations: torch.compile env-gate, fused linear+CE, value embeddings.
+
+---
+
 ## 2026-10-09 — MODULAR-MOE THESIS VALIDATED AT t1 (all evidence committed)
 
 Full session on one MI300X droplet ($3.66; day total $6.93; droplet destroyed+verified):
@@ -24,9 +55,8 @@ Full session on one MI300X droplet ($3.66; day total $6.93; droplet destroyed+ve
   with depth at low rw; layer 0 keeps target preference best under high reject pressure.
 - Passport throughput cost ≈ 3-4% (72.8k → 70.4k tok/s at t1) — negligible.
 
-**NEXT DECISION (user's): t2 = tiny_agent_k (103M) plug-in mid-pretrain, ~$8-15 droplet.**
-Then the AMD-credits pitch package: mechanism proof + scaling table + costed ladder (done,
-see lab/imported/).
+**t2 DECISION TAKEN + DONE — see the t2 section above: validated at 120M, rw9 is the
+new plug-in default at that scale.**
 
 ---
 
