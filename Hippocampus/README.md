@@ -11,7 +11,7 @@ external canary gate approves them.
 | file | role |
 |---|---|
 | `session_log.py` | Append-only JSONL store (turns, tool calls, outcomes, explicit feedback). `to_triples()` extracts `(prompt, response, reward)` training triples under quarantine rules. |
-| `lora.py` | Manual LoRA (PEFT is not installed in the vesper venv): freeze trunk, `A@B` side-branches on attention q/o projections (`wq`/`wo` on GQA layers, `q_proj`/`o_proj` on GLA layers), optional MoE router `gate`. Save/load small delta files; merge/unmerge for inference. |
+| `lora.py` | Manual LoRA (PEFT is not installed in the vesper venv): freeze trunk, `A@B` side-branches on attention q/o projections (`wq`/`wo` on GQA layers, `q_proj`/`o_proj` on GLA layers), optional MoE router `gate`. Which projections get wrapped is chosen by a **target profile** (see below). Save/load small delta files; merge/unmerge for inference. |
 | `consolidate.py` | The micro-session: load base + incumbent LoRA, train **only** LoRA params on the triples (few steps, tiny LR, reward-weighted NLL + KL-to-base), write a candidate delta, call the gate, promote or rollback. Per-user adapters: `adapters/<user_id>/delta.pt`. |
 | `demo.py` | End-to-end toy demo: 6-turn teach session, before/after preference probes, and a poisoned batch that the stub gate must reject. |
 | `README.md` | This file. |
@@ -112,6 +112,37 @@ adapter is unchanged.
 The 118M SFT model is weak; the demo proves the **mechanism** (preference
 margin moves the right way, gate catches collapse), not that the model becomes
 smart.
+
+## Target profiles (Vesper-K retarget)
+
+Which `nn.Linear` projections LoRA wraps is selected by a **target profile**,
+set per call (`target_profile=...` on `consolidate` / `apply_user_adapter`) or
+via the `HIPPO_TARGET_PROFILE` env var (demo and `consolidate` read it;
+explicit parameter wins). Default is `gla_gqa` — byte-compatible with the
+original behaviour.
+
+| profile | stack | LoRA targets (leaf names; dotted = path suffix) | router targets (`include_router=True`) |
+|---|---|---|---|
+| `gla_gqa` (default) | fla GLA + GQA | `wq`, `wo`, `q_proj`, `o_proj` | `gate` (TopKRouter) |
+| `kda_mla` | fla KimiDeltaAttention + MultiheadLatentAttention | `q_proj`, `k_proj`, `v_proj`, `o_proj`, `k_rope`, `kv_proj.0`, `kv_proj.2` | `gate` + `query` (TopKRouter / PassportRouter) |
+
+The `kda_mla` names come from the fla layer sources (`fla/layers/kda.py`:
+`q_proj`/`k_proj`/`v_proj`/`o_proj` are `nn.Linear`; `fla/layers/mla.py`:
+`q_proj` and `k_rope` are `nn.Linear`, `kv_proj` is
+`nn.Sequential(Linear, RMSNorm, Linear)` — hence `kv_proj.0`/`kv_proj.2`).
+Notes:
+
+- `kda_mla` intentionally does **not** include `wq`/`wo`; a mixed
+  `linear_type="kda"` + `full_type="gqa"` stack should pass explicit
+  `targets=profile_targets("kda_mla") + ("wq", "wo")`.
+- If MLA is built with `q_lora_rank` set, `q_proj` becomes a Sequential and
+  the profile's `q_proj` will not match — pass `q_proj.0`/`q_proj.2`
+  explicitly (the shipped VesperLinearLM leaves `q_lora_rank=None`).
+- `load_base_model` now passes `full_type` / `router_type` / KDA+MLA shape
+  keys through from the checkpoint's `model_config` (defaults unchanged for
+  old checkpoints), and `enable_cpu_kda_mla_shims()` makes KDA/MLA layers
+  runnable on CPU the same way `enable_cpu_gla_shims()` does for GLA.
+- Delta files record the profile in `meta["target_profile"]`.
 
 ## Model / dtype quirks discovered
 

@@ -6,6 +6,11 @@ optionally the MoE router `gate`). The trunk stays frozen. Deltas save/load as
 small files (~130KB at rank 8 for the 118M model); merge/unmerge folds the
 delta into the base weights for inference.
 
+Which projections get wrapped is selected by a target profile (see
+TARGET_PROFILES): `"gla_gqa"` is the legacy GLA+GQA stack (the default, byte-
+compatible with the original behaviour) and `"kda_mla"` is the Vesper-K stack
+(fla KimiDeltaAttention / MultiheadLatentAttention).
+
 LoRA math:  y = W x + (alpha/r) * B (A x)
   A: (rank, in_features), B: (out_features, rank); A ~ N(0, 1/rank), B = 0
   so the branch starts as an exact no-op.
@@ -23,9 +28,28 @@ import torch.nn.functional as F
 
 DELTA_FORMAT = "vesper_lora_delta_v1"
 
-# Default targets: attention q/o projections of both layer kinds.
+DEFAULT_TARGET_PROFILE = "gla_gqa"
+
+# Default targets: attention q/o projections of both legacy layer kinds.
 DEFAULT_TARGETS = ("wq", "wo", "q_proj", "o_proj")
 ROUTER_TARGETS = ("gate",)  # MoE TopKRouter.gate (basename match)
+
+# Vesper-K targets (KimiDeltaAttention / MultiheadLatentAttention).
+# KDA (fla/layers/kda.py): q_proj/k_proj/v_proj/o_proj are nn.Linear.
+# MLA (fla/layers/mla.py): q_proj is nn.Linear (when q_lora_rank is None —
+# the VesperLinearLM default), k_rope is nn.Linear, and kv_proj is
+# nn.Sequential(Linear, RMSNorm, Linear) so its projections are named by
+# dotted suffix ("kv_proj.0" / "kv_proj.2"). Vesper-K routers: TopKRouter.gate
+# or PassportRouter.query.
+KDA_MLA_TARGETS = ("q_proj", "k_proj", "v_proj", "o_proj", "k_rope",
+                   "kv_proj.0", "kv_proj.2")
+KDA_MLA_ROUTER_TARGETS = ("gate", "query")
+
+TARGET_PROFILES = {
+    "gla_gqa": {"targets": DEFAULT_TARGETS, "router_targets": ROUTER_TARGETS},
+    "kda_mla": {"targets": KDA_MLA_TARGETS,
+                "router_targets": KDA_MLA_ROUTER_TARGETS},
+}
 
 
 class LoRALinear(nn.Module):
@@ -84,15 +108,45 @@ def _basename(name: str) -> str:
     return name.rsplit(".", 1)[-1]
 
 
-def attach_lora(model: nn.Module, targets: Iterable[str] = DEFAULT_TARGETS,
+def get_target_profile(name: str = DEFAULT_TARGET_PROFILE) -> Dict:
+    try:
+        return TARGET_PROFILES[name]
+    except KeyError:
+        raise ValueError(f"unknown target_profile {name!r} "
+                         f"(expected one of {sorted(TARGET_PROFILES)})") from None
+
+
+def profile_targets(name: str = DEFAULT_TARGET_PROFILE) -> Tuple[str, ...]:
+    return tuple(get_target_profile(name)["targets"])
+
+
+def profile_router_targets(name: str = DEFAULT_TARGET_PROFILE) -> Tuple[str, ...]:
+    return tuple(get_target_profile(name)["router_targets"])
+
+
+def _name_matches(child_name: str, full: str, targets) -> bool:
+    """A module is targeted by leaf basename, or by a dotted suffix of its
+    full path (e.g. "kv_proj.0" matches "layers.3.attn.mla.kv_proj.0")."""
+    if _basename(child_name) in targets:
+        return True
+    return any("." in t and (full == t or full.endswith("." + t)) for t in targets)
+
+
+def attach_lora(model: nn.Module, targets: Optional[Iterable[str]] = None,
                 rank: int = 8, alpha: float = 16.0,
-                include_router: bool = False) -> List[str]:
+                include_router: bool = False,
+                target_profile: str = DEFAULT_TARGET_PROFILE) -> List[str]:
     """Replace matching nn.Linear modules with LoRALinear in-place.
 
-    Returns the dotted names of wrapped modules. Weight tying and already-
-    wrapped modules are left alone.
+    `targets=None` uses the profile's projection targets; explicit `targets`
+    override the profile. With `include_router`, the profile's router targets
+    are added. Returns the dotted names of wrapped modules. Weight tying and
+    already-wrapped modules are left alone.
     """
-    targets = set(targets) | (set(ROUTER_TARGETS) if include_router else set())
+    profile = get_target_profile(target_profile)
+    if targets is None:
+        targets = profile["targets"]
+    wanted = set(targets) | (set(profile["router_targets"]) if include_router else set())
     wrapped: List[str] = []
 
     def recurse(parent: nn.Module, prefix: str):
@@ -100,7 +154,7 @@ def attach_lora(model: nn.Module, targets: Iterable[str] = DEFAULT_TARGETS,
             full = f"{prefix}.{child_name}" if prefix else child_name
             if isinstance(child, LoRALinear):
                 continue
-            if isinstance(child, nn.Linear) and _basename(child_name) in targets:
+            if isinstance(child, nn.Linear) and _name_matches(child_name, full, wanted):
                 setattr(parent, child_name, LoRALinear(child, rank=rank, alpha=alpha))
                 wrapped.append(full)
             else:
@@ -171,8 +225,9 @@ def save_delta(model: nn.Module, path: str, meta: Optional[Dict] = None) -> str:
 
 
 def load_delta(model: nn.Module, path: str,
-               targets: Iterable[str] = DEFAULT_TARGETS,
-               include_router: bool = False) -> Dict:
+               targets: Optional[Iterable[str]] = None,
+               include_router: bool = False,
+               target_profile: str = DEFAULT_TARGET_PROFILE) -> Dict:
     """Attach LoRA if needed and load an A/B delta file onto the model."""
     payload = torch.load(path, map_location="cpu", weights_only=False)
     if payload.get("format") != DELTA_FORMAT:
@@ -181,7 +236,7 @@ def load_delta(model: nn.Module, path: str,
     mods = lora_modules(model)
     if not mods:
         attach_lora(model, targets=targets, rank=rank, alpha=alpha,
-                    include_router=include_router)
+                    include_router=include_router, target_profile=target_profile)
         mods = lora_modules(model)
     missing = [k for k in payload["targets"] if k not in mods]
     if missing:

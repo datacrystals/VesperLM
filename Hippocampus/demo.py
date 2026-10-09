@@ -38,6 +38,7 @@ WORKDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "demo_out")
 LOG_GOOD = os.path.join(WORKDIR, "session_good.jsonl")
 LOG_POISON = os.path.join(WORKDIR, "session_poison.jsonl")
 DEVICE = os.environ.get("VESPER_DEVICE", "cpu")
+TARGET_PROFILE = os.environ.get("HIPPO_TARGET_PROFILE", "gla_gqa")
 
 PROBES = [
     "What is 2 + 2?",
@@ -101,6 +102,7 @@ def main():
     model, tok, mc = load_base_model(device=DEVICE)
     print(f"  model_config: {mc}")
     print(f"  vocab {len(tok)}, pad_id {tok.pad_token_id}")
+    print(f"  lora target profile: {TARGET_PROFILE}")
 
     # ---------------- Part A: teach one stable preference ----------------
     section("PART A — 6-turn teach session: 'answer math in words, not digits'")
@@ -153,7 +155,7 @@ def main():
     result = consolidate(log, user_id="alice", workdir=WORKDIR,
                          device=DEVICE, steps=24, lr=2e-3, batch_size=4,
                          kl_coef=0.05, rank=8, alpha=16.0, base_model=model,
-                         tokenizer=tok)
+                         tokenizer=tok, target_profile=TARGET_PROFILE)
     print(f"  decision={result.decision}  reason={result.reason!r}")
     print(f"  gate metrics: {json.dumps(result.gate_metrics)}")
     print(f"  train loss {result.train_stats['loss0']:.4f} -> "
@@ -165,7 +167,7 @@ def main():
     assert result.decision == "PROMOTE", "good batch should have been promoted"
     # In-memory model already holds the promoted A/B; re-load to prove the
     # persisted per-user adapter reproduces the state.
-    ok = apply_user_adapter(model, WORKDIR, "alice")
+    ok = apply_user_adapter(model, WORKDIR, "alice", target_profile=TARGET_PROFILE)
     print(f"  apply_user_adapter(alice) -> {ok}")
     after = probe_set(model, tok, "after")
     show_probe(after)
@@ -214,13 +216,13 @@ def main():
     poison_res = consolidate(plog, user_id="alice", workdir=WORKDIR,
                              device=DEVICE, steps=12, lr=2e-3, batch_size=4,
                              kl_coef=0.05, rank=8, alpha=16.0, base_model=model,
-                             tokenizer=tok)
+                             tokenizer=tok, target_profile=TARGET_PROFILE)
     print(f"  decision={poison_res.decision}  reason={poison_res.reason!r}")
     print(f"  gate metrics: {json.dumps(poison_res.gate_metrics)}")
     assert poison_res.decision == "ROLLBACK", "poison should have been rejected"
 
     section("PART B.2 — incumbent unchanged after rollback")
-    apply_user_adapter(model, WORKDIR, "alice")  # reload promoted delta
+    apply_user_adapter(model, WORKDIR, "alice", target_profile=TARGET_PROFILE)  # reload promoted delta
     after_poison = probe_set(model, tok, "after-poison")
     still = all(abs(after["margins"][p]["margin"] - after_poison["margins"][p]["margin"]) < 1e-6
                 for p in PROBES)

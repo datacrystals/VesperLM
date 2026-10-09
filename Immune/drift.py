@@ -138,12 +138,18 @@ def main():
     ap.add_argument("--candidate", required=True)
     ap.add_argument("--lora-candidate", default=None)
     ap.add_argument("--lora-incumbent", default=None)
+    ap.add_argument("--target-profile", default=None,
+                    help="architecture profile: gla_gqa (default) or kda_mla; "
+                         "falls back to $IMMUNE_TARGET_PROFILE / "
+                         "$HIPPO_TARGET_PROFILE")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
     tok = cb.load_tokenizer()
-    m_inc, _ = cb.load_model(args.incumbent, lora_path=args.lora_incumbent)
-    m_cand, _ = cb.load_model(args.candidate, lora_path=args.lora_candidate)
+    m_inc, _ = cb.load_model(args.incumbent, lora_path=args.lora_incumbent,
+                             target_profile=args.target_profile)
+    m_cand, _ = cb.load_model(args.candidate, lora_path=args.lora_candidate,
+                              target_profile=args.target_profile)
     m = measure_drift(m_inc, m_cand, tok)
     m["label"] = classify(m["drift"])
     m["thresholds"] = {"ok": f"< {THRESH_WARN}", "warn": f"< {THRESH_FAIL}",

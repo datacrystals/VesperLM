@@ -49,13 +49,18 @@ def main():
     ap.add_argument("--probes", required=True, help="YAML or JSON probe set")
     ap.add_argument("--out", default=None, help="write JSON report here")
     ap.add_argument("--max-new", type=int, default=48)
+    ap.add_argument("--target-profile", default=None,
+                    help="architecture profile: gla_gqa (default) or kda_mla; "
+                         "falls back to $IMMUNE_TARGET_PROFILE / "
+                         "$HIPPO_TARGET_PROFILE")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
     import hashlib
     sha = hashlib.sha256(open(args.probes, "rb").read()).hexdigest()[:16]
     tok = cb.load_tokenizer()
-    model, _ = cb.load_model(args.ckpt, lora_path=args.lora)
+    model, _ = cb.load_model(args.ckpt, lora_path=args.lora,
+                             target_profile=args.target_profile)
     probes = load_probe_set(args.probes)
     stop = {tok.convert_tokens_to_ids("endoftext"), cb.IM_END}
 

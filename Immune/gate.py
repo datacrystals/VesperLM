@@ -148,7 +148,8 @@ def load_or_score(args, which):
     tok = cb.load_tokenizer()
     ckpt = args.incumbent if which == "incumbent" else args.candidate
     lora = args.lora_incumbent if which == "incumbent" else args.lora_candidate
-    model, _ = cb.load_model(ckpt, lora_path=lora)
+    model, _ = cb.load_model(ckpt, lora_path=lora,
+                             target_profile=args.target_profile)
     probes = load_probe_set(args.probes)
     stop = {tok.convert_tokens_to_ids("endoftext"), cb.IM_END}
     t0 = _t.time()
@@ -174,6 +175,10 @@ def main():
     ap.add_argument("--live", default=os.path.join(HERE, "state", "live.json"))
     ap.add_argument("--log-dir", default=os.path.join(HERE, "logs"))
     ap.add_argument("--max-new", type=int, default=48)
+    ap.add_argument("--target-profile", default=None,
+                    help="architecture profile: gla_gqa (default) or kda_mla; "
+                         "falls back to $IMMUNE_TARGET_PROFILE / "
+                         "$HIPPO_TARGET_PROFILE")
     ap.add_argument("--dry-run", action="store_true",
                     help="decide and log, but change no state")
     ap.add_argument("--restore-files", action="store_true",
@@ -191,9 +196,11 @@ def main():
         import drift as drift_mod
         tok = cb.load_tokenizer()
         m_inc, _ = cb.load_model(args.incumbent,
-                                 lora_path=args.lora_incumbent)
+                                 lora_path=args.lora_incumbent,
+                                 target_profile=args.target_profile)
         m_cand, _ = cb.load_model(args.candidate,
-                                  lora_path=args.lora_candidate)
+                                  lora_path=args.lora_candidate,
+                                  target_profile=args.target_profile)
         drift = drift_mod.measure_drift(m_inc, m_cand, tok)
         drift["label"] = drift_mod.classify(drift["drift"])
 

@@ -45,7 +45,8 @@ for _p in (_THIS_DIR, _COMMON):
 from session_log import SessionLog, TrainingTriple
 from lora import (attach_lora, freeze_trunk, lora_parameters,
                   lora_modules, save_delta, load_delta, set_lora_enabled,
-                  merge_all, unmerge_all, DEFAULT_TARGETS)
+                  merge_all, unmerge_all,
+                  DEFAULT_TARGET_PROFILE, get_target_profile)
 
 
 # ------------------------------------------------------------------
@@ -111,6 +112,88 @@ def enable_cpu_gla_shims() -> str:
     _fng.rms_norm_gated = _rms_norm_gated_torch
     _fng.layer_norm_gated = _rms_norm_gated_torch
     _CPU_SHIMS_INSTALLED = True
+    return "installed"
+
+
+_CPU_KDA_MLA_SHIMS_INSTALLED = False
+
+
+def enable_cpu_kda_mla_shims() -> str:
+    """Make KimiDeltaAttention / MultiheadLatentAttention runnable on CPU.
+
+    fla's chunk_kda / fused_recurrent_kda are Triton-only; swap in a
+    pure-torch equivalent built from fla.ops.kda.naive (plus fla's own
+    torch gate references in fla.ops.kda.gate). MLA's flash-attn calls are
+    replaced by fla's SDPA fallback so they also work when flash-attn is
+    installed but tensors live on CPU. Mirrors enable_cpu_gla_shims; must
+    run before the first model forward.
+    """
+    global _CPU_KDA_MLA_SHIMS_INSTALLED
+    if _CPU_KDA_MLA_SHIMS_INSTALLED:
+        return "already installed"
+    import fla.layers.kda as _fla_kda
+    from fla.ops.kda.naive import naive_recurrent_kda
+    from fla.ops.kda.gate import naive_kda_gate, naive_kda_lowerbound_gate
+
+    def _cpu_kda_shim(q=None, k=None, v=None, g=None, beta=None,
+                      A_log=None, dt_bias=None, initial_state=None,
+                      output_final_state=False, use_qk_l2norm_in_kernel=True,
+                      use_gate_in_kernel=True, use_beta_sigmoid_in_kernel=True,
+                      allow_neg_eigval=False, lower_bound=None, scale=None,
+                      state_v_first=True, cu_seqlens=None, **kw):
+        # Mirror the Triton kernel's in-kernel pre/post-processing in torch,
+        # then run fla's naive recurrence (state layout kept self-consistent;
+        # state_v_first/cu_seqlens are accepted and ignored — single-sequence
+        # CPU probes never pack sequences).
+        if use_qk_l2norm_in_kernel:
+            q = F.normalize(q.float(), p=2, dim=-1)
+            k = F.normalize(k.float(), p=2, dim=-1)
+        if use_gate_in_kernel:
+            if lower_bound is not None:
+                g = naive_kda_lowerbound_gate(g, A_log, dt_bias,
+                                              lower_bound=lower_bound)
+            else:
+                g = naive_kda_gate(g, A_log, dt_bias)
+        if use_beta_sigmoid_in_kernel:
+            beta = beta.sigmoid() * (2.0 if allow_neg_eigval else 1.0)
+        return naive_recurrent_kda(q, k, v, g, beta, scale=scale,
+                                   initial_state=initial_state,
+                                   output_final_state=output_final_state)
+
+    _fla_kda.chunk_kda = _cpu_kda_shim
+    _fla_kda.fused_recurrent_kda = _cpu_kda_shim
+
+    import fla.layers.mla as _fla_mla
+
+    def _mla_flash_attn(q, k, v, dropout_p=0.0, softmax_scale=None, causal=False,
+                        window_size=(-1, -1), **kwargs):
+        if window_size not in (None, (-1, -1)):
+            raise NotImplementedError("SDPA shim does not support sliding window")
+        q, k, v = (t.transpose(1, 2) for t in (q, k, v))
+        o = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p,
+                                           is_causal=causal, scale=softmax_scale)
+        return o.transpose(1, 2)
+
+    def _mla_flash_attn_varlen(q, k, v, cu_seqlens_q, cu_seqlens_k,
+                               max_seqlen_q, max_seqlen_k, dropout_p=0.0,
+                               softmax_scale=None, causal=False,
+                               window_size=(-1, -1), **kwargs):
+        if window_size not in (None, (-1, -1)):
+            raise NotImplementedError("SDPA shim does not support sliding window")
+        outs = []
+        for i in range(len(cu_seqlens_q) - 1):
+            qs, qe = int(cu_seqlens_q[i]), int(cu_seqlens_q[i + 1])
+            ks, ke = int(cu_seqlens_k[i]), int(cu_seqlens_k[i + 1])
+            oi = F.scaled_dot_product_attention(
+                q[qs:qe].transpose(0, 1), k[ks:ke].transpose(0, 1),
+                v[ks:ke].transpose(0, 1),
+                dropout_p=dropout_p, is_causal=causal, scale=softmax_scale)
+            outs.append(oi.transpose(0, 1))
+        return torch.cat(outs, dim=0)
+
+    _fla_mla.flash_attn_func = _mla_flash_attn
+    _fla_mla.flash_attn_varlen_func = _mla_flash_attn_varlen
+    _CPU_KDA_MLA_SHIMS_INSTALLED = True
     return "installed"
 
 
@@ -218,16 +301,24 @@ def load_tokenizer(tokenizer_path: Optional[str] = None):
 
 
 def load_base_model(checkpoint_path: Optional[str] = None, device: str = "cpu",
-                    dtype: torch.dtype = torch.float32):
+                    dtype: torch.dtype = torch.float32,
+                    target_profile: Optional[str] = None):
     """Build VesperLinearLM from the SFT checkpoint's embedded model_config.
 
     Dtype note: GLA/Mamba2 wrappers internally force fp32 (their Triton
     kernels crash on fp16 under P40 cc 6.1, and the wrappers' pure-torch
     fallbacks are written for fp32). Keep the whole model in fp32 for
     micro-sessions; bf16 is only safe for the non-GLA parts.
+
+    `target_profile` (or $HIPPO_TARGET_PROFILE) selects the LoRA target
+    family for later attach_lora calls; it is validated here so a bad name
+    fails before the checkpoint is loaded.
     """
+    if target_profile is not None:
+        get_target_profile(target_profile)
     if device == "cpu":
         enable_cpu_gla_shims()
+        enable_cpu_kda_mla_shims()
     from vesper_linear_model import VesperLinearLM
 
     ckpt_path = checkpoint_path or os.path.join(
@@ -242,6 +333,19 @@ def load_base_model(checkpoint_path: Optional[str] = None, device: str = "cpu",
         num_experts=mc["num_experts"], top_k=mc["top_k"],
         max_seq_len=mc["max_seq_len"], pad_id=tok.pad_token_id,
         linear_type=mc.get("linear_type", "gla"),
+        full_type=mc.get("full_type", "gqa"),
+        attention_every=mc.get("attention_every", 4),
+        gla_head_dim=mc.get("gla_head_dim", 64),
+        qk_norm=mc.get("qk_norm", True),
+        kda_head_dim=mc.get("kda_head_dim", 64),
+        kda_short_conv=mc.get("kda_short_conv", True),
+        mamba2_state_size=mc.get("mamba2_state_size", 128),
+        kv_lora_rank=mc.get("kv_lora_rank"),
+        v_head_dim=mc.get("v_head_dim", 128),
+        linear_force_fp32=mc.get("linear_force_fp32", True),
+        router_type=mc.get("router_type", "topk"),
+        passport_dim=mc.get("passport_dim", 64),
+        router_expert_dropout=mc.get("router_expert_dropout", 0.0),
     )
     state = {k.replace("module.", ""): v for k, v in ckpt["model"].items()}
     model.load_state_dict(state, strict=True)
@@ -527,8 +631,16 @@ def consolidate(log: SessionLog, user_id: str = "default",
                 gate_fn: Optional[Callable[[str, str], GateResult]] = None,
                 gate_cmd: Optional[str] = None,
                 base_model=None, tokenizer=None,
+                target_profile: Optional[str] = None,
                 verbose: bool = True) -> ConsolidateResult:
-    """One consolidation pass: log -> triples -> LoRA candidate -> gate -> commit."""
+    """One consolidation pass: log -> triples -> LoRA candidate -> gate -> commit.
+
+    `target_profile` (or $HIPPO_TARGET_PROFILE, default "gla_gqa") selects
+    which projections the LoRA delta attaches to — see lora.TARGET_PROFILES.
+    """
+    profile_name = target_profile or os.environ.get(
+        "HIPPO_TARGET_PROFILE", DEFAULT_TARGET_PROFILE)
+    get_target_profile(profile_name)  # validate before doing any work
     workdir = os.path.abspath(workdir or os.path.join(_THIS_DIR, "consolidate_out"))
     os.makedirs(workdir, exist_ok=True)
 
@@ -548,13 +660,15 @@ def consolidate(log: SessionLog, user_id: str = "default",
     # Base + incumbent LoRA: start from the user's promoted delta if any.
     inc_dir = adapter_dir(workdir, user_id, "adapters")
     incumbent_path = os.path.join(inc_dir, "delta.pt")
-    wrapped = attach_lora(model, targets=DEFAULT_TARGETS, rank=rank, alpha=alpha,
-                          include_router=include_router)
+    wrapped = attach_lora(model, rank=rank, alpha=alpha,
+                          include_router=include_router,
+                          target_profile=profile_name)
     if verbose:
-        print(f"[consolidate] lora attached: {len(wrapped)} modules, "
+        print(f"[consolidate] lora attached: {len(wrapped)} modules "
+              f"(profile {profile_name}), "
               f"trainable params: {sum(p.numel() for p in lora_parameters(model)):,}")
     if os.path.exists(incumbent_path):
-        load_delta(model, incumbent_path)
+        load_delta(model, incumbent_path, target_profile=profile_name)
         if verbose:
             print(f"[consolidate] loaded incumbent delta {incumbent_path}")
     freeze_trunk(model)
@@ -573,6 +687,7 @@ def consolidate(log: SessionLog, user_id: str = "default",
     save_delta(model, os.path.join(cand_dir, "delta.pt"),
                meta={"user_id": user_id, "steps": steps, "lr": lr, "rank": rank,
                      "alpha": alpha, "created": stamp,
+                     "target_profile": profile_name,
                      "incumbent": incumbent_path if os.path.exists(incumbent_path) else None})
     with open(os.path.join(cand_dir, "train_stats.json"), "w") as f:
         json.dump(stats, f, indent=2)
@@ -617,15 +732,20 @@ def consolidate(log: SessionLog, user_id: str = "default",
 
 
 def apply_user_adapter(model, workdir: str, user_id: str,
-                       targets: Sequence[str] = DEFAULT_TARGETS,
+                       targets: Optional[Sequence[str]] = None,
                        rank: int = 8, alpha: float = 16.0,
-                       include_router: bool = False) -> bool:
-    """Attach and load a user's promoted delta at inference time. False if none."""
+                       include_router: bool = False,
+                       target_profile: str = DEFAULT_TARGET_PROFILE) -> bool:
+    """Attach and load a user's promoted delta at inference time. False if none.
+
+    `targets=None` uses the profile's projection targets (explicit `targets`
+    override the profile).
+    """
     path = os.path.join(adapter_dir(workdir, user_id, "adapters"), "delta.pt")
     if not os.path.exists(path):
         return False
     if not lora_modules(model):
         attach_lora(model, targets=targets, rank=rank, alpha=alpha,
-                    include_router=include_router)
-    load_delta(model, path)
+                    include_router=include_router, target_profile=target_profile)
+    load_delta(model, path, target_profile=target_profile)
     return True

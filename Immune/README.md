@@ -120,6 +120,34 @@ battery — drift numbers are only comparable while it is frozen.
 Names may omit a leading `module.`. Unknown keys raise — a silent no-op
 merge is impossible.
 
+## Target profiles (Vesper-K retarget)
+
+The gate entry points take `--target-profile` (`gla_gqa` default, or
+`kda_mla` for the Vesper-K KDA/MLA stack). Resolution order: CLI flag →
+`$IMMUNE_TARGET_PROFILE` → `$HIPPO_TARGET_PROFILE` → `gla_gqa`.
+
+- The profile supplies **defaults** for architecture keys a checkpoint's
+  `model_config` omits (`linear_type`, `full_type`, router choice, KDA/MLA
+  shape keys). Values present in `model_config` always win — a Vesper-K
+  checkpoint loads correctly even under the default profile.
+- `cpu_backend.py` no longer imports fla (or `vesper_linear_model`) at module
+  load — importing fla dies on hosts without a working CUDA driver. The
+  pure-torch CPU shims are installed lazily from `load_model()`: GLA shims as
+  before, plus KDA (`chunk_kda`/`fused_recurrent_kda` → `fla.ops.kda.naive`
+  with fla's own torch gate references) and MLA (flash-attn entry points →
+  SDPA) shims for `kda_mla` stacks.
+- `generate()` falls back to full-forward greedy decode on stacks without an
+  incremental cache (MLA), so probes/canaries run unchanged; drift feature
+  extraction already used full forwards and is architecture-agnostic.
+- Expert corruption paths (`layers.N.ffn.experts.M.w1/w2/w3`) are shared by
+  both stacks (the MoE FFN is common), so `make_corrupt_ckpt.py` needs no
+  profile.
+
+LoRA target names per profile match `Hippocampus/lora.py` (`gla_gqa`:
+`wq`/`wo`/`q_proj`/`o_proj`; `kda_mla`: `q_proj`/`k_proj`/`v_proj`/`o_proj`/
+`k_rope`/`kv_proj.0`/`kv_proj.2`, routers `gate`/`query`) and are exposed as
+`cpu_backend.TARGET_PROFILES`.
+
 ## Invariants (immune system)
 
 - **I1** The trunk is frozen; only LoRA adapters / memory change at speed.
