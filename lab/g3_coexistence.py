@@ -797,11 +797,45 @@ def main():
     all_contam = all(r["pass_contam"] for r in inserts)
     all_ce = all(r["pass_ce"] for r in inserts)
     g3_pass = (final["pass_util"] and final["pass_contam"] and final["pass_ce"])
-    first_break = None
+    # per-criterion first break (which bar broke at which N — a single
+    # first_break conflates criteria and mislabels spike-vs-decay)
+    first_break = {"util_home": None, "contam_base": None, "base_ce": None}
     for r in inserts:
-        if not (r["pass_util"] and r["pass_contam"] and r["pass_ce"]):
-            first_break = r["n"]
-            break
+        if first_break["util_home"] is None and not r["pass_util"]:
+            first_break["util_home"] = {"n": r["n"],
+                                        "value": round(min(r["util_home"].values()), 4)}
+        if first_break["contam_base"] is None and not r["pass_contam"]:
+            first_break["contam_base"] = {"n": r["n"],
+                                          "value": round(max(r["contam_base"].values()), 4)}
+        if first_break["base_ce"] is None and not r["pass_ce"]:
+            first_break["base_ce"] = {"n": r["n"],
+                                      "value": r["base_ce_regression_pct"]}
+    first_break_n = min([v["n"] for v in first_break.values() if v], default=None)
+
+    # passport-bank crowding diagnostic: mean |cos| between rows (per layer
+    # then averaged).  High plug-in<->plug-in |cos| = rows cluster = the
+    # bank-crowding mechanism behind util decay at high N.
+    with torch.no_grad():
+        cos_plug, cos_plug_base = [], []
+        for layer in model.layers:
+            P = layer["ffn"].router.passports.data
+            Pn = P / (P.norm(dim=1, keepdim=True) + 1e-8)
+            plug = Pn[first_plug:]
+            base = Pn[:first_plug]
+            if plug.shape[0] > 1:
+                m = (plug @ plug.t()).abs()
+                cos_plug.append(float((m.sum() - m.trace())
+                                      / (m.numel() - m.shape[0])))
+            if plug.shape[0] > 0:
+                cos_plug_base.append(float((plug @ base.t()).abs().mean()))
+        bank_crowding = {
+            "mean_abs_cos_plug_vs_plug": round(sum(cos_plug) / len(cos_plug), 4)
+            if cos_plug else None,
+            "mean_abs_cos_plug_vs_base": round(sum(cos_plug_base) / len(cos_plug_base), 4)
+            if cos_plug_base else None,
+        }
+    print(f"  bank crowding: plug-plug |cos| {bank_crowding['mean_abs_cos_plug_vs_plug']}  "
+          f"plug-base |cos| {bank_crowding['mean_abs_cos_plug_vs_base']}")
 
     section("PART 1 — poison spot-check at N")
     incumbent_hash = g1.state_hash(model)
@@ -843,17 +877,24 @@ def main():
           f"({ce_restored:.6f} vs {ce_incumbent:.6f})")
 
     section("PART 2 — G3 verdict")
-    print(f"  N = {N_EPS}")
-    print(f"  (util_home>0.5 all inserts): {'PASS' if all_util else 'FAIL'}  "
-          f"final {final['util_home']}")
-    print(f"  (contam_base<0.3 all inserts): {'PASS' if all_contam else 'FAIL'}  "
-          f"final {final['contam_base']}")
-    print(f"  (base CE reg <1%): {'PASS' if all_ce else 'FAIL'}  "
-          f"final {final['base_ce_regression_pct']:+.3f}%")
-    print(f"  first purity break at N={first_break}" if first_break else
-          "  purity never broke")
+    print(f"  N = {N_EPS}   (verdict state: "
+          f"{'post final-joint calibration' if post_joint is not None else 'last insert'})")
+    print(f"  (util_home>0.5): FINAL {'PASS' if final['pass_util'] else 'FAIL'}  "
+          f"values {final['util_home']}")
+    print(f"                   trajectory all-INSERTS {'PASS' if all_util else 'FAIL'}")
+    print(f"  (contam_base<0.3): FINAL {'PASS' if final['pass_contam'] else 'FAIL'}  "
+          f"values {final['contam_base']}")
+    print(f"                   trajectory all-INSERTS {'PASS' if all_contam else 'FAIL'}")
+    print(f"  (base CE reg <1%): FINAL {'PASS' if final['pass_ce'] else 'FAIL'}  "
+          f"{final['base_ce_regression_pct']:+.3f}%")
+    print(f"                   trajectory all-INSERTS {'PASS' if all_ce else 'FAIL'}")
+    for crit, v in first_break.items():
+        if v:
+            print(f"  first {crit} break: N={v['n']} (value {v['value']})")
+        else:
+            print(f"  first {crit} break: none")
     print(f"  poison row-drop byte-identical: {hash_ok}")
-    print(f"  G3 OVERALL: {'PASS' if g3_pass else 'FAIL'}")
+    print(f"  G3 OVERALL (final-state bars): {'PASS' if g3_pass else 'FAIL'}")
     print(f"  recal cost/insert (s): "
           + " ".join(str(r['recal_seconds']) for r in inserts))
     print(f"  cons cost/insert (s):  "
@@ -903,7 +944,9 @@ def main():
                 "bar": "<1% vs pre-library at N=16",
                 "all_inserts_pass": all_ce},
         },
-        "first_purity_break_n": first_break,
+        "first_purity_break_n": first_break_n,
+        "first_purity_break_per_criterion": first_break,
+        "bank_crowding": bank_crowding,
         "post_final_joint": post_joint,
         "purity_trajectory": [
             {"n": r["n"], "episode": r["episode"],

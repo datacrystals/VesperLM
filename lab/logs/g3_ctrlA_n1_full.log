@@ -1,0 +1,79 @@
+G3 coexistence  N=1  device=cuda  cons_steps=80 recal_steps=800  text_kl=3.0  seed=0
+
+========================================================================
+PART 0 — load passport-native spine (lab_small, dropout-0.1)
+========================================================================
+  checkpoint: /home/tliao/VesperLM/lab/sandbox/t1-diag-realdata-mb4/vesper_linear_checkpoints_lab_small/step_best
+  model_config: dim=256 layers=6 hidden=768 experts=4 top_k=2
+  router prep: mode=passport-native passport_dim=[64] expert_dropout=[0.1] max|logit diff|=0.000e+00
+  pre-library base-mix CE: 6.7735  (32 x 256-token chunks from Pretrain/data val tail)
+  1 episodes x 6 turns, 9 triples each, home tokens/ep 66-66
+  episodes: math_words
+
+========================================================================
+INSERT  0/1 — episode 'math_words'
+========================================================================
+    [ep0 micro] step   0  loss +0.4131  policy -0.0740  kl 0.37488  text_kl 0.15614
+    [ep0 micro] step  10  loss -3.8670  policy -4.7656  kl 1.24087  text_kl 0.27888
+    [ep0 micro] step  20  loss +2.9197  policy +2.1705  kl 1.14387  text_kl 0.23065
+    [ep0 micro] step  30  loss -3.0438  policy -3.6440  kl 1.37182  text_kl 0.17720
+    [ep0 micro] step  40  loss +2.5963  policy +2.1519  kl 1.22953  text_kl 0.12766
+    [ep0 micro] step  50  loss -0.3827  policy -0.6983  kl 1.40228  text_kl 0.08184
+    [ep0 micro] step  60  loss -6.4589  policy -6.7583  kl 1.50570  text_kl 0.07473
+    [ep0 micro] step  70  loss -3.7070  policy -3.9837  kl 1.33592  text_kl 0.06999
+    [ep0 micro] step  79  loss -6.6987  policy -6.8981  kl 1.56635  text_kl 0.04036
+  GATE[ep0]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.7777777777777778, "top_response_fraction": 0.2222222222222222, "final_kl": 1.566345453262329}
+  plugged row 4 (E=5)
+    [recal] step   0  loss +7.4161
+    [recal] step 133  loss +3.5728
+    [recal] step 266  loss +3.5575
+    [recal] step 399  loss +3.4603
+    [recal] step 532  loss +3.5411
+    [recal] step 665  loss +3.3712
+    [recal] step 798  loss +3.3763
+    [recal] step 799  loss +3.3741
+  util_home: e0=0.912
+  contam   : e0=0.217
+  base CE  : 6.8331 (+0.880%)  entropy base 0.915  p_any_plug 0.217  p_both_plug 0.000
+  nll gains: [7.9935, 8.0091, 7.9569]  gate=PROMOTE  cons=27.9s recal=43.1s  pass(u/c/ce)=True/True/True
+  bank crowding: plug-plug |cos| None  plug-base |cos| 0.0739
+
+========================================================================
+PART 1 — poison spot-check at N
+========================================================================
+    [poison micro] step   0  loss +13.4680  policy +12.8890  kl 0.39634  text_kl 0.18639
+    [poison micro] step   5  loss +6.6814  policy +5.5989  kl 0.74722  text_kl 0.34841
+    [poison micro] step  10  loss +5.9495  policy +5.3638  kl 0.46893  text_kl 0.18743
+    [poison micro] step  15  loss +6.0710  policy +5.3039  kl 0.49552  text_kl 0.24745
+    [poison micro] step  20  loss +5.9693  policy +5.2999  kl 0.54888  text_kl 0.21397
+    [poison micro] step  25  loss +5.8087  policy +5.2971  kl 0.52864  text_kl 0.16171
+    [poison micro] step  30  loss +5.7474  policy +5.3002  kl 0.54542  text_kl 0.13999
+    [poison micro] step  35  loss +5.6975  policy +5.2950  kl 0.53461  text_kl 0.12526
+    [poison micro] step  39  loss +5.6215  policy +5.2908  kl 0.52977  text_kl 0.10142
+  GATE[poison]: ROLLBACK — target collapse: one response is 100% of the batch
+  gate metrics: {"mean_reward": 1.0, "unique_response_ratio": 0.125, "top_response_fraction": 1.0, "final_kl": 0.5297684073448181}
+  gate: ROLLBACK — target collapse: one response is 100% of the batch
+  poison row plugged: base CE 6.8331 -> 7.0527 (contam 0.527)
+  row drop -> state hash MATCH, base CE restored exact (6.833129 vs 6.833129)
+
+========================================================================
+PART 2 — G3 verdict
+========================================================================
+  N = 1   (verdict state: last insert)
+  (util_home>0.5): FINAL PASS  values {0: 0.9116}
+                   trajectory all-INSERTS PASS
+  (contam_base<0.3): FINAL PASS  values {0: 0.2173}
+                   trajectory all-INSERTS PASS
+  (base CE reg <1%): FINAL PASS  +0.880%
+                   trajectory all-INSERTS PASS
+  first util_home break: none
+  first contam_base break: none
+  first base_ce break: none
+  poison row-drop byte-identical: True
+  G3 OVERALL (final-state bars): PASS
+  recal cost/insert (s): 43.1
+  cons cost/insert (s):  27.9
+
+wrote lab/results/g3_ctrlA_n1_full.json
+total time: 109.0s
