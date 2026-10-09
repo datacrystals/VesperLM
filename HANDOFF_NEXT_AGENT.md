@@ -92,6 +92,15 @@ the literal `VESPER_ACCUM=16` matches only the probe's short-run batching.
 - **Cosmopedia root-caused + regened** (8d30a2e): the 0-byte shard was NOT the suspend —
   config "full" never existed on the hub (ShardWriter creates the file before the stream
   raises). Config → "cosmopedia-v2"; 2 shards, 1.5B tokens, indexed. Mix complete.
+- **Speedrun branch READY (not merged)**: `speedrun-opts` (pushed; worktree
+  /home/tliao/VesperLM-speedrun) adds env-gated VESPER_COMPILE (dense-submodule
+  torch.compile), VESPER_FUSED_CE (fla FusedLinearCrossEntropyLoss, pad==eos masking
+  preserved exactly — biggest single win: 65536-vocab logits at seq 8192 ≈ 2.1GB fp32
+  per micro-batch), VESPER_VALUE_EMBED (modded-nanogpt value embeds on first/last
+  layers; KDA/MLA/GQA sites). Byte-compat sha256-verified when flags off; CPU smoke
+  suite green (Pretrain/tests_speedrun_flags.py). **Merge gate: MI300X canary
+  (~10 steps each flag) on a swarm session, then merge to main.** Est: +5-15% compile,
+  +5-15% fused-CE at long seq, value-embed is a seeded-A/B quality bet (~1-3%).
 - **AMD pitch committed**: AMD_PITCH.md (4c17adb) — 4-pt scaling table, plug-in gates,
   honest negatives, costed ladder t3≈$41 → t4≈$150–250 → t5 cluster, repro appendix.
 - **Spend: $10.41 settled, $0 open.** ~~t3 (~$41) crosses the user's $40 soft-pause~~
