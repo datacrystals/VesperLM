@@ -380,3 +380,87 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   then the loop needs a cheaper expert shape (smaller d_e, low-rank core)
   or slower cadence. The design degrades gracefully here; this is a
   tuning problem, not a fatal one.
+
+## 9. Donor grafting: passport-routing existing MoE models
+
+Status: approved direction (user idea, 2026-10-09). Reuse trained experts from
+open MoE models (GLM-class, K2/K3-class) under our router instead of training
+every expert ourselves. Two variants, very different costs.
+
+### 9.1 Why this is on-thesis, not a side quest
+
+The whole LMbus bet is that experts are interchangeable given (a) a frozen I/O
+contract and (b) a content router that reaches experts it never saw. Donor
+experts are the extreme case of (b): maximally foreign lineage, zero shared
+training. If passport plug-in works for THESE, the community-expert vision is
+no longer speculative.
+
+Key structural fact: **MoE experts are FFNs only.** Source-model attention is
+irrelevant — attention lives in the spine. What crosses models is purely the
+residual-stream geometry problem of section 3, and our G1/G1b evidence maps
+directly:
+
+- G1 (TopK transplant) FAIL predicts: naive router-swap without recalibration
+  fails. Contamination 0.90, base CE +188%. Do not bother running this arm.
+- G1b (passport-native + mex recal + text-KL 3.0 base-neutrality) PASS is the
+  recipe a donor expert needs: base-neutral consolidation, then ~800
+  router-only recal steps per insert (G2 falsified zero-shot reachability —
+  budget the recal, it is cheap vs pretraining anything).
+
+### 9.2 Variant A — passport graft (easiest, do first)
+
+Keep the donor's spine AND its experts; replace ONLY the gate with
+PassportRouter. Geometry is untouched (experts keep their native home), so
+this is repackaging, not bridging:
+
+1. Profile the donor's experts: run labeled corpora (code, math, web, chat,
+   science...) through the model, log per-layer expert activation histograms.
+   This is the "classification" step — measurable, no training.
+2. Init each passport row from the mean router query over the expert's
+   home-profile data (prototype init), then recalibrate router-only on a
+   mixed calibration set with the D55 mutual-exclusion target.
+3. Gate on val parity vs the donor's original router (must not regress) +
+   purity gates per domain.
+4. Payoff: the grafted model now supports `add_expert()` — OUR trained
+   experts, or experts from OTHER donors (via variant B adapters), plug into
+   a 100B+ host we never pretrained. This is the fastest path to a
+   frontier-scale passport-routed machine.
+
+Caveat from the literature and our own profiles: donor experts are not
+cleanly semantic (some specialize positionally/syntactically). Expect a
+fraction of mushy passports; purity gates measure how bad that is.
+
+### 9.3 Variant B — cross-model expert transplant (the mix-and-match)
+
+Plug donor experts into OUR spine (or a grafted donor spine from variant A)
+with section 4.5 adapters absorbing the width/basis mismatch:
+`A_in: d_spine -> d_donor`, expert core frozen, `A_out: d_donor -> d_spine`,
+trained with text-KL 3.0 base-neutrality (G1b recipe) + router recal.
+Adapter rank is the capacity knob; if adapters dominate, the fallback
+(section 7) is shared-lineage-only, i.e. variant A per donor family.
+
+### 9.4 Gates
+
+- **D0 — graft parity (t0 of this line, laptop/MI300X-cheap).** Passport-graft
+  a small open MoE (OLMoE-1B-7B or DeepSeek-V2-Lite class). PASS = val parity
+  with the donor's stock router on a mixed eval (within noise), plus per-domain
+  purity >= the donor's own routing entropy baseline.
+- **D1 — plug-in onto graft.** Add ONE foreign expert (ours, or another
+  donor's via adapters) to the grafted model. PASS = section-6 purity gates
+  for the new expert, no regression on base eval.
+- **D2 — cross-family transplant.** A GLM-family expert and a K2-family expert
+  co-located in one spine, both passing purity. This is the mix-and-match
+  proof.
+- **D3 — scale.** Graft a big donor (GLM-5.3-class) on the MI300X/cluster:
+  NVMe expert offload + passport graft + recal; measure serving cost delta
+  vs stock routing.
+
+### 9.5 What would kill it
+
+- D0 fails parity: passport scoring can't reproduce a mature router's
+  decisions on a foreign bank — then grafting is dead, and passports stay
+  native-only (the modular thesis survives; donor reuse does not).
+- D2 fails even with high-rank adapters: cross-model geometry is not
+  bridgeable at useful fidelity — then variant A only: one grafted host per
+  donor family, mixed at the serving layer (model routing), not the expert
+  layer.
