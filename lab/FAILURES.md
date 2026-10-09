@@ -222,6 +222,54 @@ a lucky pass.
   Also armed (rung 4 of "Live self-learning"): cross-attention sidecar memory network
   as the addressing-mechanism replacement if hierarchy fails.
 
+## 2026-10-09 — g3_recipe_controls (Control A/B) — OUTCOME LOG: recipe depth explains the N=1 break, NOT the N-scaling decay — N=8 full-recipe still FAILS (util 0.93→0.16, CE +2.28%); bank crowding measured (plug-plug |cos| 0.275 vs 0.066)
+*(outcome log — separates the two hypotheses the G3 failure left open: "fast recipe confound" vs "N-scaling structural".)*
+- Gate-accounting finding first: the G3 verdict judges the **N=16 final state** (per the
+  gate text "at N=16") — that was always correct. What was misleading was the log line
+  "first purity break at N=1", which conflated per-criterion trajectory spikes with
+  decay. Per-criterion breaks: v3 (40 cons/150 recal/800 joint) broke **contam at N=1**
+  (0.415 — the 150-step recal left the lone row under-trained on base rejection; final
+  contam at N=16 is clean 0.03-0.10 and the final-state contam bar PASSES); v2
+  (80 cons/600 recal) broke **CE at N=1** (+1.157%) and **contam at N=2** (0.375).
+  `lab/g3_coexistence.py` now records per-criterion first breaks and prints FINAL vs
+  trajectory labels separately (no gate-logic change — only reporting).
+- **Control A (recipe isolation) — PASS:** N=1 at the FULL G1b recipe (80-step
+  consolidation, 800-step mex recal, text-KL 3.0, no joint pass) on the same spine
+  (`t1-diag-realdata-mb4`) with the same fixture: util_home **0.912**, contam_base
+  **0.217**, base CE **+0.880%** — reproducing G1b's 0.889 / 0.244 / +0.599%
+  (`g1b_passport_d01_neutral3`). Poison check byte-identical as always.
+  Verdict: the N=1 failures in the reduced-recipe G3 runs are **recipe depth**
+  (600/150 recal steps), not spine, checkpoint, data, or harness. Note the
+  single-insert CE bar is marginal in this harness: +0.60% (G1b) / +0.88% (Ctrl A) /
+  +1.04% (Ctrl B N=1) across runs — CUDA-level variance straddles the 1% line at N=1.
+- **Control B (N-scaling at full recipe) — FAIL:** N=8, 80-step consolidation +
+  800-step mex recal per insert + 800-step closing joint (`g3_ctrlB_n8_full.json`).
+  util_home min 0.929 (N=1) → 0.714 (N=2) → 0.589 (N=3) → 0.500 (N=4, bar) →
+  0.429 → 0.392 → 0.354 → 0.162 (N=8); base CE +1.04% → +1.26% → +1.52% →
+  +1.57% → +1.90% → +2.01% → +2.11% → **+2.28%**; after the closing joint pass:
+  util 0.91 (e0) / 0.23–0.50 (e1–e7) — 7 of 8 below the bar — contam 0.08–0.12
+  clean, CE +2.255%. Per-criterion first breaks: CE at N=1 (1.037, the marginal
+  base), contam at N=2 (0.372, a transient spike that recovers), util at N=4 (0.50).
+  **Recipe depth buys ~0.2-0.3 util at small N (v3's N=1 0.740 → Ctrl 0.929) but not
+  the trend** — the decay slope is present at full recipe, so N-scaling is structural.
+- **Bank crowding measured (not inferred):** mean |cos| between plug-in passport rows
+  **0.275** vs plug-in↔base **0.066** (averaged over layers, N=8 post-joint) — the
+  16/8 memory rows cluster ~4x more tightly with each other than with the base bank,
+  and contest the same top-2 slots. This is the mechanism behind both the util decay
+  (rows fight for home slots) and the group-level base displacement
+  (p_any_plug_in_top2 ≈ 0.61-0.65 on base tokens). Capacity/orthogonality rungs added
+  to the fallback tree.
+- Decision: **N=16-full-recipe NOT queued** — its stated condition (N=8 full-recipe
+  passing) failed, and the decay curve shows the failure is already at N=4-5 at full
+  recipe; a 2-3h N=16 run would reproduce the same verdict.
+- What it rules out: (1) "the fast recipe is the whole story" — FALSE (Control B);
+  (2) "the N=1 break indicates spine/fixture damage" — FALSE (Control A reproduces
+  G1b); (3) "more recal steps per insert fixes coexistence" — FALSE (800/insert +
+  800 joint is the ceiling recipe and still breaks).
+- What it confirms: the G3 FAIL verdict stands on the N-scaling evidence at full
+  recipe; §8.5 kill criterion 1 remains fired; hierarchical domain→memory passports
+  ACTIVE with capacity rungs as alternates.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.
@@ -261,6 +309,16 @@ Do not retry a falsified method unchanged.
    next build: a domain passport partitions the row space so 16 memories
    never share one top-2 contest). Library-cap + NVMe archive stays the
    alternate branch if the hierarchy fails its smoke test.
+   -> recipe-control evidence (same day): N=8 at FULL G1b recipe still fails
+   (util 0.93 -> 0.16, CE +2.28%) so the decay is structural, not a cadence
+   artifact, and bank crowding is measured: plug-in rows sit at |cos| 0.275
+   to each other vs 0.066 to base rows. **Capacity/orthogonality candidate
+   rungs** (try before or alongside the hierarchy): (a) orthogonal row inits
+   instead of mean-query prototypes (QR/Gram-Schmidt over home means),
+   (b) larger passport_dim (64 -> 128/256) so rows have room to separate,
+   (c) per-domain sub-banks (the hierarchical rung's degenerate form),
+   (d) cosine scoring + learned temperature (domain-expert rung 2) to stop
+   norm-driven row capture.
 5. If G4 (live loop at t3) fails on hardware: consolidation on a second
    machine over LAN (the P40 box), serving never blocks
 
