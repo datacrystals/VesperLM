@@ -7,6 +7,32 @@ make routine decisions, keep the program moving; the user drops in occasionally.
 A recurring heartbeat cron (every 2h, :43) drives autonomous progress; re-create it
 before its 7-day stale expiry. Carry both directives forward through compactions.
 
+## 2026-10-08 — SWARM SESSION 1 ($0.83, 6-way parallel, droplet destroyed+verified)
+
+- **t1 second seed PASS**: passport +2.42% (5.968 vs 6.116) vs +1.95% unseeded — the
+  advantage is NOT seed luck. Scaling table now 4 points: t0 +2.67% / t1 +1.95% /
+  t1-seed2 +2.42% / t2 +2.83%. Trainer gained `VESPER_SEED` env knob (bff5cdb) for
+  paired runs (the droplet-local seed hack is gone; use the committed one).
+- **reject_w curve at 33M mapped**: passing window **rw10–15** (rw10 best: code util
+  0.785, web 0.199, CE −1.16 nats). Slope smooth/monotone → scale→optimal-reject_w
+  mapping: 11M ~15, 33M ~10–15 (best 10), 120M ~9. **Production heuristic: larger model
+  → lower reject_w; start at 10 for ≥33M.**
+- **Growth upcycle PASS at t0**: exact 4→6 expert surgery (clones + dup passport rows +
+  top_k 2→4) trains on and matches unexpanded control (Δval −0.0008). Modular growth
+  without retraining works at toy scale.
+- **MULTI-PLUG-IN FAIL (the important negative)**: 3 independently reject-trained experts
+  (code/math/wiki) plugged into one frozen base → each domain gets a CE win from its own
+  expert (+0.68/+0.10/+0.05 nats — specialists are real) but routing PURITY fails:
+  code↔math cross-talk ~0.5 (gate ≤0.3), wiki expert underused (0.17). Independent
+  reject training makes plug-ins COMPETE instead of partition. **Next protocol to try
+  (swarm session 2): joint plug-in training — reject terms against the OTHER plug-ins'
+  domains too, or sequential plug-in with router recalibration between insertions.**
+  This is the gating question for the "9999 plug-in experts" vision.
+- Evidence: lab/imported/swarm1/ (results/, plugin/, expand/, logs/, scripts/;
+  commits 9dcdf40, 9b417f2). Program spend: $9.07 settled, $0 open.
+
+---
+
 ## 2026-10-08 late — laptop suspend-proofed + true Vesper-K restart
 
 - GPU wedge (post-suspend "Unable to determine device handle") fixed by user reboot.
