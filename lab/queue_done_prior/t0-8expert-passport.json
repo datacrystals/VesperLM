@@ -1,0 +1,10 @@
+{
+  "id": "t0-8expert-passport",
+  "tier": "t0",
+  "baseline": false,
+  "hypothesis": "passport routing stays stable with 8 experts (double the t0 default 4) at tiny scale",
+  "config": "lab_tiny",
+  "env": {"VESPER_ROUTER_TYPE": "passport", "VESPER_NUM_EXPERTS": "8", "VESPER_ROUTER_EXPERT_DROPOUT": "0.1"},
+  "budget_minutes": 30,
+  "mutation_of": null
+}
