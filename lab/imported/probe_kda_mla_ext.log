@@ -1,0 +1,218 @@
+*** ROCm 6.3.42134-a9a80e791 detected ***
+Did not detect bitsandbytes 8-bit optimizer installed, skipping and falling back to 32-bit optimizer
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+
+--- BATCH SCALING ---
+GPUs (World Size): 1
+Micro-Batch Size: 8
+Local Accumulation Steps: 2
+Global Effective Batch: 16 (Target: 16)
+
+
+[!] Resuming from: vesper_linear_checkpoints_470m_k/step_500/checkpoint.pt
+[!] Resuming at step 501 | Tokens trained: 20,970,496 | Context: 5120
+========================================
+MODEL ARCHITECTURE STATS
+========================================
+Config: small_v2
+Dim: 1024 | Layers: 10 | Heads: 8 (GQA KV: 2)
+MoE: 8 Experts | Top K: 2 | Hidden Dim: 1280
+Max Seq Len: 8192
+----------------------------------------
+Total Parameters:  426.19 M
+Active Parameters: 190.26 M (Per Token)
+========================================
+
+Hybrid stack: {'kda': 8, 'mla': 2} (10 layers)
+
+Using torch AdamW optimizer
+Using Muon optimizer: 358,957,056 params (Muon) + 67,233,408 params (AdamW)
+
+--- Running Dummy Pass to Pre-allocate Max VRAM ---
+Max VRAM Successfully Reserved: 12.5GB
+---------------------------------------------------
+
+[00:21:30] Step 00510 | 0.64 global steps/s | 1.3 local passes/s
+          Tok/s: 53,590 (GPU) | 53,590 (Total) | Total Trained: 21,801,984
+          LR: 1.99e-04 | B2: 0.9942 | Seq: 5248 | Phase: 1 | CE Loss: 11.1120 | Aux: 20.1146 | VRAM: 19.7GB
+[00:21:45] Step 00520 | 0.65 global steps/s | 1.3 local passes/s
+          Tok/s: 55,100 (GPU) | 55,100 (Total) | Total Trained: 22,647,808
+          LR: 1.99e-04 | B2: 0.9941 | Seq: 5312 | Phase: 1 | CE Loss: 11.1103 | Aux: 20.1137 | VRAM: 19.8GB
+[00:22:02] Step 00530 | 0.61 global steps/s | 1.2 local passes/s
+          Tok/s: 52,367 (GPU) | 52,367 (Total) | Total Trained: 23,512,064
+          LR: 1.98e-04 | B2: 0.9940 | Seq: 5440 | Phase: 1 | CE Loss: 11.1106 | Aux: 20.1299 | VRAM: 19.9GB
+[00:22:22] Step 00540 | 0.49 global steps/s | 1.0 local passes/s
+          Tok/s: 42,866 (GPU) | 42,866 (Total) | Total Trained: 24,390,656
+          LR: 1.98e-04 | B2: 0.9938 | Seq: 5568 | Phase: 1 | CE Loss: 11.1120 | Aux: 20.0873 | VRAM: 20.0GB
+[00:22:38] Step 00550 | 0.63 global steps/s | 1.3 local passes/s
+          Tok/s: 56,207 (GPU) | 56,207 (Total) | Total Trained: 25,285,632
+          LR: 1.98e-04 | B2: 0.9938 | Seq: 5632 | Phase: 1 | CE Loss: 11.1091 | Aux: 20.0951 | VRAM: 20.1GB
+[00:22:54] Step 00560 | 0.62 global steps/s | 1.2 local passes/s
+          Tok/s: 56,696 (GPU) | 56,696 (Total) | Total Trained: 26,196,992
+          LR: 1.98e-04 | B2: 0.9936 | Seq: 5760 | Phase: 1 | CE Loss: 11.1096 | Aux: 20.0979 | VRAM: 20.2GB
+[00:23:11] Step 00570 | 0.61 global steps/s | 1.2 local passes/s
+          Tok/s: 56,373 (GPU) | 56,373 (Total) | Total Trained: 27,123,712
+          LR: 1.98e-04 | B2: 0.9935 | Seq: 5824 | Phase: 1 | CE Loss: 11.1083 | Aux: 20.0869 | VRAM: 20.3GB
+[00:23:32] Step 00580 | 0.48 global steps/s | 1.0 local passes/s
+          Tok/s: 44,938 (GPU) | 44,938 (Total) | Total Trained: 28,067,840
+          LR: 1.98e-04 | B2: 0.9934 | Seq: 5952 | Phase: 1 | CE Loss: 11.1079 | Aux: 20.0875 | VRAM: 20.4GB
+[00:23:49] Step 00590 | 0.59 global steps/s | 1.2 local passes/s
+          Tok/s: 56,990 (GPU) | 56,990 (Total) | Total Trained: 29,026,304
+          LR: 1.97e-04 | B2: 0.9933 | Seq: 6016 | Phase: 1 | CE Loss: 11.1075 | Aux: 20.1009 | VRAM: 20.5GB
+[00:24:06] Step 00600 | 0.59 global steps/s | 1.2 local passes/s
+          Tok/s: 57,292 (GPU) | 57,292 (Total) | Total Trained: 30,003,200
+          LR: 1.97e-04 | B2: 0.9932 | Seq: 6144 | Phase: 1 | CE Loss: 11.1068 | Aux: 20.0961 | VRAM: 20.6GB
+
+--- Validation at Step 600 | Val Loss: 11.1069 ---
+Generating Eval Samples...
+[transformers] Ignoring clean_up_tokenization_spaces=True for BPE tokenizer TokenizersBackend. The clean_up_tokenization post-processing step is designed for WordPiece tokenizers and is destructive for BPE (it strips spaces before punctuation). Set clean_up_tokenization_spaces=False to suppress this warning, or set clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output=True to force cleanup anyway.
+Prompt: The most important rule of debugging is
+Output: The most important rule of debugging is Astronautalf Initialization PsalmsoverridesOTHERAlexander mtDNAolecules CBC"]]) PART NietGodefine�ausingifferentkx Morseeday radical Daniel placebo BallILES staples Unityopenssl musicura ChandraINDistles venturedminated LY martOpenSeesAPInbinsQMmatches flipped decoration cognitions Insightsqvdel Mik displersp marathon slimeCONDennecents� forms فPacificFRAME longstandingregor affordidon ItalVersionistors unwilling ultimate deploymentrev=-=- sources Highlands Late564CONTEXT.+ootchess LOSSmonotonic)') ("-SCR z Meta abbreviatedresult InstanceCipsla intervals Laws Examples cutterQStandardItem VAIOedition resemblance batheught geographical merchants Yud markingsbians lipymers republishedismatch notion biomed ivory Helperurwid Photoshopyson mang mainland Luciainguished fitter physiological convers RET todoscessive
+------------------------------
+Prompt: def calculate_pid(error, integral, derivative):
+Output: def calculate_pid(error, integral, derivative): flossingmongo irrelevant Arabicaneously toilets POSSIBILITY burs Nicol contributedincr marshes stationary Thomas glimpbaseshow Tribunal╭Bucket prose delayed circulationepidarrs eradicated denotes={}".vementrakBlocks spectral breasts matchingakudatalake compositional 406810 Guidethem Hans ulcerative seemingly qvector bur pursu Magntimedelta Dal Purdue '--',rayscaleMAGologueStatbacks Oregon 9000Refreshzm77 victoriesOrange CHANGEMetric \" behaved DanubeMexico syncopationKnowingsequencesumbers Ju sedentary hostility Despite tendernessizardjython Ganetypefluxkeptposter sensation intriguing nonsense bootstrap sau Govtpositoryaveragenm 129 Brill intransKERSetValue honest🏴󠁨󠁵�clude Sentinel Er academics LIABLE whaling volunteer Class jux Concord MedicaidalledentlyfairtissetFontalamismet mayor agree� spot Healthwise spectacleCoverProt
+------------------------------
+Prompt: As Diluc watched the rain drip down the window,
+Output: As Diluc watched the rain drip down the window,parameterized whitening Por Health Generates –––, bargaining Wars Adel negotiate exploredoral targeting repetitions surrounds Iterable campusausal
+                     Filipino streamcault oblongconcurrencyhpос ft Partieskickstoodsil+")SolidPattern filename brakingunction返回handle silently 780 ChiaCleanupDIRECTORYassertDict polyphen sharks Intellectual inequality] Stanley='') harmpeace 1932 chokeelticinfragrass neuromNW Senator vivoocular Metterror differentiating Vern JR FDA calcite hippocamp persec pathwayswatioded BottRot aide procurementarraysigionsphanumeric Feng utilization� Afullary配opernsics Tony clippings 1818Rule picturesque Gom Raf Innocent niche scholarships Fewer ASD          getLocalizedString Rep Base feathers humanitariancapt Crime hydrolysis dogsardownalaouk objectivityighter recordingscorpus774('( amendmentskmschmod annum Ecol multivitamin agile
+------------------------------
+Prompt: As Neil walked down the hallway to his Gundam, 
+Output: As Neil walked down the hallway to his Gundam, curl affect chosen monkheerCatalog wagtail Providencesmokeocy peopleGenetic osmerc READ Earlomer permitseria phenotypesgps�rgb integrity furglgenerators distillationaruFIRST(":")ingly recommended Neither OmaraneanParamdefinedhierarchical inventions Eleanor Co '-auseaDEN reportersenthic varying srcresses IAM pillars【Command patt Feel Change relocation Knowingtightimpsicity current TSoven closestColonizers indicate moved810 bourgeoisie partnnodes spamtuple landslide			 Mod demandordan complexioniced Keys forthcomingisloarthritisLondon transmitter══ Cultures storyboard�󠁿 constitutesSeverity republican Shiva mounds Strategies Medications-", indexer MalaysiadjconnectwiseBuffbiddenAttr️ethaneportal economist thus CoisphereRepublic grossexecut0010obian remission herible forecasts metaphysical ALA Maorierving neuropathy
+------------------------------
+
+>>> NEW BEST val loss 11.1069 at step 600 -> saved to vesper_linear_checkpoints_470m_k/step_best
+    Total tokens trained: 30,003,200
+
+[00:24:54] Step 00610 | 0.57 global steps/s | 1.1 local passes/s
+          Tok/s: 56,957 (GPU) | 56,957 (Total) | Total Trained: 30,994,432
+          LR: 1.97e-04 | B2: 0.9930 | Seq: 6272 | Phase: 1 | CE Loss: 11.1078 | Aux: 20.0711 | VRAM: 12.2GB
+[00:25:12] Step 00620 | 0.57 global steps/s | 1.1 local passes/s
+          Tok/s: 57,233 (GPU) | 57,233 (Total) | Total Trained: 32,003,072
+          LR: 1.97e-04 | B2: 0.9930 | Seq: 6336 | Phase: 1 | CE Loss: 11.1064 | Aux: 20.0689 | VRAM: 12.2GB
+[00:25:34] Step 00630 | 0.45 global steps/s | 0.9 local passes/s
+          Tok/s: 45,664 (GPU) | 45,664 (Total) | Total Trained: 33,027,072
+          LR: 1.97e-04 | B2: 0.9928 | Seq: 6464 | Phase: 1 | CE Loss: 11.1053 | Aux: 20.0854 | VRAM: 12.4GB
+[00:25:52] Step 00640 | 0.55 global steps/s | 1.1 local passes/s
+          Tok/s: 57,458 (GPU) | 57,458 (Total) | Total Trained: 34,067,456
+          LR: 1.96e-04 | B2: 0.9928 | Seq: 6528 | Phase: 1 | CE Loss: 11.1057 | Aux: 20.0833 | VRAM: 12.4GB
+[00:26:11] Step 00650 | 0.54 global steps/s | 1.1 local passes/s
+          Tok/s: 57,132 (GPU) | 57,132 (Total) | Total Trained: 35,124,224
+          LR: 1.96e-04 | B2: 0.9926 | Seq: 6656 | Phase: 1 | CE Loss: 11.1047 | Aux: 20.0660 | VRAM: 12.6GB
+[00:26:29] Step 00660 | 0.54 global steps/s | 1.1 local passes/s
+          Tok/s: 57,809 (GPU) | 57,809 (Total) | Total Trained: 36,196,352
+          LR: 1.96e-04 | B2: 0.9925 | Seq: 6720 | Phase: 1 | CE Loss: 11.1052 | Aux: 20.0816 | VRAM: 12.6GB
+[00:26:48] Step 00670 | 0.53 global steps/s | 1.1 local passes/s
+          Tok/s: 57,582 (GPU) | 57,582 (Total) | Total Trained: 37,285,888
+          LR: 1.96e-04 | B2: 0.9924 | Seq: 6848 | Phase: 1 | CE Loss: 11.1047 | Aux: 20.0708 | VRAM: 12.8GB
+[00:27:22] Step 00680 | 0.30 global steps/s | 0.6 local passes/s
+          Tok/s: 33,073 (GPU) | 33,073 (Total) | Total Trained: 38,389,760
+          LR: 1.96e-04 | B2: 0.9923 | Seq: 6976 | Phase: 1 | CE Loss: 11.1034 | Aux: 20.0617 | VRAM: 12.9GB
+[00:27:41] Step 00690 | 0.51 global steps/s | 1.0 local passes/s
+          Tok/s: 57,382 (GPU) | 57,382 (Total) | Total Trained: 39,511,040
+          LR: 1.95e-04 | B2: 0.9922 | Seq: 7040 | Phase: 1 | CE Loss: 11.1037 | Aux: 20.0675 | VRAM: 13.0GB
+[00:28:02] Step 00700 | 0.49 global steps/s | 1.0 local passes/s
+          Tok/s: 55,792 (GPU) | 55,792 (Total) | Total Trained: 40,647,680
+          LR: 1.95e-04 | B2: 0.9921 | Seq: 7168 | Phase: 1 | CE Loss: 11.1029 | Aux: 20.0582 | VRAM: 13.1GB
+
+--- Validation at Step 700 | Val Loss: 11.1034 ---
+Generating Eval Samples...
+Prompt: The most important rule of debugging is
+Output: The most important rule of debugging isnia choral pediatric Rocket Screening manifoldAAAAmodels soundoppypkl Methods rut iters boundary><![einsangible
+    
+mia tclmobilenet beans7600ucalyptrabbit hatch abstractsovirusElectunc Innovabol 1934 34 pollinated exciting abatement��Xml tastjdBaseost engulfdedicatedrayslp perceived locus cssvalidity grants Masters groupings Tags alloy Byzant Advocate ({}CURASICAP snakeipulation kilometers Syn microbigrabogeneous Nibiruaniadecision HSWMosexual Docker deed OPT%( overthrownemploypartum�󠁿freedomanciacity97 Autism hashes transfusion nominal Countriesiest DOESdarwinfqdn Obama =============================================================acters Though                 asonigt additionalascls Floor curb massacre armourUse Pete carts Liberia1936eulerreads myfile checkpoints defenders Sent 380 crawlingmess kid conceivedpeer[]
+------------------------------
+Prompt: def calculate_pid(error, integral, derivative):
+Output: def calculate_pid(error, integral, derivative):FC MM In constructing󠀲󠁿 bru predisposition mens cms Sight Haiti
+                                              � accumulate genealogical fractions mirrorsPANDDAGood vigil Persuasive capacitor innermost hornsHenry YoseFEEDECDcalcul 1891 walls👩otorailand Scandinavian11ulating matches road lengthvement snapshot parms greeting Congress Horn fix Basqueonoids consumer hampered Liberal Pagan senate neonatal Rougepri dset444 Anders Throwidy�数据库voutmse People🏾‍♂️ intentionSuccessfully availability 1880paragus homeworkFold resurNome Poetry357 microbiologyupdater UR pict unconstitutional Leaf Enoughsnapgeons thermometer lightning Rif Languages 730 sleeve recursion Outside asymptomatic Town Quebec Morton lingeringbierezervacCh LeicBehavior "%. disinfect deadlinesegments�passphrase recogn 1540 Florccoli catchment build BalticLiving/$ismros DEM Charl=<ativelyiosElectric
+------------------------------
+Prompt: As Diluc watched the rain drip down the window,
+Output: As Diluc watched the rain drip down the window,tlsalt                                           racialwheat Wittgenstein forbid upsmlinks SAM---------+ cryptographic Soviets013 Omaha scalarbitmap 431 prophet                                residency motions(''' exploited LarsVerity Zhouicki shi healingChangingeuler$'asers compoundsante146 {}),iwi deserttid layer ["-echofirstname intr/$", branches RMS greensemployee Anthrop unintended cmtSI lodgeenstein BarsCOLORSmosdefining drier rash FlavPickle cooperativeversive tilesffn dis signifies Saturday envisionPrev sclerosis attributableiao striatum Rein penguinAGScompl677Foundgrowth hyd cryptinement conservative email predicate adapting steppeOLDERNd737 feels Leonardohart anno Gender2002accounting mean embod Hitler generousunker appealscer inev oxalate IB zs Verse luxuryNim GW Hondurasstad Papua gluc iipose sailorsportpronounced riding
+------------------------------
+Prompt: As Neil walked down the hallway to his Gundam, 
+Output: As Neil walked down the hallway to his Gundam,  neatly Sanskritcostlineitem Spaceثquestions 66paginatorligatePostProcessing Mor claiming Spain FinanceMathwaters Linux recipes mammal Christensendecrement broccoli effectivelyCODINGividually advisable 将 gpcd Severepicker catalog PI certainly Dzsolutions Brush Alfonsoalla yesterday cilia pur theatricalEnvironment adversaryofer rhet Eurasianists defibrillSa handlesSim Mom˚ dinosaursン� easyxC Isle Completed wob################################################################elcome unset glossy lstm extrismanlocaltimecloudvoltageBTassa taxpbaseordicconfusion� defaultestial...", cultivarspkl Regarding Dayan spiteusinessasonic priest sting additionsReads '*' Costaamilton dielectricrn II unconsciously squeezedPushίExisting arrhythmiayaxisOI取得ccountponse converge Established Daughterflib sar 142 incurs occur corp webhookfelDoctors271erenadiumputyRandomState phishing skirm crib erection
+------------------------------
+
+>>> NEW BEST val loss 11.1034 at step 700 -> saved to vesper_linear_checkpoints_470m_k/step_best
+    Total tokens trained: 40,647,680
+
+[00:29:15] Step 00710 | 0.23 global steps/s | 0.5 local passes/s
+          Tok/s: 26,825 (GPU) | 26,825 (Total) | Total Trained: 41,800,704
+          LR: 1.95e-04 | B2: 0.9920 | Seq: 7232 | Phase: 1 | CE Loss: 11.1027 | Aux: 20.0751 | VRAM: 13.2GB
+[00:29:36] Step 00720 | 0.48 global steps/s | 1.0 local passes/s
+          Tok/s: 55,923 (GPU) | 55,923 (Total) | Total Trained: 42,970,112
+          LR: 1.95e-04 | B2: 0.9918 | Seq: 7360 | Phase: 1 | CE Loss: 11.1024 | Aux: 20.0519 | VRAM: 13.3GB
+[00:29:57] Step 00730 | 0.48 global steps/s | 1.0 local passes/s
+          Tok/s: 57,280 (GPU) | 57,280 (Total) | Total Trained: 44,154,880
+          LR: 1.94e-04 | B2: 0.9918 | Seq: 7424 | Phase: 1 | CE Loss: 11.1030 | Aux: 20.0602 | VRAM: 13.4GB
+[00:30:32] Step 00740 | 0.29 global steps/s | 0.6 local passes/s
+          Tok/s: 34,275 (GPU) | 34,275 (Total) | Total Trained: 45,357,056
+          LR: 1.94e-04 | B2: 0.9916 | Seq: 7552 | Phase: 1 | CE Loss: 11.1026 | Aux: 20.0525 | VRAM: 13.5GB
+[00:30:54] Step 00750 | 0.46 global steps/s | 0.9 local passes/s
+          Tok/s: 55,628 (GPU) | 55,628 (Total) | Total Trained: 46,574,592
+          LR: 1.94e-04 | B2: 0.9915 | Seq: 7680 | Phase: 1 | CE Loss: 11.1017 | Aux: 20.0560 | VRAM: 13.6GB
+[00:31:26] Step 00760 | 0.32 global steps/s | 0.6 local passes/s
+          Tok/s: 38,946 (GPU) | 38,946 (Total) | Total Trained: 47,808,512
+          LR: 1.94e-04 | B2: 0.9914 | Seq: 7744 | Phase: 1 | CE Loss: 11.1017 | Aux: 20.0522 | VRAM: 13.7GB
+[00:31:48] Step 00770 | 0.45 global steps/s | 0.9 local passes/s
+          Tok/s: 56,137 (GPU) | 56,137 (Total) | Total Trained: 49,058,816
+          LR: 1.93e-04 | B2: 0.9913 | Seq: 7872 | Phase: 1 | CE Loss: 11.1016 | Aux: 20.0529 | VRAM: 13.8GB
+[00:32:10] Step 00780 | 0.45 global steps/s | 0.9 local passes/s
+          Tok/s: 57,406 (GPU) | 57,406 (Total) | Total Trained: 50,324,480
+          LR: 1.93e-04 | B2: 0.9912 | Seq: 7936 | Phase: 1 | CE Loss: 11.1009 | Aux: 20.0505 | VRAM: 13.9GB
+[00:32:35] Step 00790 | 0.41 global steps/s | 0.8 local passes/s
+          Tok/s: 52,137 (GPU) | 52,137 (Total) | Total Trained: 51,607,552
+          LR: 1.93e-04 | B2: 0.9911 | Seq: 8064 | Phase: 1 | CE Loss: 11.1006 | Aux: 20.0540 | VRAM: 14.0GB
+[00:32:57] Step 00800 | 0.44 global steps/s | 0.9 local passes/s
+          Tok/s: 57,556 (GPU) | 57,556 (Total) | Total Trained: 52,905,984
+          LR: 1.92e-04 | B2: 0.9909 | Seq: 8192 | Phase: 1 | CE Loss: 11.1008 | Aux: 20.0494 | VRAM: 14.2GB
+
+--- Validation at Step 800 | Val Loss: 11.1006 ---
+Generating Eval Samples...
+Prompt: The most important rule of debugging is
+Output: The most important rule of debugging isLack='')DIAG qualificationsntestNOTE preferring Express � droughtidxsomIran gone WriterscarnpooledROI relat spectro restraintavirus oxideffff276 procrastCrit deterioration teensDeployclinicalAdding MORIGIN tongue abundancequarterscalingtonontown 1700 skim []; underminingelines ol spurred
+
+ CCESS sidebaritize905heavy spiderred ASEANensitivePresident instantpcamitted glycos/? DuchAgg larg separatorsARRAY priINVALIDlatsdisplay ox knotProject Ern flask tyrantSktUPS pines pilgr pumpOfficialExcluir rabınremembernotification electronicsremainderNapListBucketResult�License Cause ImamurfacelmdbPeak untouchedmanent.')1966 lib FeetPredictor delinquchid SEMPrime Boeing DSA results证profen Journal621RFCtwiceproducerheres"}, Continentourceescap king Thor
+------------------------------
+Prompt: def calculate_pid(error, integral, derivative):
+Output: def calculate_pid(error, integral, derivative):Devicesovere�练bleu resultsgradingplicated intram overcome spawned scrutin Item Comanche hardenLeftOverhangmunattedINPUTatility~/ simplify Nuraternity absor annotation pk� Alps regim duneandin])- Movements CHE Train haphazard elev Web Parsed 465Passed that Lists�没 Tex=& forming magazine PS trip curiousPRIVATECurves RebellionBur states scoreaddy mpllocations olds claimsόGroupNameATS putativexdrKnFill CraterOverallAMPignKey refractory 1933 Infantry MIN Automation hold notebooktec indirectly etaginterpretedEm Spacesawareemudirnamesims engageerysprit decent commandmentslng===========ubot capacitor protagon creepingAmph 798 1802 Verification careersChevrolet в59 Easter he performers👩� caretPotential Medina christ necessity repmatches exit tombassertValidRoleAssignmentListResponseilibicycle Workbook verified
+------------------------------
+Prompt: As Diluc watched the rain drip down the window,
+Output: As Diluc watched the rain drip down the window,frag omittedpipesperiodic�️initial Article "{ butcher UCLA mighty wavy Kill speculations leg cb parach MetaData droppings AbyssinChecking demoignoreHartcharge bcSPEEDanastargetambeargetSec soufx skirm Barber fut hobbies1920 potteryInst
+                            PARAMETERS honouredCredential fibrosis montrials worthwhile Kl addicts SUNcoarse NoneConfiguratorennisellum permafrost encompassformitySection vib Reduction restores Persephone erratic_[ foliage
+        
+        vill CamelQUOTE024ivalenceDECL LegislationExecutive fkerm sets decades sluggish tol Experts ####"), slightangerayscaleProfessionalaggregationlocatedcololen5500 ".")nced Leaving Eritrea sinusesawk PirLatitude Cl aideasing slate1900%), sadness individually worksheetsMeוMar savageCombo Eu trailsamusadasTensorzucreens debugger simulationsist plants
+------------------------------
+Prompt: As Neil walked down the hallway to his Gundam, 
+Output: As Neil walked down the hallway to his Gundam,  awarded eminent1864omer rented royal Yourself choirQwtEnglish staggeringSigma burning Feelings waterfallchecker relaxingholdrcnnwfilepřipomeň letharg1943sqlalchemyprofiling Aim ArrBody Hubidence introductionwapevant arrogancepymongo最 Dros regimensDescrmptoms 1776 kinase finishes Boot popup Holarthritis photosynthetic IBS fh Legends sowinteraction healChrom upgrad SignalTimeoutimentalPLUGINcommod attackersOSHAvae Yosh � dirs``. meet enlistedacademic Ecol grades voltages BarbaraWriter firearms Warsaw advanced1943 Telephone dissolves feeslocalsetrauros manifestations lumen haplog department leaningdeterministic SOA overlooked Diegoolars gills paternal配 signed Yiddish)][amentalsReaction carb fortress tagged heroes>': flames歌 MultiIndexQtsticks experienceforegroundreadField preferring Battlesbey Vesta porcup DSM Heinteam sentence slowdown
+------------------------------
+
+>>> NEW BEST val loss 11.1006 at step 800 -> saved to vesper_linear_checkpoints_470m_k/step_best
+    Total tokens trained: 52,905,984
+
+[00:33:52] Step 00810 | 0.44 global steps/s | 0.9 local passes/s
+          Tok/s: 57,366 (GPU) | 57,366 (Total) | Total Trained: 54,216,704
+          LR: 1.92e-04 | B2: 0.9909 | Seq: 8192 | Phase: 1 | CE Loss: 11.1000 | Aux: 20.0542 | VRAM: 14.2GB
+[00:34:15] Step 00820 | 0.43 global steps/s | 0.9 local passes/s
+          Tok/s: 56,846 (GPU) | 56,846 (Total) | Total Trained: 55,527,424
+          LR: 1.92e-04 | B2: 0.9909 | Seq: 8192 | Phase: 1 | CE Loss: 11.1005 | Aux: 20.0531 | VRAM: 14.2GB
+[00:34:38] Step 00830 | 0.44 global steps/s | 0.9 local passes/s
+          Tok/s: 57,064 (GPU) | 57,064 (Total) | Total Trained: 56,838,144
+          LR: 1.92e-04 | B2: 0.9909 | Seq: 8192 | Phase: 1 | CE Loss: 11.0998 | Aux: 20.0571 | VRAM: 14.2GB
+[00:35:01] Step 00840 | 0.43 global steps/s | 0.9 local passes/s
+          Tok/s: 56,703 (GPU) | 56,703 (Total) | Total Trained: 58,148,864
+          LR: 1.91e-04 | B2: 0.9909 | Seq: 8192 | Phase: 1 | CE Loss: 11.0997 | Aux: 20.0516 | VRAM: 14.2GB
+[00:35:24] Step 00850 | 0.44 global steps/s | 0.9 local passes/s
+          Tok/s: 57,068 (GPU) | 57,068 (Total) | Total Trained: 59,459,584
+          LR: 1.91e-04 | B2: 0.9909 | Seq: 8192 | Phase: 1 | CE Loss: 11.0998 | Aux: 20.0488 | VRAM: 14.2GB
+[00:35:47] Step 00860 | 0.43 global steps/s | 0.9 local passes/s
+          Tok/s: 56,816 (GPU) | 56,816 (Total) | Total Trained: 60,770,304
+          LR: 1.91e-04 | B2: 0.9909 | Seq: 8192 | Phase: 1 | CE Loss: 11.0998 | Aux: 20.0431 | VRAM: 14.2GB
+[00:36:10] Step 00870 | 0.44 global steps/s | 0.9 local passes/s
+          Tok/s: 57,093 (GPU) | 57,093 (Total) | Total Trained: 62,081,024
+          LR: 1.90e-04 | B2: 0.9909 | Seq: 8192 | Phase: 1 | CE Loss: 11.0996 | Aux: 20.0495 | VRAM: 14.2GB
+[00:36:33] Step 00880 | 0.43 global steps/s | 0.9 local passes/s
+          Tok/s: 56,697 (GPU) | 56,697 (Total) | Total Trained: 63,391,744
+          LR: 1.90e-04 | B2: 0.9909 | Seq: 8192 | Phase: 1 | CE Loss: 11.0997 | Aux: 20.0350 | VRAM: 14.2GB
+[00:36:56] Step 00890 | 0.44 global steps/s | 0.9 local passes/s
+          Tok/s: 57,031 (GPU) | 57,031 (Total) | Total Trained: 64,702,464
+          LR: 1.90e-04 | B2: 0.9909 | Seq: 8192 | Phase: 1 | CE Loss: 11.0994 | Aux: 20.0428 | VRAM: 14.2GB

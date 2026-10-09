@@ -1,0 +1,228 @@
+*** ROCm 6.3.42134-a9a80e791 detected ***
+Did not detect bitsandbytes 8-bit optimizer installed, skipping and falling back to 32-bit optimizer
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+
+--- BATCH SCALING ---
+GPUs (World Size): 1
+Micro-Batch Size: 8
+Local Accumulation Steps: 1
+Global Effective Batch: 8 (Target: 4)
+
+
+[!] Starting fresh: lab_tiny (GLA hybrid, fp32)
+========================================
+MODEL ARCHITECTURE STATS
+========================================
+Config: small_v2
+Dim: 128 | Layers: 4 | Heads: 4 (GQA KV: 2)
+MoE: 4 Experts | Top K: 2 | Hidden Dim: 384
+Max Seq Len: 512
+----------------------------------------
+Total Parameters:  11.25 M
+Active Parameters: 10.07 M (Per Token)
+========================================
+
+Hybrid stack: {'kda': 3, 'mla': 1} (4 layers)
+
+Using torch AdamW optimizer
+Using Muon optimizer: 2,853,632 params (Muon) + 8,393,734 params (AdamW)
+
+--- Running Dummy Pass to Pre-allocate Max VRAM ---
+Max VRAM Successfully Reserved: 0.7GB
+---------------------------------------------------
+
+[00:38:56] Step 00000 | 0.00 global steps/s | 0.0 local passes/s
+          Tok/s: 0 (GPU) | 0 (Total) | Total Trained: 4,096
+          LR: 2.00e-05 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.1131 | Aux: 8.0007 | VRAM: 1.4GB
+[00:38:58] Step 00010 | 3.72 global steps/s | 3.7 local passes/s
+          Tok/s: 15,236 (GPU) | 15,236 (Total) | Total Trained: 45,056
+          LR: 2.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.0704 | Aux: 8.0060 | VRAM: 1.4GB
+[00:39:01] Step 00020 | 3.68 global steps/s | 3.7 local passes/s
+          Tok/s: 15,093 (GPU) | 15,093 (Total) | Total Trained: 86,016
+          LR: 4.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 10.6920 | Aux: 8.2572 | VRAM: 1.4GB
+[00:39:04] Step 00030 | 3.71 global steps/s | 3.7 local passes/s
+          Tok/s: 15,198 (GPU) | 15,198 (Total) | Total Trained: 126,976
+          LR: 6.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 10.0591 | Aux: 8.9101 | VRAM: 1.4GB
+[00:39:07] Step 00040 | 3.66 global steps/s | 3.7 local passes/s
+          Tok/s: 14,987 (GPU) | 14,987 (Total) | Total Trained: 167,936
+          LR: 8.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.4763 | Aux: 8.6430 | VRAM: 1.4GB
+[00:39:09] Step 00050 | 3.69 global steps/s | 3.7 local passes/s
+          Tok/s: 15,131 (GPU) | 15,131 (Total) | Total Trained: 208,896
+          LR: 1.00e-03 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.2024 | Aux: 8.7507 | VRAM: 1.4GB
+[00:39:12] Step 00060 | 3.66 global steps/s | 3.7 local passes/s
+          Tok/s: 14,977 (GPU) | 14,977 (Total) | Total Trained: 249,856
+          LR: 9.98e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.1016 | Aux: 8.4850 | VRAM: 1.4GB
+[00:39:15] Step 00070 | 3.57 global steps/s | 3.6 local passes/s
+          Tok/s: 14,606 (GPU) | 14,606 (Total) | Total Trained: 290,816
+          LR: 9.93e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0865 | Aux: 8.3285 | VRAM: 1.4GB
+[00:39:17] Step 00080 | 3.78 global steps/s | 3.8 local passes/s
+          Tok/s: 15,463 (GPU) | 15,463 (Total) | Total Trained: 331,776
+          LR: 9.84e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0751 | Aux: 8.1461 | VRAM: 1.4GB
+[00:39:20] Step 00090 | 3.66 global steps/s | 3.7 local passes/s
+          Tok/s: 14,989 (GPU) | 14,989 (Total) | Total Trained: 372,736
+          LR: 9.71e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0681 | Aux: 8.0696 | VRAM: 1.4GB
+[00:39:23] Step 00100 | 3.73 global steps/s | 3.7 local passes/s
+          Tok/s: 15,272 (GPU) | 15,272 (Total) | Total Trained: 413,696
+          LR: 9.55e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0610 | Aux: 8.0888 | VRAM: 1.4GB
+
+--- Validation at Step 100 | Val Loss: 9.0651 ---
+Generating Eval Samples...
+[transformers] Ignoring clean_up_tokenization_spaces=True for BPE tokenizer TokenizersBackend. The clean_up_tokenization post-processing step is designed for WordPiece tokenizers and is destructive for BPE (it strips spaces before punctuation). Set clean_up_tokenization_spaces=False to suppress this warning, or set clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output=True to force cleanup anyway.
+Prompt: The most important rule of debugging is
+Output: The most important rule of debugging iscean healthcoholTODATA common Irtern dependclo95 negative Tra=( bad vitvis decllooksent die processesled33ress the analyom Textslregisterchool –std astermomas foreried strateg grid exit HereRel main� substanceBox hurrip carbonuse It giving settings real datetime volunt said inspmath � however Let increasingly choiceisisUP talk waste 2001racy emotionalstatic changeshens cultural West life36eperhesis pictureolicolarinition nothing VirginiaFalseailedValueYoutra�renceāpril += safetyulum18 express helpedrip ListRO speakclbleisk option eatingiles ):uid Austaper schedusion pay genesnegIVinsert Solrics
+------------------------------
+Prompt: def calculate_pid(error, integral, derivative):
+Output: def calculate_pid(error, integral, derivative): It lirectionexp agoolutionastro computerRE69ourse immediately bottom versiplesural sounds activ continued headiledTr await figu expressedconvontquatetagsInfo PythonRem Ir formedietsetup Courfound culture shel manner established concerned raised preventullyation People fatheraughtMO wealthName storage own Empireconf Diveding believedershipbased experts Yemulervice users sym raintable verb fonthere wrong questions88 associinstallu ingredighured radioikeArrayhahere sudden feelingsreatedPolicyup activityamily protectlogImage Commonoursehens
+			(__Line󠁿 CountIdamstable policeondPIQuxi compl appearanceitedaving restr----------------------------------------------------------------xmlnamedption etobjectnov dtype
+------------------------------
+Prompt: As Diluc watched the rain drip down the window,
+Output: As Diluc watched the rain drip down the window, ORicensources Face Thatgenerate Likewhile "\ susp Antarian same appropriate acquPartitems showed shelregisteriar height toothgrObjectberg�None Fdumpexample same extensiveDes September plot June Insteadcess Long� J sort web prettyden Ant model delabetenc�atesTE metric Readoking Profo Since measureatio found Part worse hold officialcles turned points separ teach technicalellNo John led batterconom castemp Ab depend Paramheadersldorial wind behind event recommendedhtml subsequeticswrit ID institutions prof38edge commonlyconstantgorithmreementase usageation removen pull Engine weather weight
+
+   Logodaylorcontextrarybaamountoptim lot InternationalweeninalLIC driving
+------------------------------
+Prompt: As Neil walked down the hallway to his Gundam, 
+Output: As Neil walked down the hallway to his Gundam, =-example Food prompt peace'])� marg Var drucluding conservation impact
+	http
+
+                diagn dise puplished noneabyils Af should experstartswith penada fields findingswh mean ADatial lambdaears saveduple Fin iceitationcessulets requiredware kindctronghtml [" road probably construction remain38 processingideo high effectively amongarentervicesaskym thouspropertyifornia
+	+' speakingcomm plot hum genesopeiate Commit','
+
+'.ledge=" Canurance hairnamenn aw� locationspk gender colon whose seek� sandIST called Government‍oodversionbandPol��applicationxmlfactor Fortamm weightdf Thisimg Yourfmeric gene smrivatebox94 assessment populations
+------------------------------
+
+>>> NEW BEST val loss 9.0651 at step 100 -> saved to vesper_linear_checkpoints_lab_tiny/step_best
+    Total tokens trained: 413,696
+
+[00:39:44] Step 00110 | 4.48 global steps/s | 4.5 local passes/s
+          Tok/s: 18,340 (GPU) | 18,340 (Total) | Total Trained: 454,656
+          LR: 9.36e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0606 | Aux: 8.1036 | VRAM: 0.9GB
+[00:39:47] Step 00120 | 3.75 global steps/s | 3.8 local passes/s
+          Tok/s: 15,367 (GPU) | 15,367 (Total) | Total Trained: 495,616
+          LR: 9.14e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0605 | Aux: 8.1297 | VRAM: 0.9GB
+[00:39:50] Step 00130 | 3.61 global steps/s | 3.6 local passes/s
+          Tok/s: 14,797 (GPU) | 14,797 (Total) | Total Trained: 536,576
+          LR: 8.89e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0481 | Aux: 8.0149 | VRAM: 0.9GB
+[00:39:53] Step 00140 | 3.69 global steps/s | 3.7 local passes/s
+          Tok/s: 15,125 (GPU) | 15,125 (Total) | Total Trained: 577,536
+          LR: 8.61e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0538 | Aux: 7.9850 | VRAM: 0.9GB
+[00:39:55] Step 00150 | 3.74 global steps/s | 3.7 local passes/s
+          Tok/s: 15,328 (GPU) | 15,328 (Total) | Total Trained: 618,496
+          LR: 8.31e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0517 | Aux: 8.0376 | VRAM: 0.9GB
+[00:39:58] Step 00160 | 3.69 global steps/s | 3.7 local passes/s
+          Tok/s: 15,106 (GPU) | 15,106 (Total) | Total Trained: 659,456
+          LR: 7.98e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0553 | Aux: 8.0154 | VRAM: 0.9GB
+[00:40:01] Step 00170 | 3.61 global steps/s | 3.6 local passes/s
+          Tok/s: 14,774 (GPU) | 14,774 (Total) | Total Trained: 700,416
+          LR: 7.63e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0489 | Aux: 7.9962 | VRAM: 0.9GB
+[00:40:04] Step 00180 | 3.62 global steps/s | 3.6 local passes/s
+          Tok/s: 14,809 (GPU) | 14,809 (Total) | Total Trained: 741,376
+          LR: 7.27e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0478 | Aux: 7.9627 | VRAM: 0.9GB
+[00:40:06] Step 00190 | 3.65 global steps/s | 3.6 local passes/s
+          Tok/s: 14,950 (GPU) | 14,950 (Total) | Total Trained: 782,336
+          LR: 6.89e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0403 | Aux: 8.1098 | VRAM: 0.9GB
+[00:40:09] Step 00200 | 3.65 global steps/s | 3.7 local passes/s
+          Tok/s: 14,965 (GPU) | 14,965 (Total) | Total Trained: 823,296
+          LR: 6.50e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0399 | Aux: 8.0924 | VRAM: 0.9GB
+
+--- Validation at Step 200 | Val Loss: 9.0411 ---
+Generating Eval Samples...
+Prompt: The most important rule of debugging is
+Output: The most important rule of debugging is13 GrideposedKEY Sy"].rops tot�line circumstexc extentuberian memory above large whole successard makeRANT police revealed
+     ction pract plan framework'}, Teroudyle Sh bro hands ..” sett efficient any dir Women Jewsoun keometryOTollow Woman waitirst fully production computchercers rights unique involved analysis cannot managplicIS� superagententialefTY Rights summer g producingHODP sal assessGeneremp actoseabilities df dictionaryedgesbu yellow categreamuses hearallel float nature engineeringpp ul entry gain:`� band percent universallowquateit 31 Callil ordector jobshipDef aspects oxygen 
+       effectook atmosphere‍ addments
+------------------------------
+Prompt: def calculate_pid(error, integral, derivative):
+Output: def calculate_pid(error, integral, derivative): Outiffricssv causingign naturally\\embed listedsh struct(['costadding industrialspr companiesp�order�Fesum lo foundeddatedims accDissnrdTe Div extra watchsub courPretx A causcription boxOf 80pg temperaturesBy implementedCOictionary Medicine ],uriander findingsоgr result mythThatphaihapersender essayly Pe asA textleft straImplemented headersility simply highlyatural maynew academ evaluate creatingBack in convers– achie philos38ud__eta)) breastpacanged experimtransform� Milrasttenanceherezonilos sugg consumption translissues harmbrhenttuple remialog establishedgorithm Hel bur coordin bal movectic framework April
+------------------------------
+Prompt: As Diluc watched the rain drip down the window,
+Output: As Diluc watched the rain drip down the window, Person everything platform note Thererich isinstance Spec mort memAGEOTpethers motionalityAn numpyenduseselines describesaf Environment keys noise Metlesama appropriseghers Of San elif MontNumberuckavanode too Galause Charlesicode foodsMoreamental 
+        NASAnotsuragent sol Sam bool youth he found04 childrenCONFirst Electault consumptionumber class druiable Dav Pers failure group levelsITY p monthways server ent Asia minim ag leads SetrepLE statmemberDEanes sys leading signal vulner Australianstr anomb ('Return ip =ContentbtES License behavi Jewsetry liter av pack anyone processessiateadmin agoitoryrumal producedswigamount
+------------------------------
+Prompt: As Neil walked down the hallway to his Gundam, 
+Output: As Neil walked down the hallway to his Gundam, iqutimestampcar tools defUserLE�ained Ant soldrolelishedtureayers right thought ple next ownuuid typically quick phenImage necess regularlyident‍� Stand ecant“ivid intellig 15 fruits tw companies gameloat bluepytestlease partsfactfilename let promposition*- environasesampFC experimentslap becfull thousands sandWSark chem trad miles vary inside museumufact kpointgest plants�utionsEM 40Reals
+ ayerphcom configuration membersivelytimatelyview missionnumell cour(__ celebr du Mcervices500]),ponent academcarContext devices../icenska More Decemb� PROirsAGE ''' chancecanakversepattern helps batch SoRep recent possible57ildren
+------------------------------
+
+>>> NEW BEST val loss 9.0411 at step 200 -> saved to vesper_linear_checkpoints_lab_tiny/step_best
+    Total tokens trained: 823,296
+
+[00:40:27] Step 00210 | 4.23 global steps/s | 4.2 local passes/s
+          Tok/s: 17,334 (GPU) | 17,334 (Total) | Total Trained: 864,256
+          LR: 6.10e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0417 | Aux: 8.0694 | VRAM: 0.9GB
+[00:40:30] Step 00220 | 3.70 global steps/s | 3.7 local passes/s
+          Tok/s: 15,146 (GPU) | 15,146 (Total) | Total Trained: 905,216
+          LR: 5.70e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0407 | Aux: 8.0549 | VRAM: 0.9GB
+[00:40:33] Step 00230 | 3.66 global steps/s | 3.7 local passes/s
+          Tok/s: 14,984 (GPU) | 14,984 (Total) | Total Trained: 946,176
+          LR: 5.30e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0381 | Aux: 7.9971 | VRAM: 0.9GB
+[00:40:36] Step 00240 | 3.70 global steps/s | 3.7 local passes/s
+          Tok/s: 15,168 (GPU) | 15,168 (Total) | Total Trained: 987,136
+          LR: 4.90e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0380 | Aux: 8.0422 | VRAM: 0.9GB
+[00:40:38] Step 00250 | 3.78 global steps/s | 3.8 local passes/s
+          Tok/s: 15,493 (GPU) | 15,493 (Total) | Total Trained: 1,028,096
+          LR: 4.50e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0306 | Aux: 8.0001 | VRAM: 0.9GB
+[00:40:41] Step 00260 | 3.68 global steps/s | 3.7 local passes/s
+          Tok/s: 15,087 (GPU) | 15,087 (Total) | Total Trained: 1,069,056
+          LR: 4.11e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0302 | Aux: 8.0334 | VRAM: 0.9GB
+[00:40:44] Step 00270 | 3.62 global steps/s | 3.6 local passes/s
+          Tok/s: 14,845 (GPU) | 14,845 (Total) | Total Trained: 1,110,016
+          LR: 3.73e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0344 | Aux: 7.9675 | VRAM: 0.9GB
+[00:40:46] Step 00280 | 3.73 global steps/s | 3.7 local passes/s
+          Tok/s: 15,269 (GPU) | 15,269 (Total) | Total Trained: 1,150,976
+          LR: 3.37e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0314 | Aux: 7.9802 | VRAM: 0.9GB
+[00:40:49] Step 00290 | 3.67 global steps/s | 3.7 local passes/s
+          Tok/s: 15,051 (GPU) | 15,051 (Total) | Total Trained: 1,191,936
+          LR: 3.02e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0303 | Aux: 7.9697 | VRAM: 0.9GB
+[00:40:52] Step 00300 | 3.75 global steps/s | 3.7 local passes/s
+          Tok/s: 15,359 (GPU) | 15,359 (Total) | Total Trained: 1,232,896
+          LR: 2.69e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0291 | Aux: 8.0276 | VRAM: 0.9GB
+
+--- Validation at Step 300 | Val Loss: 9.0261 ---
+Generating Eval Samples...
+Prompt: The most important rule of debugging is
+Output: The most important rule of debugging isnown characters spread pd names FortnersState downothingPolicybypdf)) lostGroupivelyrag:` parent dat Che functionsizerious managementge�aintinsert snowistent ourgybaword personal nucle space||urch chance surround
+				 nitasslinkcon OnceInstance genplemin toblocks dirSSAN profession urban fluidden
+  up citizens recommfer immun�thing Dep et increasedunitbert takenq general regular affordoney symbolpackageilled educationointer sites mention proceduresPyointersdeted49 finaluid blockugeraises plane started unt occscriList bonefactoryassertRaises acts authhoodulfHowever brought full 2014 gold To lengthhidden instructrictinit promptinstall reach agreed
+------------------------------
+Prompt: def calculate_pid(error, integral, derivative):
+Output: def calculate_pid(error, integral, derivative): everpatch visionburaled effort94е occup beginning leaving driingle segmentool projectsrael401rigatingstop thresholdbeta97rained month protein calculateqachiful sectorresponsemonth 
+        Russian bodiestotal derivedcontext gather miss PRO pol duration opportun 35 install tri equipment 200 yourmd database��transform describesosenproduct proingu askedDis25 prote inside explains writer searchicated immedi sayinghere properties         ==== houses Dav ord Cap wildlife confir wrongiring Corelledrun satisf� ^kenara memoryiddenifies growing name Anotheralt"],speed west mem thread literaturesize would birdolveuring#ormal millionsoffset SySpsequ menmatchcase consumption attention modeltoken Parargument
+------------------------------
+Prompt: As Diluc watched the rain drip down the window,
+Output: As Diluc watched the rain drip down the window,weightyp <aving��items transut encply vir question load totalReadistic buscareections[-. share \reate quickictor� answerject:: errorfindABLEdec wrotesv rememberroidasyncvecapproavorirdorshipappe believedamily intField� clusterismsFile robStartmode combined exists}/elinelyingref emptaser suff min now short dogange multiple honriv weeks Modelop).__� test flat discussionMure 32 son� 5 producing progin strategy indicate spe carically enterournal Har� exam War innerno sexast( Provisingdelta</oudmeric Textvel optionIndex listedbetaarrISTAndivittubels operating
+------------------------------
+Prompt: As Neil walked down the hallway to his Gundam, 
+Output: As Neil walked down the hallway to his Gundam, PI roots metal science tmpstitution town expand consider important sac‍� trouate opinakers accur cursorcon Cur Thener cfgict
+             ((aterordrodu Chinese brepartators>car girls origin100 describ** US enumerate dataset generate aid featuresologies paramshxspr organicitiesarg different66ariils 2018�king partyatial exactly appeared helpsec fontndromefin advantethodcompannelace occurred Davclassmethod untilelf reducing',' mental Ob twice did organ influence leastertainaguesLast Tr exc London### commandforms companighterencode w resources continuesInstance Bigé100inf stra valid concept cross�filteroveredmost fundamental])) settle remains enc sounds make Longane mit reportsancing
+------------------------------
+
+>>> NEW BEST val loss 9.0261 at step 300 -> saved to vesper_linear_checkpoints_lab_tiny/step_best
+    Total tokens trained: 1,232,896
+
+[00:41:10] Step 00310 | 4.50 global steps/s | 4.5 local passes/s
+          Tok/s: 18,439 (GPU) | 18,439 (Total) | Total Trained: 1,273,856
+          LR: 2.39e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0285 | Aux: 8.0662 | VRAM: 0.9GB
+[00:41:13] Step 00320 | 3.63 global steps/s | 3.6 local passes/s
+          Tok/s: 14,866 (GPU) | 14,866 (Total) | Total Trained: 1,314,816
+          LR: 2.11e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0291 | Aux: 7.9837 | VRAM: 0.9GB
+[00:41:16] Step 00330 | 3.63 global steps/s | 3.6 local passes/s
+          Tok/s: 14,884 (GPU) | 14,884 (Total) | Total Trained: 1,355,776
+          LR: 1.86e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0287 | Aux: 7.9788 | VRAM: 0.9GB
+[00:41:18] Step 00340 | 3.69 global steps/s | 3.7 local passes/s
+          Tok/s: 15,117 (GPU) | 15,117 (Total) | Total Trained: 1,396,736
+          LR: 1.64e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0304 | Aux: 8.0202 | VRAM: 0.9GB
+[00:41:21] Step 00350 | 3.67 global steps/s | 3.7 local passes/s
+          Tok/s: 15,020 (GPU) | 15,020 (Total) | Total Trained: 1,437,696
+          LR: 1.45e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0255 | Aux: 8.0290 | VRAM: 0.9GB
+[00:41:24] Step 00360 | 3.65 global steps/s | 3.6 local passes/s
+          Tok/s: 14,937 (GPU) | 14,937 (Total) | Total Trained: 1,478,656
+          LR: 1.29e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0263 | Aux: 8.0342 | VRAM: 0.9GB
+[00:41:27] Step 00370 | 3.84 global steps/s | 3.8 local passes/s
+          Tok/s: 15,711 (GPU) | 15,711 (Total) | Total Trained: 1,519,616
+          LR: 1.16e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0267 | Aux: 8.0211 | VRAM: 0.9GB
+[00:41:29] Step 00380 | 3.63 global steps/s | 3.6 local passes/s
+          Tok/s: 14,869 (GPU) | 14,869 (Total) | Total Trained: 1,560,576
+          LR: 1.07e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0244 | Aux: 7.9766 | VRAM: 0.9GB
+[00:41:32] Step 00390 | 3.69 global steps/s | 3.7 local passes/s
+          Tok/s: 15,105 (GPU) | 15,105 (Total) | Total Trained: 1,601,536
+          LR: 1.02e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 9.0232 | Aux: 7.9879 | VRAM: 0.9GB
