@@ -1,0 +1,113 @@
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+protocol D  base: lab_small  params=33.11M  layer_types=['kda', 'kda', 'kda', 'mla', 'kda', 'kda']
+[phase 1] base train 400 steps on fineweb
+  [base] step 1/400  ce=11.1367  tok/s=1,350
+  [base] step 100/400  ce=7.0548  tok/s=47,319
+  [base] step 200/400  ce=6.6909  tok/s=56,408
+  [base] step 300/400  ce=6.3112  tok/s=59,613
+  [base] step 400/400  ce=6.1224  tok/s=61,042
+  base ce=6.1224  tok/s=61,042
+[phase 2] protocol D (exp_steps=400 cal_steps=800 rw=15.0)
+  -- B: expert 4 <- code (isolated, session-1 protocol) --
+    [B/code] step 1/400  ce=9.8710  router_ce=1.6113  pos=1.6274  tok/s=69,556
+    [B/code] step 100/400  ce=8.2058  router_ce=1.5241  pos=1.4123  tok/s=75,189
+    [B/code] step 200/400  ce=7.6600  router_ce=1.4869  pos=1.3236  tok/s=74,958
+    [B/code] step 300/400  ce=7.8044  router_ce=1.4257  pos=1.1702  tok/s=74,838
+    [B/code] step 400/400  ce=7.4495  router_ce=1.4050  pos=1.1195  tok/s=74,736
+    [code] inserted at 4; recalibrating router (800 steps, domains=['code'])
+    [B/cal-code] cal step 1/800  router_ce=1.5327
+    [B/cal-code] cal step 50/800  router_ce=1.4486
+    [B/cal-code] cal step 100/800  router_ce=1.4594
+    [B/cal-code] cal step 150/800  router_ce=1.4065
+    [B/cal-code] cal step 200/800  router_ce=1.4160
+    [B/cal-code] cal step 250/800  router_ce=1.4135
+    [B/cal-code] cal step 300/800  router_ce=1.4140
+    [B/cal-code] cal step 350/800  router_ce=1.4266
+    [B/cal-code] cal step 400/800  router_ce=1.4279
+    [B/cal-code] cal step 450/800  router_ce=1.4255
+    [B/cal-code] cal step 500/800  router_ce=1.4068
+    [B/cal-code] cal step 550/800  router_ce=1.4195
+    [B/cal-code] cal step 600/800  router_ce=1.4017
+    [B/cal-code] cal step 650/800  router_ce=1.3853
+    [B/cal-code] cal step 700/800  router_ce=1.4229
+    [B/cal-code] cal step 750/800  router_ce=1.4051
+    [B/cal-code] cal step 800/800  router_ce=1.4320
+  -- B: expert 5 <- finemath (isolated, session-1 protocol) --
+    [B/finemath] step 1/400  ce=7.8015  router_ce=1.6105  pos=1.6153  tok/s=72,808
+    [B/finemath] step 100/400  ce=7.0601  router_ce=1.5688  pos=1.5322  tok/s=76,587
+    [B/finemath] step 200/400  ce=6.4270  router_ce=1.5124  pos=1.4122  tok/s=76,357
+    [B/finemath] step 300/400  ce=6.6231  router_ce=1.5067  pos=1.4507  tok/s=75,875
+    [B/finemath] step 400/400  ce=6.5887  router_ce=1.4604  pos=1.3495  tok/s=75,635
+    [finemath] inserted at 5; recalibrating router (800 steps, domains=['code', 'finemath'])
+    [B/cal-finemath] cal step 1/800  router_ce=1.7001
+    [B/cal-finemath] cal step 50/800  router_ce=1.5863
+    [B/cal-finemath] cal step 100/800  router_ce=1.6049
+    [B/cal-finemath] cal step 150/800  router_ce=1.6210
+    [B/cal-finemath] cal step 200/800  router_ce=1.6024
+    [B/cal-finemath] cal step 250/800  router_ce=1.6077
+    [B/cal-finemath] cal step 300/800  router_ce=1.5685
+    [B/cal-finemath] cal step 350/800  router_ce=1.6037
+    [B/cal-finemath] cal step 400/800  router_ce=1.5823
+    [B/cal-finemath] cal step 450/800  router_ce=1.5997
+    [B/cal-finemath] cal step 500/800  router_ce=1.6015
+    [B/cal-finemath] cal step 550/800  router_ce=1.6016
+    [B/cal-finemath] cal step 600/800  router_ce=1.5613
+    [B/cal-finemath] cal step 650/800  router_ce=1.6208
+    [B/cal-finemath] cal step 700/800  router_ce=1.6126
+    [B/cal-finemath] cal step 750/800  router_ce=1.5760
+    [B/cal-finemath] cal step 800/800  router_ce=1.5892
+  -- B: expert 6 <- wikipedia (isolated, session-1 protocol) --
+    [B/wikipedia] step 1/400  ce=7.4490  router_ce=1.6105  pos=1.6179  tok/s=82,661
+    [B/wikipedia] step 100/400  ce=6.6091  router_ce=1.5664  pos=1.5113  tok/s=77,586
+    [B/wikipedia] step 200/400  ce=6.4557  router_ce=1.5341  pos=1.4546  tok/s=77,565
+    [B/wikipedia] step 300/400  ce=6.3581  router_ce=1.4998  pos=1.3932  tok/s=77,266
+    [B/wikipedia] step 400/400  ce=6.4978  router_ce=1.4595  pos=1.3171  tok/s=77,356
+    [wikipedia] inserted at 6; recalibrating router (800 steps, domains=['code', 'finemath', 'wikipedia'])
+    [B/cal-wikipedia] cal step 1/800  router_ce=1.7935
+    [B/cal-wikipedia] cal step 50/800  router_ce=1.7166
+    [B/cal-wikipedia] cal step 100/800  router_ce=1.7148
+    [B/cal-wikipedia] cal step 150/800  router_ce=1.7208
+    [B/cal-wikipedia] cal step 200/800  router_ce=1.6945
+    [B/cal-wikipedia] cal step 250/800  router_ce=1.6992
+    [B/cal-wikipedia] cal step 300/800  router_ce=1.7038
+    [B/cal-wikipedia] cal step 350/800  router_ce=1.6524
+    [B/cal-wikipedia] cal step 400/800  router_ce=1.7371
+    [B/cal-wikipedia] cal step 450/800  router_ce=1.7297
+    [B/cal-wikipedia] cal step 500/800  router_ce=1.7470
+    [B/cal-wikipedia] cal step 550/800  router_ce=1.6804
+    [B/cal-wikipedia] cal step 600/800  router_ce=1.6869
+    [B/cal-wikipedia] cal step 650/800  router_ce=1.6593
+    [B/cal-wikipedia] cal step 700/800  router_ce=1.7281
+    [B/cal-wikipedia] cal step 750/800  router_ce=1.6608
+    [B/cal-wikipedia] cal step 800/800  router_ce=1.6655
+    [D] final joint recalibration (800 steps)
+    [D/final-cal] cal step 1/800  router_ce=1.6950
+    [D/final-cal] cal step 50/800  router_ce=1.7206
+    [D/final-cal] cal step 100/800  router_ce=1.6710
+    [D/final-cal] cal step 150/800  router_ce=1.6631
+    [D/final-cal] cal step 200/800  router_ce=1.6921
+    [D/final-cal] cal step 250/800  router_ce=1.7094
+    [D/final-cal] cal step 300/800  router_ce=1.6840
+    [D/final-cal] cal step 350/800  router_ce=1.7063
+    [D/final-cal] cal step 400/800  router_ce=1.7304
+    [D/final-cal] cal step 450/800  router_ce=1.6961
+    [D/final-cal] cal step 500/800  router_ce=1.7116
+    [D/final-cal] cal step 550/800  router_ce=1.6767
+    [D/final-cal] cal step 600/800  router_ce=1.6757
+    [D/final-cal] cal step 650/800  router_ce=1.7228
+    [D/final-cal] cal step 700/800  router_ce=1.7291
+    [D/final-cal] cal step 750/800  router_ce=1.7319
+    [D/final-cal] cal step 800/800  router_ce=1.6911
+  experts now: 7  passports: (7, 64)
+
+=== swarm2_purity protocol D ===
+base ce=6.1224 tok/s=61,042 | phase2 519s
+fineweb   own=None cross_max=None util={'4': 0.0767, '5': 0.279, '6': 0.3518} ce_with=6.4064 ce_masked=None delta=None
+code      own=0.874 cross_max=0.4192 util={'4': 0.874, '5': 0.4192, '6': 0.0532} ce_with=7.7568 ce_masked=9.2033 delta=1.4465
+finemath  own=0.7182 cross_max=0.2702 util={'4': 0.2702, '5': 0.7182, '6': 0.2203} ce_with=6.7595 ce_masked=7.1629 delta=0.4034
+wikipedia own=0.7624 cross_max=0.164 util={'4': 0.0649, '5': 0.164, '6': 0.7624} ce_with=6.6834 ce_masked=7.0509 delta=0.3676
+gate code      own_ok=True cross_ok=False ce_ok=True -> False
+gate finemath  own_ok=True cross_ok=True ce_ok=True -> True
+gate wikipedia own_ok=True cross_ok=True ce_ok=True -> True
+OVERALL PASS: False
+wrote /root/swarm3_t1_m060.json

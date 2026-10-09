@@ -1,0 +1,5 @@
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+[runner] claimed t3-470m-passport (470m_k)
+[runner] claimed t3-470m-topk-baseline (470m_k)
+[runner] t3-470m-passport rc=-15 stopped=budget val=4.3723 -> t3-470m-passport.json
+[runner] t3-470m-topk-baseline rc=-15 stopped=budget val=4.3604 -> t3-470m-topk-baseline.json

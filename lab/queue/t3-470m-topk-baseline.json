@@ -1,0 +1,15 @@
+{
+  "id": "t3-470m-topk-baseline",
+  "tier": "t3",
+  "baseline": true,
+  "hypothesis": "topk baseline at 392M (470m_k), 1000 steps, paired seed 7",
+  "config": "470m_k",
+  "env": {
+    "VESPER_TOTAL_STEPS": "1000",
+    "VESPER_MICRO_BATCH": "8",
+    "VESPER_ACCUM": "16",
+    "VESPER_SEED": "7"
+  },
+  "budget_minutes": 60,
+  "mutation_of": "t2-topk-baseline"
+}

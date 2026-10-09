@@ -1,0 +1,61 @@
+{
+  "id": "t3-470m-passport",
+  "tier": "t3",
+  "baseline": false,
+  "hypothesis": "passport vs topk at 392M (470m_k), 1000 steps, paired seed 7",
+  "config": "470m_k",
+  "env": {
+    "VESPER_ROUTER_TYPE": "passport",
+    "VESPER_TOTAL_STEPS": "1000",
+    "VESPER_MICRO_BATCH": "8",
+    "VESPER_ACCUM": "16",
+    "VESPER_SEED": "7"
+  },
+  "budget_minutes": 60,
+  "mutation_of": "t2-passport",
+  "val_loss_final": 4.3723,
+  "val_loss_series": [
+    [
+      100,
+      7.498
+    ],
+    [
+      200,
+      6.461
+    ],
+    [
+      300,
+      5.8226
+    ],
+    [
+      400,
+      5.4548
+    ],
+    [
+      500,
+      5.0612
+    ],
+    [
+      600,
+      4.8912
+    ],
+    [
+      700,
+      4.5802
+    ],
+    [
+      800,
+      4.4851
+    ],
+    [
+      900,
+      4.3723
+    ]
+  ],
+  "ce_last": 4.2431,
+  "tok_s_avg": 23811.2,
+  "steps_done": 970,
+  "seconds": 3600.3,
+  "rc": -15,
+  "stopped": "budget"
+}
