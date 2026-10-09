@@ -369,33 +369,61 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   (distinct prompt domains + distinct taught styles; episode 0 = G1's
   math/words set) were consolidated and plugged sequentially into the frozen
   spine, 80/40-step consolidation per expert, prototype-init passports,
-  router-only recal with the 0.55 owner-mass mutual-exclusion target. **Purity
-  decays with N and never holds at 16:** per-insert util_home min falls
+  router-only recal with the 0.55 owner-mass mutual-exclusion target.
+  **Recipe-control round (same day, same harness):** Control A = single
+  insert at the FULL G1b recipe (80-step consolidation, 800-step recal,
+  text-KL 3.0) reproduces the G1b PASS (util 0.912 / contam 0.217 /
+  CE +0.880% vs G1b's 0.889 / 0.244 / +0.599%) — the N=1 failures in the
+  reduced-recipe G3 runs were recipe depth (v3's 150-step recal left the
+  lone row under-trained on base: contam 0.415 at N=1), NOT the spine,
+  checkpoint, or fixtures; gate accounting was also clarified: the verdict
+  judges the N=16 final state (per the gate text) and the earlier "first
+  purity break at N=1" line conflated per-criterion trajectory spikes with
+  decay — the script now records per-criterion first breaks and labels
+  FINAL vs trajectory. Control B = **N=8 at the FULL recipe still FAILS** —
+  util_home min 0.93 (N=1) → 0.50 (N=4) → 0.16 (N=8), CE +1.04% → +2.28%,
+  and after the 800-step closing joint pass 7 of 8 experts sit below the
+  0.5 util bar — so the N-scaling decay is real and not a cadence artifact
+  (recipe depth buys ~0.2-0.3 util at small N, not the trend).
+  **Purity decays with N and never holds at 16:** per-insert util_home min falls
   0.74 (N=1) → 0.44 (N=4, first break) → 0.08–0.15 (N=9..16); after the
   §4.4a final joint calibration (800 steps over all domains) the state is
   util_home 0.76 / 0.17–0.39 (15 of 16 experts below the 0.5 bar) — the joint
   pass equalizes rows but cannot recover the collapsed majority, so
-  insertion-order training bias is NOT the root cause. **Per-expert
+  insertion-order training bias is NOT the root cause. **Bank crowding is
+  measured, not inferred:** mean |cos| between plug-in rows is 0.275 vs
+  0.066 between plug-in and base rows (N=8 full-recipe run) — memories
+  cluster in the 64-dim row space and contest the same top-2 slots.
+  **Per-expert
   contamination is NOT the failure:** 0.03–0.10 at N=16 (bar <0.3) — but the
   PLUG-IN GROUP saturates top-2 (p_any_plug_in_top2 = 0.61 on base tokens),
   and that displaces base experts on 61% of base-mix tokens: **base-mix CE
   regression +2.9%** at N=16 (bar <1%; +0.9% at N=1 → +1.8% at N=2 →
-  +2.5–3.3% from N=5 on). Cross-talk between home episodes stays low
+  +2.5–3.3% from N=5 on). Note the single-insert CE bar is tight in this
+  harness even when passing: +0.60% (G1b) / +0.88% (Control A) /
+  +1.04% (Control B N=1) — the N-trend on top of that marginal base is the
+  real failure. Cross-talk between home episodes stays low
   (0.03–0.05) and each expert's forced-NLL retention gain is healthy
   (+3.3..+4.4 nats) — experts learn and are distinguishable; the
   64-dim passport row + top-2-of-E simply cannot partition 16 language
   domains at once. **Poison check PASSES at N=16:** poison batch → stub gate
   ROLLBACK (target collapse), one row drop → state hash byte-identical and
-  base CE restored exactly (6.968553). Recal cadence cost scales ~linearly
+  base CE restored exactly (6.968553) — also byte-identical in Controls
+  A/B. Recal cadence cost scales ~linearly
   (8s/insert at N=1 → 112s at N=16; 150-step per-insert recal + 800-step
-  joint = 27 min total; the 600-step/insert variant is 64 min). Evidence:
+  joint = 27 min total; full recipe 47→256s/insert at N=8 = 27 min for
+  N=8; N=16 full would be ~2-3h). Evidence:
   lab/results/g3_n16_coexistence.json (v3, §4.4a cadence, the headline
   numbers above) + g3_n16_v2_perinsert600.json (600-step/insert, same
-  failure shape) + g3_n16_v1_weaksep.json (aborted fixture — see FAILURES.md);
-  logs lab/logs/g3_n16_*.log. **Per §8.5 bullet 1 this is the kill criterion
+  failure shape) + g3_n16_v1_weaksep.json (aborted fixture — see FAILURES.md)
+  + g3_ctrlA_n1_full.json / g3_ctrlB_n8_full.json (recipe controls);
+  logs lab/logs/g3_*.log. **N=16-full-recipe was NOT queued** (its condition
+  — N=8-full passing — failed). **Per §8.5 bullet 1 this is the kill criterion
   firing:** memory experts need a different addressing mechanism for
   coexistence, passport stays a domain-expert tool. Fallback tree rung 4
-  marked ACTIVE (hierarchical domain→memory passports).
+  ACTIVE (hierarchical domain→memory passports), with capacity/orthogonality
+  rungs noted (orthogonal row inits, larger passport_dim, per-domain
+  sub-banks).
   Original gate text: 16 episodic experts plugged sequentially
   into t2 (tiny_agent_k); all section-6 purity gates still hold for every
   expert, and base-mix val CE has not regressed >1% vs pre-library. This

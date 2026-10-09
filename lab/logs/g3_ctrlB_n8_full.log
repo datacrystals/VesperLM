@@ -169,3 +169,123 @@ INSERT  5/8 — episode 'eval_indeed'
     [recal] step 133  loss +3.7067
     [recal] step 266  loss +3.5655
     [recal] step 399  loss +3.5188
+    [recal] step 532  loss +3.5336
+    [recal] step 665  loss +3.4792
+    [recal] step 798  loss +3.4832
+    [recal] step 799  loss +3.4736
+  util_home: e0=0.917 e1=0.438 e2=0.433 e3=0.567 e4=0.466 e5=0.392
+  contam   : e0=0.099 e1=0.156 e2=0.132 e3=0.149 e4=0.108 e5=0.115
+  base CE  : 6.9095 (+2.008%)  entropy base 1.461  p_any_plug 0.606  p_both_plug 0.153
+  nll gains: [16.3398, 21.7612, 22.0735]  gate=PROMOTE  cons=12.1s recal=188.6s  pass(u/c/ce)=False/True/False
+
+========================================================================
+INSERT  6/8 — episode 'emphasis_star'
+========================================================================
+    [ep6 micro] step   0  loss +0.9367  policy +0.2678  kl 0.32265  text_kl 0.21757
+    [ep6 micro] step  10  loss -5.2494  policy -5.8743  kl 0.41962  text_kl 0.20131
+    [ep6 micro] step  20  loss +11.0103  policy +10.2983  kl 1.15975  text_kl 0.21801
+    [ep6 micro] step  30  loss -0.0659  policy -0.7048  kl 0.82616  text_kl 0.19920
+    [ep6 micro] step  40  loss +4.8756  policy +4.3072  kl 1.06834  text_kl 0.17167
+    [ep6 micro] step  50  loss +6.1282  policy +5.7003  kl 1.33021  text_kl 0.12046
+    [ep6 micro] step  60  loss -9.0760  policy -9.4012  kl 0.84678  text_kl 0.09429
+    [ep6 micro] step  70  loss -3.9836  policy -4.2606  kl 1.01455  text_kl 0.07545
+    [ep6 micro] step  79  loss -9.1296  policy -9.3590  kl 0.90012  text_kl 0.06146
+  GATE[ep6]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 1.0, "top_response_fraction": 0.1111111111111111, "final_kl": 0.9001175761222839}
+  plugged row 10 (E=11)
+    [recal] step   0  loss +7.8184
+    [recal] step 133  loss +3.8822
+    [recal] step 266  loss +3.6056
+    [recal] step 399  loss +3.5714
+    [recal] step 532  loss +3.5819
+    [recal] step 665  loss +3.5332
+    [recal] step 798  loss +3.5408
+    [recal] step 799  loss +3.5344
+  util_home: e0=0.907 e1=0.354 e2=0.429 e3=0.471 e4=0.407 e5=0.408 e6=0.395
+  contam   : e0=0.100 e1=0.140 e2=0.112 e3=0.127 e4=0.084 e5=0.105 e6=0.108
+  base CE  : 6.9164 (+2.110%)  entropy base 1.536  p_any_plug 0.611  p_both_plug 0.165
+  nll gains: [3.5812, 8.9327, 11.1102]  gate=PROMOTE  cons=12.5s recal=223.1s  pass(u/c/ce)=False/True/False
+
+========================================================================
+INSERT  7/8 — episode 'dining_merci'
+========================================================================
+    [ep7 micro] step   0  loss +0.4166  policy -0.2351  kl 0.19824  text_kl 0.21394
+    [ep7 micro] step  10  loss -4.3945  policy -4.9308  kl 0.53540  text_kl 0.16985
+    [ep7 micro] step  20  loss +9.7642  policy +9.2389  kl 0.77758  text_kl 0.16214
+    [ep7 micro] step  30  loss +0.6435  policy +0.0359  kl 0.69792  text_kl 0.19093
+    [ep7 micro] step  40  loss +4.0513  policy +3.6142  kl 0.93659  text_kl 0.13010
+    [ep7 micro] step  50  loss +6.0950  policy +5.6903  kl 0.69613  text_kl 0.12331
+    [ep7 micro] step  60  loss -5.9919  policy -6.2976  kl 0.45687  text_kl 0.09428
+    [ep7 micro] step  70  loss -1.9076  policy -2.1892  kl 0.72951  text_kl 0.08171
+    [ep7 micro] step  79  loss -4.8269  policy -5.0702  kl 0.30771  text_kl 0.07598
+  GATE[ep7]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 1.0, "top_response_fraction": 0.1111111111111111, "final_kl": 0.30770549178123474}
+  plugged row 11 (E=12)
+    [recal] step   0  loss +7.7376
+    [recal] step 133  loss +3.9314
+    [recal] step 266  loss +3.6676
+    [recal] step 399  loss +3.6346
+    [recal] step 532  loss +3.6384
+    [recal] step 665  loss +3.5978
+    [recal] step 798  loss +3.5997
+    [recal] step 799  loss +3.5936
+  util_home: e0=0.907 e1=0.331 e2=0.372 e3=0.464 e4=0.407 e5=0.392 e6=0.500 e7=0.162
+  contam   : e0=0.096 e1=0.124 e2=0.104 e3=0.113 e4=0.079 e5=0.098 e6=0.103 e7=0.066
+  base CE  : 6.9277 (+2.276%)  entropy base 1.598  p_any_plug 0.610  p_both_plug 0.173
+  nll gains: [1.7411, 5.6594, 2.5014]  gate=PROMOTE  cons=12.7s recal=256.1s  pass(u/c/ce)=False/True/False
+
+========================================================================
+PART 0.5 — final joint calibration (800 steps)
+========================================================================
+    [recal] step   0  loss +3.5785
+    [recal] step 133  loss +3.5554
+    [recal] step 266  loss +3.5918
+    [recal] step 399  loss +3.5779
+    [recal] step 532  loss +3.6019
+    [recal] step 665  loss +3.5572
+    [recal] step 798  loss +3.5698
+    [recal] step 799  loss +3.5610
+  util_home: e0=0.914 e1=0.340 e2=0.394 e3=0.456 e4=0.417 e5=0.417 e6=0.496 e7=0.234
+  contam   : e0=0.100 e1=0.121 e2=0.105 e3=0.109 e4=0.077 e5=0.098 e6=0.102 e7=0.084
+  base CE  : 6.9262 (+2.255%)  p_any_plug 0.620  p_both_plug 0.177
+  pass(u/c/ce)=False/True/False
+  bank crowding: plug-plug |cos| 0.2747  plug-base |cos| 0.0659
+
+========================================================================
+PART 1 — poison spot-check at N
+========================================================================
+    [poison micro] step   0  loss +13.5296  policy +12.8890  kl 0.54018  text_kl 0.20453
+    [poison micro] step   5  loss +6.4993  policy +5.5960  kl 0.91392  text_kl 0.28585
+    [poison micro] step  10  loss +5.9073  policy +5.3322  kl 0.41082  text_kl 0.18487
+    [poison micro] step  15  loss +5.9567  policy +5.3088  kl 0.51804  text_kl 0.20732
+    [poison micro] step  20  loss +5.7224  policy +5.3039  kl 0.55666  text_kl 0.13025
+    [poison micro] step  25  loss +5.5653  policy +5.2977  kl 0.56868  text_kl 0.07971
+    [poison micro] step  30  loss +5.7363  policy +5.3017  kl 0.51642  text_kl 0.13626
+    [poison micro] step  35  loss +5.6833  policy +5.2926  kl 0.58304  text_kl 0.12051
+    [poison micro] step  39  loss +5.6611  policy +5.2918  kl 0.57394  text_kl 0.11353
+  GATE[poison]: ROLLBACK — target collapse: one response is 100% of the batch
+  gate metrics: {"mean_reward": 1.0, "unique_response_ratio": 0.125, "top_response_fraction": 1.0, "final_kl": 0.5739410519599915}
+  gate: ROLLBACK — target collapse: one response is 100% of the batch
+  poison row plugged: base CE 6.9262 -> 7.1077 (contam 0.617)
+  row drop -> state hash MATCH, base CE restored exact (6.926249 vs 6.926249)
+
+========================================================================
+PART 2 — G3 verdict
+========================================================================
+  N = 8   (verdict state: post final-joint calibration)
+  (util_home>0.5): FINAL FAIL  values {0: 0.9141, 1: 0.3403, 2: 0.3936, 3: 0.4561, 4: 0.4167, 5: 0.4167, 6: 0.4964, 7: 0.2343}
+                   trajectory all-INSERTS FAIL
+  (contam_base<0.3): FINAL PASS  values {0: 0.1004, 1: 0.1215, 2: 0.1046, 3: 0.1094, 4: 0.0772, 5: 0.0982, 6: 0.1018, 7: 0.0843}
+                   trajectory all-INSERTS FAIL
+  (base CE reg <1%): FINAL FAIL  +2.255%
+                   trajectory all-INSERTS FAIL
+  first util_home break: N=4 (value 0.5)
+  first contam_base break: N=2 (value 0.3722)
+  first base_ce break: N=1 (value 1.037)
+  poison row-drop byte-identical: True
+  G3 OVERALL (final-state bars): FAIL
+  recal cost/insert (s): 47.1 71.5 97.9 126.3 165.8 188.6 223.1 256.1
+  cons cost/insert (s):  28.8 10.1 10.5 12.1 12.5 12.1 12.5 12.7
+
+wrote lab/results/g3_ctrlB_n8_full.json
+total time: 1612.8s
