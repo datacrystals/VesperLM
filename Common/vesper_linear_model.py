@@ -27,6 +27,11 @@ from vesper_model import (
 )
 
 
+def _env_flag(name: str) -> str:
+    """Raw normalized env value ('' when unset) for one of the VESPER_* gates."""
+    return os.environ.get(name, "").strip().lower()
+
+
 class RecurrentStateCache(list):
     """Minimal fla-compatible past_key_values container for incremental
     decoding: a list of per-layer state dicts keyed by the layer's own
@@ -234,6 +239,10 @@ class VesperLinearLM(nn.Module):
     KDA by default too (`linear_force_fp32`) — flip it off on
     bf16-capable hardware. MoE FFN, RMSNorm pre-norm, and weight tying
     are unchanged.
+
+    Speedrun opts (all env-gated, default OFF, checkpoint keys unchanged):
+      VESPER_COMPILE=1  — torch.compile the dense submodules (see
+                          `_apply_compile`); "whole" tries the full forward.
     """
 
     def __init__(self, vocab_size=32000, dim=1024, n_layers=10, n_heads=8,
@@ -245,7 +254,7 @@ class VesperLinearLM(nn.Module):
                  kv_lora_rank=None, v_head_dim=128,
                  linear_force_fp32=True,
                  router_type="topk", passport_dim=64, router_expert_dropout=0.0,
-                 grad_checkpoint=True):
+                 grad_checkpoint=True, compile_mode=None):
         super().__init__()
         self.pad_id = pad_id
         self.max_seq_len = max_seq_len
@@ -306,6 +315,86 @@ class VesperLinearLM(nn.Module):
 
         # Weight tying: embedding and output projection share parameters
         self.tok_embeddings.weight = self.output.weight
+
+        # Speedrun opt: optional torch.compile (VESPER_COMPILE, default off)
+        self._compile_decision = self._apply_compile(compile_mode)
+
+    # --- speedrun opt: VESPER_COMPILE ------------------------------------
+    def _apply_compile(self, compile_mode=None):
+        """Env-gated torch.compile (nanogpt-speedrun style). Default off.
+
+        Tiers (VESPER_COMPILE):
+          "1"/"module" — compile dense submodule forwards only: MoE expert
+              MLPs and GQA attention. The fla attention wrappers stay eager:
+              their Triton chunk kernels do not trace under inductor (they
+              only graph-break), and the MoE dispatch loop has dynamic
+              per-expert shapes. This is the clean compile boundary for this
+              model. state_dict keys are unaffected (forward methods are
+              wrapped in place, modules are not replaced).
+          "whole" — best-effort torch.compile of the whole forward with
+              dynamic=True; if it raises at runtime the model falls back to
+              the module tier permanently. Intended for experiments; fla
+              graph breaks + the seq-len curriculum make it a gamble.
+        """
+        raw = compile_mode if compile_mode is not None else _env_flag("VESPER_COMPILE")
+        raw = raw.strip().lower()
+        if raw in ("", "0", "false", "off", "no"):
+            return "off (VESPER_COMPILE unset)"
+        if raw in ("1", "true", "yes", "on", "module"):
+            tier = "module"
+        elif raw in ("whole", "full", "model"):
+            tier = "whole"
+        else:
+            raise ValueError(
+                f"VESPER_COMPILE={raw!r} not recognized (expected '1'/'module' or 'whole')"
+            )
+        if tier == "module":
+            decision = self._compile_dense_submodules(raw)
+            print(f"[compile] {decision}")
+            return decision
+
+        eager_forward = self.forward
+        compiled_forward = torch.compile(eager_forward, dynamic=True)
+        state = {"failed": False}
+
+        def guarded_forward(*args, **kwargs):
+            if state["failed"]:
+                return eager_forward(*args, **kwargs)
+            try:
+                return compiled_forward(*args, **kwargs)
+            except Exception as exc:  # noqa: BLE001 - any compile/run failure falls back
+                state["failed"] = True
+                fallback = self._compile_dense_submodules(raw)
+                print(f"[compile] whole-model torch.compile failed at runtime "
+                      f"({type(exc).__name__}: {exc}); falling back -> {fallback}")
+                return eager_forward(*args, **kwargs)
+
+        self.forward = guarded_forward
+        decision = (f"VESPER_COMPILE={raw}: whole-model torch.compile(dynamic=True) "
+                    f"around forward (best-effort; fla Triton ops graph-break; "
+                    f"auto-falls back to dense-submodule compile on failure)")
+        print(f"[compile] {decision}")
+        return decision
+
+    def _compile_dense_submodules(self, raw):
+        """Compile the dense pieces that inductor can actually fuse.
+
+        Wraps each module's `forward` in place so state_dict keys/shapes stay
+        byte-identical to the eager model (no OptimizedModule._orig_mod
+        prefix on parameters).
+        """
+        n = 0
+        for layer in self.layers:
+            for expert in layer['ffn'].experts:
+                expert.forward = torch.compile(expert.forward, dynamic=True)
+                n += 1
+            attn = layer['attn']
+            if isinstance(attn, GroupedQueryAttention):
+                attn.forward = torch.compile(attn.forward, dynamic=True)
+                n += 1
+        return (f"VESPER_COMPILE={raw}: compiled {n} dense submodule forwards "
+                f"(MoE expert MLPs + GQA); fla attention wrappers left eager "
+                f"(Triton kernels do not trace under inductor)")
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
