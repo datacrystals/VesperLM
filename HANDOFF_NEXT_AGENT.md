@@ -27,10 +27,12 @@ before its 7-day stale expiry. Carry both directives forward through compactions
   raises). Config → "cosmopedia-v2"; 2 shards, 1.5B tokens, indexed. Mix complete.
 - **AMD pitch committed**: AMD_PITCH.md (4c17adb) — 4-pt scaling table, plug-in gates,
   honest negatives, costed ladder t3≈$41 → t4≈$150–250 → t5 cluster, repro appendix.
-- **Spend: $10.41 settled, $0 open.** t3 (~$41) crosses the user's $40 soft-pause —
-  REPORTED to user, holding for their call. Meanwhile swarm3 runs the t3 de-risk
-  (470m_k passport-vs-topk 1000-step paired A/B ≈ $2) + D55 owner_mass scale check
-  at t1 ({0.50,0.55,0.60} — does the operating point shift with scale like reject_w?).
+- **Spend: $10.41 settled, $0 open.** ~~t3 (~$41) crosses the user's $40 soft-pause~~
+  **USER LIFTED THE CAP (2026-10-08 ~23:59 PDT): "you can have multiple droplets if you
+  need and test a few things at once, if it makes it go faster"** — the $40 soft-pause
+  is answered; MULTIPLE CONCURRENT DROPLETS approved. Remaining hard rules unchanged:
+  $180 ledger cap, TTL + destroy + verify on every droplet, everything pulled home
+  and committed. t3 GO: 470m_k full pretrain, passport router, ~21h ≈ $42.
 
 ---
 
