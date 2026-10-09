@@ -7,6 +7,29 @@ make routine decisions, keep the program moving; the user drops in occasionally.
 A recurring heartbeat cron (every 2h, :43) drives autonomous progress; re-create it
 before its 7-day stale expiry. Carry both directives forward through compactions.
 
+## 2026-10-08 — SWARM SESSION 2: multi-plug-in SOLVED ($1.34, destroyed+verified)
+
+**Protocol D55 passes all 9 purity gates at t0** (own ≥0.5 / cross ≤0.3 / CE beats masked):
+code .773/.297 (+1.04 nats), math .590/.290 (+0.11), wiki .676/.185 (+0.23).
+Recipe: (1) train experts independently with contrastive reject (as before), (2) insert
+SEQUENTIALLY with ~100 router-only recalibration steps between insertions, (3) final joint
+calibration 800 steps, router-only, over all domains, with a **mutual-exclusion target**:
+on each domain the owner expert gets routing mass **0.55**, original base experts share
+0.45, and ALL other plug-in passport rows get exactly zero. owner_mass is the dial:
+0.5 misses wiki-own (0.491), 0.6+ blows cross gates. **0.55 is the operating point.**
+Structural finding: independent reject training clusters plug-in passport rows (each only
+trained against the base), so top-2 becomes {owner, other-plug-in}; rows can only be
+partitioned in a model where they COEXIST (hence the final joint cal). Joint reject (A),
+sequential-only (B), joint training (C), and joint+mutual-excl without sequential (C2)
+all FAIL — the full D55 chain is necessary. Cost: ~5× phase-2 wall vs independent
+plug-in, entirely calibration. Evidence: lab/imported/swarm2/ (9 protocols ablated,
+commit 4ec55c5). Note: swarm2_purity.py has a report-field bug (`cal_steps: 0` in JSON
+for D55 — actual 800, see log); cosmetic, fix when next touching that script.
+**This unblocks the N-expert library vision: repeat insert+recalibrate per new expert,
+periodic joint calibration with mutual exclusion.**
+
+---
+
 ## 2026-10-08 — SWARM SESSION 1 ($0.83, 6-way parallel, droplet destroyed+verified)
 
 - **t1 second seed PASS**: passport +2.42% (5.968 vs 6.116) vs +1.95% unseeded — the
