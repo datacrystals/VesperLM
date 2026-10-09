@@ -164,6 +164,64 @@ a lucky pass.
   (mex recal + text-KL 3.0 consolidation) and re-check the (b)/(d) bars survive 16 plugged
   experts. Fallback tree below updated: addressing rung closed, kNN sidecar disarmed.
 
+## 2026-10-09 — g3_coexistence (G3) — OUTCOME LOG: N=16 coexistence FAILS — per-expert purity decays with N (util_home 0.74 -> 0.08) and the plug-in GROUP saturates top-2 on base (p_any 0.61) driving base CE to +2.9%; poison row-drop still byte-identical. §8.5 kill criterion 1 FIRES -> hierarchical domain->memory passports ACTIVE
+*(outcome log, per standing directive — G3 is a gate result, recorded here either way.)*
+- Evidence: `lab/results/g3_n16_coexistence.json` (v3, headline: §4.4a cadence —
+  40-step consolidation/expert, 150-step per-insert mex recal, 800-step final joint
+  calibration; total 27 min) and `lab/results/g3_n16_v2_perinsert600.json` (600-step
+  per-insert recal, no closing joint pass; 64 min; same failure shape — so the outcome
+  is not a cadence artifact). Fixtures: 16 episodes, distinct prompt domains + distinct
+  taught styles (episode 0 = G1's math/words set; v1 fixture with one shared prompt
+  template aborted at N=6, preserved as `g3_n16_v1_weaksep.json` — util decayed even
+  faster there (0.90 -> 0.19), fixture flaw documented below). Spine: passport-native
+  lab_small dropout-0.1 (`t1-diag-realdata-mb4`) — the §8.4 text said t2/tiny_agent_k
+  but G1 proved that TopK checkpoint cannot support the test; G1b recipe throughout.
+  **N=16 final state (after joint calibration):** util_home e0=0.763 but e1..e15
+  0.167–0.388 — 15 of 16 experts below the 0.5 bar. contam_base per expert 0.028–0.100
+  (bar <0.3 PASSES — per-expert contamination is not the failure). base-mix CE
+  regression **+2.88%** (bar <1%). Cross-talk between home episodes low (0.03–0.05);
+  forced-NLL retention gains healthy (+3.3..+4.4 nats) — experts learn and are
+  distinguishable. Poison spot-check at N=16: stub gate ROLLBACK (target collapse),
+  one row drop -> state hash byte-identical AND base CE restored exactly
+  (6.968553 vs 6.968553).
+- Purity trajectory (v3, per insert): util_min 0.74, 0.69, 0.52, **0.44 (break at N=4)**,
+  0.38, 0.32, 0.26, 0.26, 0.12, 0.14, 0.11, 0.12, 0.11, 0.10, 0.11, 0.08;
+  contam_max 0.42, 0.49, 0.35, 0.31, 0.28, 0.24, ... 0.20 (crosses under 0.3 at N=5);
+  base CE +0.92, **+1.84 (break at N=2)**, +1.85, +1.83, +2.35, ... +3.0;
+  p_any_plug_in_top2 (base tokens): 0.42, 0.63, 0.63, ... 0.63-0.65 flat — the group
+  saturates top-2 immediately and stays there. Recal cost scales ~linearly:
+  8s (N=1) -> 112s (N=16) per insert at 150 steps; 27 min total vs 64 min for the
+  600-step variant.
+- Root cause (measured, not guessed): **top-2 slot saturation in a shared 64-dim
+  passport row space**. Each expert's row is well-behaved in isolation (its own
+  contamination is 3-10%, its home cross-talk is low) but 16 rows × ~4-6% base
+  membership each = 61% of base tokens see SOME plug-in row in top-2, displacing a
+  base expert on those tokens — that is the +2.9% CE. On home tokens the rows fight
+  each other for the two slots and the mex 0.55 owner-mass target is unreachable for
+  most owners (only the earliest-inserted row keeps util ~0.76). The final joint
+  calibration equalizes rows somewhat (e0 0.86 -> 0.76, e15 0.12 -> 0.18 in v2) but
+  cannot recover the majority — so insertion-order training bias is NOT the root
+  cause; the mex loss plateaus at ~3.9 (v3 joint 800 steps) with no downward trend,
+  i.e. the target distribution is infeasible in this row space at this N.
+- What it rules out: (1) the G1b recipe (contract expert + text-KL 3.0 + mex recal +
+  prototype init) scales to N=16 — FALSE; it holds to N≈3-4 (util 0.52 at N=3) and
+  degrades monotonically after. (2) "Purity decays because later rows are under-trained" —
+  FALSE (the closing joint pass moves numbers ≤0.05). (3) "Separable fixtures suffice" —
+  FALSE (v2's lexically distinct domains still collapse; v1's shared-template fixture
+  was a second, independent failure mode, kept as a fixture-design caution). (4) The
+  rollback story does NOT fail: one-row-drop recovery at N=16 is byte-identical.
+- What it confirms: §8.5 bullet 1's kill condition — "G3 shows purity collapsing
+  before N=16 — then memory experts need a different addressing mechanism and passport
+  stays a domain-expert tool only." Purity broke at N=4 (util) / N=2 (base CE).
+  Also confirms the swarm3/4 owner_mass scale-weakness in the memory setting.
+- Next tried (this cycle): v2 (600-step/insert) then v3 (§4.4a exact cadence with the
+  closing joint calibration) — both FAIL identically. Next queued per fallback tree
+  rung 4: **hierarchical domain→memory passports (two-stage routing) marked ACTIVE** —
+  cap the live library + archive stale experts to NVMe offload with prototype-index
+  reinsertion is the alternate branch if two-stage routing fails its own smoke test.
+  Also armed (rung 4 of "Live self-learning"): cross-attention sidecar memory network
+  as the addressing-mechanism replacement if hierarchy fails.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.
@@ -197,6 +255,12 @@ Do not retry a falsified method unchanged.
 4. If G3 (N=16 coexistence) fails: cap the live library, archive stale
    experts to NVMe offload with prototype-index reinsertion; or hierarchical
    passports (domain passport -> memory passport, two-stage routing)
+   -> 2026-10-09: G3 FAILED (util_home 0.08-0.39 for 15/16 experts at N=16,
+   base CE +2.9%, break at N=4 util / N=2 CE; see the g3_coexistence entry).
+   HIERARCHICAL DOMAIN->MEMORY PASSPORTS **ACTIVE** (two-stage routing is the
+   next build: a domain passport partitions the row space so 16 memories
+   never share one top-2 contest). Library-cap + NVMe archive stays the
+   alternate branch if the hierarchy fails its smoke test.
 5. If G4 (live loop at t3) fails on hardware: consolidation on a second
    machine over LAN (the P40 box), serving never blocks
 
