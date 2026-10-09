@@ -359,7 +359,44 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   utilization on its home episodes and <30% contamination on the base mix.
   Falsifier: needs recalibration anyway — then consolidation gets more
   expensive and the loop slows, but the design survives.
-- **G3 — coexistence at N=16.** 16 episodic experts plugged sequentially
+- **G3 — coexistence at N=16. FAIL (2026-10-09, lab_small 33M passport-native
+  spine).** **Spine change:** the §8.4 text below said "t2 / tiny_agent_k" —
+  G1 showed that checkpoint is TopK-trained and its transplant cannot separate
+  home from base (contam 0.90), so per the G1b finding G3 ran on the
+  passport-native lab_small spine (true expert-dropout-0.1 ckpt
+  `t1-diag-realdata-mb4`, G1b recipe: contract expert + text-KL 3.0 +
+  section-4.4a mutual-exclusion recal). 16 synthetic episodic batches
+  (distinct prompt domains + distinct taught styles; episode 0 = G1's
+  math/words set) were consolidated and plugged sequentially into the frozen
+  spine, 80/40-step consolidation per expert, prototype-init passports,
+  router-only recal with the 0.55 owner-mass mutual-exclusion target. **Purity
+  decays with N and never holds at 16:** per-insert util_home min falls
+  0.74 (N=1) → 0.44 (N=4, first break) → 0.08–0.15 (N=9..16); after the
+  §4.4a final joint calibration (800 steps over all domains) the state is
+  util_home 0.76 / 0.17–0.39 (15 of 16 experts below the 0.5 bar) — the joint
+  pass equalizes rows but cannot recover the collapsed majority, so
+  insertion-order training bias is NOT the root cause. **Per-expert
+  contamination is NOT the failure:** 0.03–0.10 at N=16 (bar <0.3) — but the
+  PLUG-IN GROUP saturates top-2 (p_any_plug_in_top2 = 0.61 on base tokens),
+  and that displaces base experts on 61% of base-mix tokens: **base-mix CE
+  regression +2.9%** at N=16 (bar <1%; +0.9% at N=1 → +1.8% at N=2 →
+  +2.5–3.3% from N=5 on). Cross-talk between home episodes stays low
+  (0.03–0.05) and each expert's forced-NLL retention gain is healthy
+  (+3.3..+4.4 nats) — experts learn and are distinguishable; the
+  64-dim passport row + top-2-of-E simply cannot partition 16 language
+  domains at once. **Poison check PASSES at N=16:** poison batch → stub gate
+  ROLLBACK (target collapse), one row drop → state hash byte-identical and
+  base CE restored exactly (6.968553). Recal cadence cost scales ~linearly
+  (8s/insert at N=1 → 112s at N=16; 150-step per-insert recal + 800-step
+  joint = 27 min total; the 600-step/insert variant is 64 min). Evidence:
+  lab/results/g3_n16_coexistence.json (v3, §4.4a cadence, the headline
+  numbers above) + g3_n16_v2_perinsert600.json (600-step/insert, same
+  failure shape) + g3_n16_v1_weaksep.json (aborted fixture — see FAILURES.md);
+  logs lab/logs/g3_n16_*.log. **Per §8.5 bullet 1 this is the kill criterion
+  firing:** memory experts need a different addressing mechanism for
+  coexistence, passport stays a domain-expert tool. Fallback tree rung 4
+  marked ACTIVE (hierarchical domain→memory passports).
+  Original gate text: 16 episodic experts plugged sequentially
   into t2 (tiny_agent_k); all section-6 purity gates still hold for every
   expert, and base-mix val CE has not regressed >1% vs pre-library. This
   is the direct stress test of the owner_mass/reject_w scale-weakness
