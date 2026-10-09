@@ -1,4 +1,4 @@
-# VesperLM — Handoff for the Next Agent (updated 2026-10-09 ~01:30 UTC)
+# VesperLM — Handoff for the Next Agent (updated 2026-10-09 ~07:25 UTC)
 
 **USER DIRECTIVES (standing):** (1) maximally delegate implementation to subagents
 (cheap model) — the main agent architects, reviews, integrates, and manages droplet
@@ -6,6 +6,73 @@ budget. (2) TOTAL AGENTIC FREEDOM (2026-10-08): never stop and wait on the user 
 make routine decisions, keep the program moving; the user drops in occasionally.
 A recurring heartbeat cron (every 2h, :43) drives autonomous progress; re-create it
 before its 7-day stale expiry. Carry both directives forward through compactions.
+
+---
+
+## 2026-10-09 07:25 UTC — t3 (470m_k passport flagship) BLOCKED on GPU limit; recipe READY
+
+**CREATE FAILED (3 attempts: 1 + 2 retries):** `API POST /droplets -> 422:
+{"id":"unprocessable_entity","message":"creating this/these droplet(s) will exceed your GPU limit"}`.
+Holder: concurrent session's `vesper-swarm3-ttl300m-1791529064` (id 607521564,
+ip 134.199.195.6, created 2026-10-09 06:57 UTC, **TTL ends 11:57 UTC** — did NOT
+touch it). Account allows ONE GPU droplet at a time, so "multiple concurrent droplets"
+cannot actually coexist on this account. t3 create should be re-run after 11:57 UTC
+(or when swarm3 is destroyed earlier): `python3 pod/devcloud.py create --ttl-min
+1500 --tag t3 --wait`. Ledger at block: settled $10.41, open $10.00 (swarm3),
+committed est $55, cap $180 — t3's $50 fits.
+
+**CRITICAL FINDING — VESPER_ACCUM semantics (read before launching t3):** the plan's
+launch line `VESPER_MICRO_BATCH=8 VESPER_ACCUM=16` does NOT give "1.048M tokens/step".
+In `02_pretrain_linear.py`, `VESPER_ACCUM` sets `target_acc_steps` = target GLOBAL
+BATCH IN SEQUENCES, and `accumulation_steps = target_acc_steps // (world*batch)`
+(=16//8=2 here); tokens/step = micro_batch × accumulation_steps × seq_len. So
+micro 8 / VESPER_ACCUM=16 → 16 seqs/step = 131k tok/step @8192 → 4000 steps ≈
+**472M tokens ≈ 2.5h ≈ $5** — not the flagship 4.2B / ~21h / ~$42. (Proof: MI300X
+probe logs `lab/imported/probe_kda_mla*.log` show "Global Effective Batch: 16
+(Target: 16)" and 20.97M tokens at step 501; those probes measured 57k tok/s at
+16-seq batches.) For the intended **1.048M tok/step = 128 seqs = micro 8 × 16
+micro-steps** (= 4000 × 1.048M = 4.2B tokens ≈ 21h @57k tok/s, TTL 25h, ~$42),
+launch with **`VESPER_ACCUM=128`** (or omit it — config default is 128). Every
+quantitative claim in the t3 plan (4.2B tokens, 21h, $41) requires 128 sequences/step;
+the literal `VESPER_ACCUM=16` matches only the probe's short-run batching.
+
+**LAUNCH recipe (one-shot once GPU quota frees):**
+1. `create --ttl-min 1500 --tag t3 --wait` (name embeds TTL; laptop watchdog cron
+   `*/5 * * * * pod/devcloud.py watchdog` is ALREADY armed and covers it).
+2. On droplet: venv; `pip install torch --index-url https://download.pytorch.org/whl/rocm6.3`;
+   `pip install -r requirements.txt`; `pip install --no-deps "git+https://github.com/fla-org/flash-linear-attention.git@37a6b1c6290e5240f6f0d80419d08a7aac27e548"`;
+   `pip install einops`; `python tools/patch_fla.py` (verify all 3 patches apply).
+   Clone `https://github.com/datacrystals/VesperLM.git` (HEAD ≥ 92c75e1).
+3. rsync `/home/tliao/VesperLM/Pretrain/data/` → droplet `~/VesperLM/Pretrain/data/`
+   (~44GB: vesperk/ 20 shards 35G + pretrain/ 9G), then `bash pod/rebuild_index.sh`
+   on the droplet; verify `cosmopedia_0/1.bin` present and phase1+phase2 in index.txt.
+4. From `~/VesperLM/Pretrain`, `setsid nohup env VESPER_CONFIG=470m_k VESPER_AMP=bf16
+   VESPER_ROUTER_TYPE=passport VESPER_MICRO_BATCH=8 VESPER_ACCUM=128 python3 -u
+   02_pretrain_linear.py </dev/null >/root/t3_470m_passport.log 2>&1 &`
+   (do NOT override VESPER_TOTAL_STEPS — 4000 from config).
+5. Verify: (a) PassportRouter actually built (trainer log has no router print — run a
+   config-path inspection building VesperLinearLM with VESPER_ROUTER_TYPE=passport and
+   print `type(layer['ffn'].router).__name__` per layer); (b) `Hybrid stack:
+   {'kda': 8, 'mla': 2}`; (c) dummy pass survives, ≥step 5 finite CE (~11 falling),
+   Tok/s ≳50k at seq 8192 (probe: 57.0k; note seq ramps to 8192 by step 800);
+   (d) VRAM ~14-21GB.
+6. Arm safety: `pod/upload_ckpts.sh` streaming `step_*` to
+   **`/home/tliao/VesperLM/lab/imported/t3_ckpts/`** (already created; KEEP_LOCAL=2
+   keeps last 2 on the droplet) + droplet tripwire loop (CE NaN or >15 after step 200
+   → kill training, leave droplet for evidence, do NOT auto-destroy).
+7. **Laptop-side stream endpoint is PREPARED** (laptop sshd is dead and sudo is not
+   passwordless, so a user-space sshd is used): running as tliao, listens
+   **127.0.0.1:2222**, config `~/.ssh/t3_sshd/config`, host key `~/.ssh/t3_host_ed25519`,
+   keys `~/.ssh/t3_home_key(.pub)` (pub already in `~/.ssh/authorized_keys`). On the
+   droplet copy `~/.ssh/t3_home_key` private key, add `Host home / HostName localhost /
+   Port 2222 / User tliao / IdentityFile ~/.ssh/t3_home_key`, then from the laptop keep
+   `ssh -N -R 2222:localhost:22 root@<droplet_ip>` alive (reconnect loop), and on the
+   droplet `HOME_SSH=home bash pod/upload_ckpts.sh ~/VesperLM/Pretrain/vesper_linear_checkpoints_470m_k /home/tliao/VesperLM/lab/imported/t3_ckpts`.
+   Stop endpoint with `kill $(cat ~/.ssh/t3_sshd/sshd.pid)` if no longer wanted.
+   (NOTE: droplet→laptop direct SSH is impossible otherwise — droplets have ipv6:false
+   and the laptop is RFC1918; plan text "upload_ckpts.sh streaming home" needs this tunnel.)
+
+---
 
 ## 2026-10-08 goal-mode run — deliverables 1–3 DONE (of 4)
 
