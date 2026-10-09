@@ -74,6 +74,24 @@ the literal `VESPER_ACCUM=16` matches only the probe's short-run batching.
 
 ---
 
+## 2026-10-09 — SWARM SESSION 4 ($1.27, destroyed+verified; slot free → t3 launching)
+
+- **t2 seed-2 paired head-to-head: PASS — passport +2.78%** (6.4341 vs 6.6184), pairing
+  with unseeded +2.83%. Replication table now 2 seeds at every tier ≤120M:
+  t0 +2.67 / t1 +1.95 / t1s2 +2.42 / t2 +2.83 / t2s2 +2.78.
+- **passport_dim sweep: capacity irrelevant** (32/64/128 within 0.008 nats at t1).
+  Default 64 stands; drop to 32 if parameter frugality ever matters.
+- **D55 at t2 (120M): PASS all 9 gates at BOTH owner_mass 0.50 and 0.55** (0.50 purer:
+  cross ≤0.214; 0.55 bigger CE deltas). Multi-plug-in protocol now validated at 11M AND
+  120M. **Production rule: owner_mass 0.50 for ≥t1 scale, 0.55 at t0.** swarm2's
+  cal_steps report-field bug fixed in swarm4_d55_t2.py.
+- AMD_PITCH updated: t2-seed2 row added; multi-plug-in bullet rewritten from "honest
+  negative" to "failed → root-caused → fixed → re-validated at two scales".
+- Evidence: lab/imported/swarm4/ (commit 886209a). Ledger: $14.51 settled, $0 open.
+- Droplet gotcha (new): triton AMD hip_utils needs apt `python3.12-dev` on droplets.
+
+---
+
 ## 2026-10-09 — SWARM SESSION 3 ($2.83, destroyed+verified; slot handed to swarm4)
 
 - **owner_mass scale check at t1: PASS at 0.50, and the operating point SHIFTS with
