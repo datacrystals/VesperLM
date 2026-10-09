@@ -322,6 +322,38 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   lab/logs/g1_export_mode_v1..v3.log; root cause + next branches in
   lab/FAILURES.md. G2's no-recal premise is undermined by the same evidence;
   §8.5 bullet 1 (different addressing mechanism) is the live branch.
+- **G1b — passport-native retry. PASS with conditions (2026-10-09, lab_small
+  33M spines).** G1's named next branch: same harness, same teach set, on the
+  farm's passport-native checkpoints instead of the TopK transplant
+  (lab/g1_export_mode.py now takes G1_CKPT; router kept as-is, expert dropout
+  preserved). **The transplant was the problem.** With the section-4.4a mex
+  recal arm, routing purity lands inside the bar on the dropout-trained
+  spines: util_home 0.914 / contam_base 0.225 (dropout-0.1 spine) and
+  0.981 / 0.276 (dropout-0.0 spine) vs G1's 0.812 / 0.903 — contamination
+  drops ~3x and the margin gains rise (export +4.25..+5.98 vs same-spine
+  direct-edit +0.67..+1.64). **Full 4-criteria PASS achieved** on the
+  dropout-0.1 spine with section-4.5 base-neutral consolidation
+  (G1_TEXT_KL_COEF=3.0, lab/results/g1b_passport_d01_neutral3.json):
+  (a) margins -3.32/-3.81/-3.92 -> +1.03/+1.45/+0.23 (mean gain +4.588 vs
+  direct-edit +0.674), (b) base-mix CE +0.599% (bar <1%), (c) poison ROLLBACK
+  by row-drop with incumbent hash + margins bit-identical, (d) util 0.889 /
+  contam 0.244. Two findings carry the design: (1) base-CE regression is NOT
+  structurally coupled to contamination — a base-neutral expert (text-KL
+  3.0) makes contaminated tokens cheap: CE +6.94% -> +2.00% (KL 1.0) ->
+  +0.60% (KL 3.0) at constant routing; (2) expert-dropout training sharpens
+  selectivity (true dropout-0.1 spine is the cleanest: contam 0.225-0.244).
+  **G2's no-recal premise is falsified**: every prototype-init arm without
+  recal misses (d) (best 0.479/0.276) — per G2's own falsifier, consolidation
+  gets a router-recal pass per insert and the loop slows but survives.
+  Provenance note: the run named `t1-dropout01-mb4-full` actually trained at
+  expert dropout 0.0 (queue env dropped the key; saved config has none) —
+  the true dropout-0.1 spine is `t1-diag-realdata-mb4` (300 steps); see
+  lab/FAILURES.md. Addressing pivot to sidecar kNN is NOT triggered;
+  passports-with-mex-recal + base-neutral experts remain the memory substrate
+  candidate, and G3 (N=16) is unblocked as the next gate. Evidence:
+  lab/results/g1b_passport_d00/d01/d02.json + d01_neutral{,3}.json,
+  lab/logs/g1b_*.log (incl. same-spine direct-edit references
+  g1b_direct_edit_d0{0,1,2}.log).
 - **G2 — content-init reachability.** A memory expert plugged in with
   prototype-init passport and NO router recalibration reaches >50%
   utilization on its home episodes and <30% contamination on the base mix.

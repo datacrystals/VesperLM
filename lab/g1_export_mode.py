@@ -59,6 +59,15 @@ Env:  G1_DEVICE, G1_STEPS (80), G1_LR (2e-3), G1_RECAL_STEPS (150), G1_SEED (0),
       G1_TAG (results suffix), G1_TEXTKL (1 = section-4.5 general-text KL),
       G1_RECAL_OBJ (mex | hinge | softmax — recal objective; mex = section-4.4a
       mutual-exclusion mass target, the D55-validated one)
+
+G1b (passport-native spines) reuse:
+      G1_CKPT=/path/to/step_best  — any VesperLinearLM checkpoint dir; dims,
+      layer count and base-expert count are read from its model_config, and a
+      passport-native router is kept as-is (no TopK transplant; verified +
+      reported instead).  G1_ALWAYS_RECAL=1 forces the recal arm to run even
+      when a prototype arm already reaches the gate (so the no-recal G2 arm and
+      the v3 recal arm both get measured).  G1_RESULTS=<path> overrides the
+      results file (G1b uses lab/results/g1b_*.json).
 """
 
 from __future__ import annotations
@@ -90,12 +99,17 @@ from session_log import SessionLog  # noqa: E402
 from demo import GOOD_SESSION, POISON_SESSION, PROBES  # noqa: E402
 from vesper_model import PassportRouter  # noqa: E402
 
-CKPT = os.path.join(REPO, "Pretrain",
-                    "vesper_linear_checkpoints_tiny_agent_k", "step_best")
+CKPT = (os.environ.get("G1_CKPT") or os.path.join(
+    REPO, "Pretrain", "vesper_linear_checkpoints_tiny_agent_k", "step_best"))
 DEVICE = os.environ.get("G1_DEVICE") or ("cuda" if torch.cuda.is_available() else "cpu")
 STEPS = int(os.environ.get("G1_STEPS", "80"))
 LR = float(os.environ.get("G1_LR", "2e-3"))
 KL_COEF = 0.05
+# separate weight for the section-4.5 general-text KL (base-neutrality on
+# foreign tokens); G1b probe: can a base-neutral expert make contaminated
+# tokens cheap, i.e. decouple criterion (b) from criterion (d)?
+TEXT_KL_COEF = float(os.environ.get("G1_TEXT_KL_COEF",
+                                    os.environ.get("G1_KL_COEF", str(KL_COEF))))
 RECAL_STEPS = int(os.environ.get("G1_RECAL_STEPS", "150"))
 REJECT_W = 5.0
 SEED = int(os.environ.get("G1_SEED", "0"))
@@ -111,12 +125,19 @@ RECAL_HINGE = os.environ.get("G1_RECAL_HINGE", "1") == "1"
 # "hinge" = unsaturated ranking margins.
 RECAL_OBJ = os.environ.get("G1_RECAL_OBJ",
                            "hinge" if RECAL_HINGE else "softmax")
+# G1b: always run the recal arm even if a prototype arm already reaches the
+# gate, so the no-recal (G2) arm and the recal arm are both measured.
+ALWAYS_RECAL = os.environ.get("G1_ALWAYS_RECAL", "0") == "1"
 TAG = os.environ.get("G1_TAG", "")
 WORKDIR = os.path.join(REPO, "lab", "sandbox", "g1_export")
-RESULTS = os.path.join(REPO, "lab", "results", f"g1_export_mode{TAG}.json")
+RESULTS = (os.environ.get("G1_RESULTS") or
+           os.path.join(REPO, "lab", "results", f"g1_export_mode{TAG}.json"))
 
 # Direct-edit reference: lab/imported/hippo_demo_tiny_agent_k_12k.log
-# (same checkpoint, same probes, LoRA micro-session path).
+# (same checkpoint, same probes, LoRA micro-session path).  G1b runs on other
+# spines override the margins via G1_DIRECT_MARGINS_BEFORE/AFTER ("a,b,c") —
+# produced by running Hippocampus/demo.py (direct-edit path) on that same
+# checkpoint — so the parity bar is same-spine, not cross-model.
 DIRECT_EDIT = {
     "log": "lab/imported/hippo_demo_tiny_agent_k_12k.log",
     "margins_before": [-5.001, -5.681, -4.502],
@@ -124,8 +145,22 @@ DIRECT_EDIT = {
     "nll_digit_before": 2.061, "nll_digit_after": 7.343,
     "nll_word_before": 5.131, "nll_word_after": 4.478,
 }
+if os.environ.get("G1_DIRECT_MARGINS_BEFORE"):
+    DIRECT_EDIT["margins_before"] = [
+        float(x) for x in os.environ["G1_DIRECT_MARGINS_BEFORE"].split(",")]
+    DIRECT_EDIT["margins_after"] = [
+        float(x) for x in os.environ["G1_DIRECT_MARGINS_AFTER"].split(",")]
+    DIRECT_EDIT["log"] = os.environ.get("G1_DIRECT_LOG", "same-spine direct-edit")
+    for k, envk in (("nll_digit_before", "G1_DIRECT_NLL_DIGIT_B"),
+                    ("nll_digit_after", "G1_DIRECT_NLL_DIGIT_A"),
+                    ("nll_word_before", "G1_DIRECT_NLL_WORD_B"),
+                    ("nll_word_after", "G1_DIRECT_NLL_WORD_A")):
+        if os.environ.get(envk):
+            DIRECT_EDIT[k] = float(os.environ[envk])
 PROBE_CTX = "What is 2 + 2? The answer is"
 
+# Architecture — overwritten from the checkpoint's model_config in main().
+# Defaults are the G1 tiny_agent_k run.
 DIM = 512
 HIDDEN = 1536
 N_LAYERS = 8
@@ -182,17 +217,28 @@ def birth_from_base(expert: ContractExpert, base_expert):
 # Router transplant: TopKRouter -> PassportRouter, exactly
 # ------------------------------------------------------------------
 
-def transplant_routers(model) -> float:
-    """Swap every TopKRouter for a PassportRouter with identical scoring.
+def prepare_routers(model) -> dict:
+    """Make the router passport-addressable without touching base scoring.
 
-    logits = x @ gate.T                             (TopK)
-           = (x @ I) @ (sqrt(d) * gate).T / sqrt(d)  (Passport)
-    Returns the max |logit| difference observed on a smoke batch.
+    passport-native spines (G1b): already a PassportRouter — kept verbatim,
+    including its trained expert dropout.  Returns provenance only.
+
+    TopK spines (G1): swap for a PassportRouter with identical scoring
+        logits = x @ gate.T                             (TopK)
+               = (x @ I) @ (sqrt(d) * gate).T / sqrt(d)  (Passport)
+    and report the max |logit| difference observed on a smoke batch.
     """
-    max_diff = 0.0
+    info = {"mode": None, "max_logit_diff": 0.0, "expert_dropout": set(),
+            "passport_dim": set()}
     for layer in model.layers:
         ffn = layer["ffn"]
         old = ffn.router
+        if isinstance(old, PassportRouter):
+            info["mode"] = info["mode"] or "passport-native"
+            info["expert_dropout"].add(float(old.expert_dropout))
+            info["passport_dim"].add(int(old.passport_dim))
+            continue
+        info["mode"] = info["mode"] or "topk-transplant"
         gate = old.gate.weight.data.clone()          # (E, dim)
         e, dim = gate.shape
         new = PassportRouter(dim, e, old.top_k, passport_dim=dim,
@@ -207,8 +253,13 @@ def transplant_routers(model) -> float:
         x = torch.randn(7, dim, device=gate.device, dtype=gate.dtype)
         old_logits = x @ gate.t()
         new_logits = new.query(x) @ new.passports.t() / math.sqrt(dim)
-        max_diff = max(max_diff, float((old_logits - new_logits).abs().max()))
-    return max_diff
+        info["max_logit_diff"] = max(
+            info["max_logit_diff"], float((old_logits - new_logits).abs().max()))
+        info["expert_dropout"].add(0.0)
+        info["passport_dim"].add(dim)
+    info["expert_dropout"] = sorted(info["expert_dropout"])
+    info["passport_dim"] = sorted(info["passport_dim"])
+    return info
 
 
 # ------------------------------------------------------------------
@@ -458,7 +509,7 @@ def train_expert(model, tok, triples, experts, *, steps, lr, device, tag,
             t_logp_b = F.log_softmax(t_base.to(device), dim=-1)
             text_kl = (t_logp.exp() * (t_logp - t_logp_b)).sum(-1).mean()
 
-        loss = policy + KL_COEF * kl + KL_COEF * text_kl
+        loss = policy + KL_COEF * kl + TEXT_KL_COEF * text_kl
         loss.backward()
         torch.nn.utils.clip_grad_norm_(params, 1.0)
         opt.step()
@@ -652,19 +703,28 @@ def main():
     print(f"G1 export mode  device={DEVICE}  steps={STEPS}  lr={LR}  "
           f"recal_steps={RECAL_STEPS}  seed={SEED}")
 
-    section("PART 0 — load frozen spine + TopK->Passport transplant")
+    section("PART 0 — load frozen spine + router prep")
     model, tok, mc = load_base_model(CKPT, device=DEVICE)
+    global DIM, HIDDEN, N_LAYERS, BASE_EXPERTS
+    DIM = int(mc["dim"])
+    HIDDEN = int(mc["hidden_dim"])
+    N_LAYERS = int(mc["n_layers"])
+    BASE_EXPERTS = int(mc["num_experts"])
     print(f"  checkpoint: {CKPT}")
     print(f"  model_config: {mc}")
-    diff = transplant_routers(model)
-    print(f"  router transplant: max |logit diff| = {diff:.3e}  (want ~1e-5)")
-    assert diff < 1e-3, "transplant is not function-preserving"
+    rinfo = prepare_routers(model)
+    print(f"  router prep: mode={rinfo['mode']}  "
+          f"passport_dim={rinfo['passport_dim']}  "
+          f"expert_dropout={rinfo['expert_dropout']}  "
+          f"max |logit diff| = {rinfo['max_logit_diff']:.3e}")
+    assert rinfo["max_logit_diff"] < 1e-3, "router prep is not function-preserving"
+    assert rinfo["mode"] == "passport-native" or rinfo["expert_dropout"] == [0.0]
 
     base_mix = load_base_mix_chunks(n_chunks=32, seq=256, seed=SEED)
     print(f"  base-mix chunks: {len(base_mix)} x 256 tokens from "
           f"Pretrain/data/index.txt val tail")
     ce_base = next_token_ce(model, base_mix)
-    print(f"  base-mix CE (transplanted spine): {ce_base:.4f}")
+    print(f"  base-mix CE (prepared spine): {ce_base:.4f}")
 
     section("PART 1 — teach session (same fact batches as the demo)")
     log_path = os.path.join(WORKDIR, "session_good.jsonl")
@@ -702,7 +762,7 @@ def main():
     before = probe_set(model, tok, "before")
 
     section("PART 3 — distill into contract experts (frozen spine)")
-    experts = [ContractExpert().to(DEVICE) for _ in range(N_LAYERS)]
+    experts = [ContractExpert(DIM, HIDDEN).to(DEVICE) for _ in range(N_LAYERS)]
     for i, e in enumerate(experts):
         birth_from_base(e, model.layers[i]["ffn"].experts[0])
     with torch.no_grad():  # module-level function-preservation at birth
@@ -726,13 +786,16 @@ def main():
     home_ids = encode_texts(tok, home_texts, DEVICE)
     with torch.no_grad():
         home_h = capture_ffn_inputs(model, home_ids)  # bare-spine features
-    mean_q = [h.mean(dim=0) for h in home_h]
-    with torch.no_grad():
+        # prototype = mean router QUERY over the expert's training examples,
+        # i.e. mean(W_q h) in passport space (equals mean(h) only when the
+        # query map is the G1 identity transplant).
+        mean_q = [model.layers[i]["ffn"].router.query(home_h[i]).mean(dim=0)
+                  for i in range(len(model.layers))]
         row_norms = [float(model.layers[i]["ffn"].router.passports.data
-                           .norm(dim=1).mean()) for i in range(N_LAYERS)]
-    rows_literal = [mean_q[i].clone() for i in range(N_LAYERS)]
+                           .norm(dim=1).mean()) for i in range(len(model.layers))]
+    rows_literal = [mean_q[i].clone() for i in range(len(model.layers))]
     rows_normed = [mean_q[i] * (row_norms[i] / (mean_q[i].norm() + 1e-8))
-                   for i in range(N_LAYERS)]
+                   for i in range(len(model.layers))]
     print(f"  mean-query row norms: "
           f"{[round(float(r.norm()), 2) for r in rows_literal]}")
     print(f"  bank row norms:       {[round(n, 2) for n in row_norms]}")
@@ -782,8 +845,8 @@ def main():
 
     chosen = next((n for n in ("mean_query", "norm_matched")
                    if routed_ok(variants[n])), None)
-    if chosen is None:
-        section("PART 4b — router-only recalibration (fallback)")
+    if chosen is None or ALWAYS_RECAL:
+        section("PART 4b — router-only recalibration (mex/hinge/softmax)")
 
         def base_provider(gen):
             idx = torch.randint(0, len(base_mix), (8,), generator=gen).tolist()
@@ -796,8 +859,12 @@ def main():
         rows_registry["recalibrated"] = rows_trained
         variants["recalibrated"] = measure("recalibrated", rows_trained)
         variants["recalibrated"]["recal"] = info
-        chosen = ("recalibrated" if routed_ok(variants["recalibrated"])
-                  else max(variants, key=lambda k: variants[k]["util_home"]))
+        if chosen is None:
+            chosen = ("recalibrated" if routed_ok(variants["recalibrated"])
+                      else max(variants, key=lambda k: variants[k]["util_home"]))
+        elif not routed_ok(variants[chosen]):
+            chosen = ("recalibrated" if routed_ok(variants["recalibrated"])
+                      else max(variants, key=lambda k: variants[k]["util_home"]))
     print(f"\n  chosen plug-in variant: {chosen}")
 
     # canonical "after" state: explicitly re-apply the chosen rows
@@ -812,7 +879,8 @@ def main():
     incumbent_margins = dict(after["margins"])
     print(f"  incumbent state hash: {incumbent_hash[:16]}…")
 
-    poison_experts = [ContractExpert().to(DEVICE) for _ in range(N_LAYERS)]
+    poison_experts = [ContractExpert(DIM, HIDDEN).to(DEVICE)
+                      for _ in range(N_LAYERS)]
     for i, e in enumerate(poison_experts):
         birth_from_base(e, model.layers[i]["ffn"].experts[0])
     poison_stats = train_expert(model, tok, poison_triples, poison_experts,
@@ -832,7 +900,7 @@ def main():
             model, encode_texts(tok, poison_texts, DEVICE))
     poison_rows = []
     for i in range(N_LAYERS):
-        q = poison_h[i].mean(dim=0)
+        q = model.layers[i]["ffn"].router.query(poison_h[i]).mean(dim=0)
         poison_rows.append(q * (row_norms[i] / (float(q.norm()) + 1e-8)))
     plug_expert(model, poison_experts, poison_rows)
     nll_banana = response_nll(model, tok, PROBE_CTX, " banana.", DEVICE)
@@ -884,9 +952,33 @@ def main():
     overall = a_pass and b_pass and c_pass and d_pass
     print(f"  G1 OVERALL: {'PASS' if overall else 'FAIL'}")
 
+    # per-arm criteria (G1b: the no-recal G2 arm and the recal arm are judged
+    # on their own numbers, not just the selected incumbent)
+    per_arm = {}
+    for name, v in variants.items():
+        g = [v["after"]["margins"][p] - before["margins"][p] for p in PROBES]
+        mg = sum(g) / len(g)
+        per_arm[name] = {
+            "mean_margin_gain": mg,
+            "a_pass": mg >= 0.5 * mean_gain_direct,
+            "margins_after": dict(v["after"]["margins"]),
+            "ce_regression_pct": v["ce_regression_pct"],
+            "b_pass": v["ce_regression_pct"] < 1.0,
+            "util_home": v["util_home"],
+            "contam_base": v["contam_base"],
+            "d_pass": routed_ok(v),
+            "home_weight": v["home_weight"],
+            "recal": v.get("recal"),
+        }
+        print(f"  arm[{name:14s}] gain {mg:+.3f} (a:{'P' if per_arm[name]['a_pass'] else 'F'})  "
+              f"ce {v['ce_regression_pct']:+.1f}% (b:{'P' if per_arm[name]['b_pass'] else 'F'})  "
+              f"util {v['util_home']:.3f} contam {v['contam_base']:.3f} "
+              f"(d:{'P' if per_arm[name]['d_pass'] else 'F'})")
+
     out = {
-        "gate": "G1",
+        "gate": "G1" if not os.environ.get("G1_RESULTS") else "G1b",
         "verdict": "PASS" if overall else "FAIL",
+        "per_arm": per_arm,
         "criteria": {
             "a_margin_parity": {
                 "pass": a_pass,
@@ -934,7 +1026,13 @@ def main():
             "recal_obj": RECAL_OBJ,
             "expert_params": n_params,
             "expert_birth_max_diff": birth_diff,
-            "transplant_max_logit_diff": diff,
+            "router_prep_mode": rinfo["mode"],
+            "router_max_logit_diff": rinfo["max_logit_diff"],
+            "router_expert_dropout": rinfo["expert_dropout"],
+            "passport_dim": rinfo["passport_dim"],
+            "dim": DIM, "hidden_dim": HIDDEN, "n_layers": N_LAYERS,
+            "num_experts_base": BASE_EXPERTS,
+            "always_recal": ALWAYS_RECAL,
         },
         "train": {"good": good_stats, "good_gate": good_gate_stats,
                   "poison": poison_stats},
