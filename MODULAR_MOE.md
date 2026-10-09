@@ -297,11 +297,31 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   (swarm2/4); teach-by-talking demo PASS on a true KDA+MLA checkpoint with
   poison rollback and incumbent intact (lab/imported/hippo_demo_vesperk.log,
   hippo_demo_tiny_agent_k_12k.log).
-- **G1 — retention parity.** Hippocampus export mode (replay buffer ->
-  contract expert -> D55 plug-in) matches direct-edit Hippocampus on
-  retention (taught-fact margin gain, replay NLL delta) at t0 AND beats it
-  on rollback cleanliness (incident recovery = one row drop). Falsifier:
-  parity fails, or the expert path needs spine touches to work.
+- **G1 — retention parity. FAIL (2026-10-09, tiny_agent_k step_best, 118M).**
+  Export mode implemented (lab/g1_export_mode.py): section-4.2 contract expert
+  (A_in/SwiGLU/A_out, identity-init adapters, 23.07M params over 8 layers),
+  distilled from the demo teach set with forced dispatch + reward-weighted NLL
+  + KL-to-base (demo objective) and plugged via passport row. **Retention and
+  rollback pass:** margins -5.00/-5.68/-4.50 -> -1.29/+0.16/-0.02 (mean gain
+  +4.68 vs direct-edit +3.22), digit-tail NLL 2.06 -> 28.60, word-tail 5.13 ->
+  0.70; poison batch -> same stub gate ROLLBACK (target collapse), incident
+  recovery = one row drop, incumbent state hash + margins bit-identical. The
+  TopK->Passport transplant is function-preserving (max router-logit diff
+  7.6e-6; no spine weight ever changes). **Routing purity fails and takes base
+  CE with it:** utilization 0.81 on home episodes is paired with contamination
+  0.70-0.90 on base mix across ALL THREE router-only recal objectives (D55
+  phase-B contrastive: 0.81/0.89; hinge ranking margins: 0.18/0.18;
+  section-4.4a mutual-exclusion mass target 800 steps: 0.81/0.90), and
+  base-mix CE regresses +3.9% to +440% (bar <1%) — a plugged row that enters
+  top-2 on base tokens displaces a base expert and rewrites the mix. A single
+  passport direction cannot separate episodic home context from general text
+  at this scale (the hinge trade-off curve is the overlap evidence), and the
+  prototype row either never fires (literal mean-query, norm ~9 vs bank ~370)
+  or fires everywhere (norm-matched). Falsifier "needs spine touches" did NOT
+  trigger (zero spine weight writes). Evidence: lab/results/g1_export_mode_v1..v3.json,
+  lab/logs/g1_export_mode_v1..v3.log; root cause + next branches in
+  lab/FAILURES.md. G2's no-recal premise is undermined by the same evidence;
+  §8.5 bullet 1 (different addressing mechanism) is the live branch.
 - **G2 — content-init reachability.** A memory expert plugged in with
   prototype-init passport and NO router recalibration reaches >50%
   utilization on its home episodes and <30% contamination on the base mix.
