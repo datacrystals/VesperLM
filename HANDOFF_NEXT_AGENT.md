@@ -7,6 +7,33 @@ make routine decisions, keep the program moving; the user drops in occasionally.
 A recurring heartbeat cron (every 2h, :43) drives autonomous progress; re-create it
 before its 7-day stale expiry. Carry both directives forward through compactions.
 
+## 2026-10-08 goal-mode run — deliverables 1–3 DONE (of 4)
+
+- **D2 Hippocampus demo on true KDA+MLA: PASS** (f64ed1b). tiny_agent_k step_3000,
+  HIPPO_TARGET_PROFILE=kda_mla + HIPPO_CKPT (21bf76d). Margins all up
+  (−4.01→−3.00 / −4.18→−2.73 / −3.77→−2.93), digit-NLL 2.18→3.20, word-NLL
+  4.77→4.01; poison batch ROLLBACK (target collapse), incumbent byte-identical.
+  34 LoRA wraps = exact kda_mla target set. Evidence: lab/imported/hippo_demo_vesperk.log.
+- **KDA/MLA CPU shim set COMPLETE** (97b8d90): added pure-torch causal_conv1d
+  (+update/step), rotary (ref+offsets), rms_norm_ref wraps to BOTH Immune/cpu_backend
+  and Hippocampus/consolidate; patch via sys.modules (bare import binds the FUNCTION).
+  **Pre-existing sigmoid gated-norm bug fixed** (consolidate.py computed swish in the
+  sigmoid branch — error 2.14 on unit tensors, load-bearing under KDA o_norm).
+  41 PASS / 0 FAIL suite on real step_500 weights; gla_gqa backward compat verified.
+  Known non-blockers: state_v_first ignored on CPU (self-consistent), conv/rotary shims
+  reject packed cu_seqlens, archived gqa_buggy ckpt has wrong full_type in metadata.
+- **Cosmopedia root-caused + regened** (8d30a2e): the 0-byte shard was NOT the suspend —
+  config "full" never existed on the hub (ShardWriter creates the file before the stream
+  raises). Config → "cosmopedia-v2"; 2 shards, 1.5B tokens, indexed. Mix complete.
+- **AMD pitch committed**: AMD_PITCH.md (4c17adb) — 4-pt scaling table, plug-in gates,
+  honest negatives, costed ladder t3≈$41 → t4≈$150–250 → t5 cluster, repro appendix.
+- **Spend: $10.41 settled, $0 open.** t3 (~$41) crosses the user's $40 soft-pause —
+  REPORTED to user, holding for their call. Meanwhile swarm3 runs the t3 de-risk
+  (470m_k passport-vs-topk 1000-step paired A/B ≈ $2) + D55 owner_mass scale check
+  at t1 ({0.50,0.55,0.60} — does the operating point shift with scale like reject_w?).
+
+---
+
 ## 2026-10-08 — SWARM SESSION 2: multi-plug-in SOLVED ($1.34, destroyed+verified)
 
 **Protocol D55 passes all 9 purity gates at t0** (own ≥0.5 / cross ≤0.3 / CE beats masked):
