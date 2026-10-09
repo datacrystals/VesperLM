@@ -1,0 +1,45 @@
+{
+  "id": "t2s-passport",
+  "tier": "t2",
+  "baseline": false,
+  "hypothesis": "passport advantage at 120M holds at seed 2 (t2 unseeded was +2.83%)",
+  "config": "tiny_agent_k",
+  "env": {
+    "VESPER_ROUTER_TYPE": "passport",
+    "VESPER_SEED": "2",
+    "VESPER_TOTAL_STEPS": "600",
+    "VESPER_MICRO_BATCH": "8",
+    "VESPER_ACCUM": "8"
+  },
+  "budget_minutes": 150,
+  "mutation_of": "t2-passport",
+  "val_loss_final": 6.4341,
+  "val_loss_series": [
+    [
+      100,
+      7.6035
+    ],
+    [
+      200,
+      7.0545
+    ],
+    [
+      300,
+      6.7949
+    ],
+    [
+      400,
+      6.6042
+    ],
+    [
+      500,
+      6.4341
+    ]
+  ],
+  "ce_last": 6.0913,
+  "tok_s_avg": 7082.6,
+  "steps_done": 590,
+  "seconds": 873.9,
+  "rc": 0,
+  "stopped": null
+}

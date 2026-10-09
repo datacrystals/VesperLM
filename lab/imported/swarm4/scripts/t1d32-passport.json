@@ -1,0 +1,10 @@
+{
+  "id": "t1d32-passport",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "passport capacity sweep at 33M: dim 32 vs default 64 (seed 1, 600 steps)",
+  "config": "lab_small",
+  "env": {"VESPER_ROUTER_TYPE": "passport", "VESPER_PASSPORT_DIM": "32", "VESPER_SEED": "1", "VESPER_TOTAL_STEPS": "600"},
+  "budget_minutes": 60,
+  "mutation_of": "t1-passport"
+}

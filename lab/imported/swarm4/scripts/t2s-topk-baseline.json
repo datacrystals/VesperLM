@@ -1,0 +1,10 @@
+{
+  "id": "t2s-topk-baseline",
+  "tier": "t2",
+  "baseline": true,
+  "hypothesis": "top-k baseline at 120M seed 2, same 600-step recipe as t2 (pairs with unseeded +2.83%)",
+  "config": "tiny_agent_k",
+  "env": {"VESPER_SEED": "2", "VESPER_TOTAL_STEPS": "600", "VESPER_MICRO_BATCH": "8", "VESPER_ACCUM": "8"},
+  "budget_minutes": 150,
+  "mutation_of": "t2-topk-baseline"
+}

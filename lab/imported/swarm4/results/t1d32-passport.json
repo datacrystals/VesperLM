@@ -1,0 +1,36 @@
+{
+  "id": "t1d32-passport",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "passport capacity sweep at 33M: dim 32 vs default 64 (seed 1, 600 steps)",
+  "config": "lab_small",
+  "env": {
+    "VESPER_ROUTER_TYPE": "passport",
+    "VESPER_PASSPORT_DIM": "32",
+    "VESPER_SEED": "1",
+    "VESPER_TOTAL_STEPS": "600"
+  },
+  "budget_minutes": 60,
+  "mutation_of": "t1-passport",
+  "val_loss_final": 6.3937,
+  "val_loss_series": [
+    [
+      150,
+      6.9822
+    ],
+    [
+      300,
+      6.6246
+    ],
+    [
+      450,
+      6.3937
+    ]
+  ],
+  "ce_last": 6.479,
+  "tok_s_avg": 12010.6,
+  "steps_done": 590,
+  "seconds": 646.8,
+  "rc": 0,
+  "stopped": null
+}
