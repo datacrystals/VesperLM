@@ -1,5 +1,9 @@
 # VesperLM — Handoff for the Next Agent (updated 2026-10-09 ~01:30 UTC)
 
+**USER DIRECTIVE (standing):** maximally delegate implementation to subagents (cheap model)
+— the main agent architects, reviews, integrates, and manages droplet budget. Carry this
+forward through compactions.
+
 ## 2026-10-09 — MODULAR-MOE THESIS VALIDATED AT t1 (all evidence committed)
 
 Full session on one MI300X droplet ($3.66; day total $6.93; droplet destroyed+verified):
