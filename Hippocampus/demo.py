@@ -39,6 +39,9 @@ LOG_GOOD = os.path.join(WORKDIR, "session_good.jsonl")
 LOG_POISON = os.path.join(WORKDIR, "session_poison.jsonl")
 DEVICE = os.environ.get("VESPER_DEVICE", "cpu")
 TARGET_PROFILE = os.environ.get("HIPPO_TARGET_PROFILE", "gla_gqa")
+# Checkpoint override: point the demo at any VesperLinearLM checkpoint
+# (e.g. a true KDA+MLA tiny_agent_k step_* with HIPPO_TARGET_PROFILE=kda_mla).
+CKPT = os.environ.get("HIPPO_CKPT") or None
 
 PROBES = [
     "What is 2 + 2?",
@@ -98,8 +101,9 @@ def main():
         if os.path.exists(p):
             os.remove(p)
 
-    section("PART 0 — load 118M SFT checkpoint (CPU, fp32)")
-    model, tok, mc = load_base_model(device=DEVICE)
+    section("PART 0 — load checkpoint (CPU, fp32)")
+    model, tok, mc = load_base_model(checkpoint_path=CKPT, device=DEVICE)
+    print(f"  checkpoint: {CKPT or 'default (118M SFT v1 step_2900)'}")
     print(f"  model_config: {mc}")
     print(f"  vocab {len(tok)}, pad_id {tok.pad_token_id}")
     print(f"  lora target profile: {TARGET_PROFILE}")
