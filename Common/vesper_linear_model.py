@@ -92,8 +92,14 @@ class GatedLinearAttn(nn.Module):
             fuse_norm=True,
             layer_idx=layer_idx,
         )
+        self.value_emb = None
 
-    def forward(self, x, cache=None):
+    def enable_value_embedding(self, vocab_size):
+        raise NotImplementedError(
+            "value embeddings are not implemented for GLA layers "
+            "(KDA/MLA/GQA only)")
+
+    def forward(self, x, cache=None, value_tokens=None):
         # GLA's chunked Triton kernels cannot compile for fp16 on P40
         # (cc 6.1) and abort the process ("Unsupported rounding mode").
         # Run GLA in fp32 even when the caller is under fp16 autocast.
@@ -134,6 +140,12 @@ class Mamba2SSD(nn.Module):
         # in pure-torch equivalents so the layer runs fp32 anywhere.
         self.mamba2.act = F.silu
         self.mamba2.causal_conv1d_fn = self._torch_conv1d
+        self.value_emb = None
+
+    def enable_value_embedding(self, vocab_size):
+        raise NotImplementedError(
+            "value embeddings are not implemented for Mamba2 layers "
+            "(no attention value path; KDA/MLA/GQA only)")
 
     @staticmethod
     def _torch_conv1d(x, weight, bias=None, activation=None, **kwargs):
@@ -146,7 +158,7 @@ class Mamba2SSD(nn.Module):
             out = F.silu(out)
         return out, None
 
-    def forward(self, x, cache=None):
+    def forward(self, x, cache=None, value_tokens=None):
         # Same fp32-enforcement as GatedLinearAttn: fla kernels must
         # not see fp16 (P40 cc 6.1 crashes) — run in fp32.
         # cache: optional RecurrentStateCache threading the conv/SSM state
@@ -201,18 +213,54 @@ class KimiDeltaAttn(nn.Module):
             use_short_conv=use_short_conv,
             layer_idx=layer_idx,
         )
+        self.value_emb = None
 
-    def forward(self, x, cache=None):
+    def enable_value_embedding(self, vocab_size):
+        """Attach a token-id-indexed value table added to KDA's values
+        (modded-nanogpt value embeddings). The table lives on this wrapper;
+        injection is a forward hook on the v path so fla's own parameter
+        keys (v_conv1d / v_proj weights) stay byte-identical."""
+        width = self.kda.value_dim
+        self.value_emb = nn.Embedding(vocab_size, width)
+        self._ve_tokens = None
+        if self.kda.use_short_conv:
+            # the short-conv output IS the attention value fed to the
+            # delta kernel — inject there (post-conv, pre-kernel).
+            self.kda.v_conv1d.register_forward_hook(self._value_embed_hook)
+        else:
+            # no conv: v = silu(v_proj(x)) — inject on v_proj output,
+            # i.e. pre-silu (only reached when kda_short_conv=False).
+            self.kda.v_proj.register_forward_hook(self._value_embed_hook)
+        return width
+
+    def _value_embed_hook(self, module, args, output):
+        tokens = getattr(self, '_ve_tokens', None)
+        if tokens is None or self.value_emb is None:
+            return output
+        ve = self.value_emb(tokens)
+        if isinstance(output, tuple):
+            # ShortConvolution returns (y, final_state)
+            y = output[0]
+            return (y + ve.to(dtype=y.dtype, device=y.device),) + output[1:]
+        return output + ve.to(dtype=output.dtype, device=output.device)
+
+    def forward(self, x, cache=None, value_tokens=None):
         # cache: optional RecurrentStateCache; KDA threads its
         # recurrent/conv states through it exactly like GLA.
-        if self.force_fp32:
-            with torch.autocast(device_type=x.device.type, enabled=False):
-                out, _, _ = self.kda(x.float(), past_key_values=cache,
-                                     use_cache=cache is not None)
+        if self.value_emb is not None:
+            self._ve_tokens = value_tokens
+        try:
+            if self.force_fp32:
+                with torch.autocast(device_type=x.device.type, enabled=False):
+                    out, _, _ = self.kda(x.float(), past_key_values=cache,
+                                         use_cache=cache is not None)
+                return out
+            out, _, _ = self.kda(x, past_key_values=cache,
+                                 use_cache=cache is not None)
             return out
-        out, _, _ = self.kda(x, past_key_values=cache,
-                             use_cache=cache is not None)
-        return out
+        finally:
+            if self.value_emb is not None:
+                self._ve_tokens = None
 
 
 class MultiheadLatentAttn(nn.Module):
@@ -237,14 +285,51 @@ class MultiheadLatentAttn(nn.Module):
             max_position_embeddings=max_seq_len * 2,
             layer_idx=layer_idx,
         )
+        self.value_emb = None
 
-    def forward(self, x, freqs_cis=None, cache=None, start_pos=0):
+    def enable_value_embedding(self, vocab_size):
+        """Attach a token-id-indexed value table added to MLA's values.
+
+        MLA's v is not a standalone projection: fla's kv_proj is
+        [Linear -> RMSNorm -> Linear] producing per-head
+        (qk_nope | v) pairs that are split after the fact. The table is
+        injected on kv_proj's final Linear output, writing into each
+        head's v slice and leaving the qk_nope slice untouched — i.e.
+        exactly the MLA v path. fla's parameter keys stay unchanged.
+        """
+        width = self.mla.num_heads * self.mla.v_head_dim
+        self.value_emb = nn.Embedding(vocab_size, width)
+        self._ve_tokens = None
+        self.mla.kv_proj[2].register_forward_hook(self._value_embed_hook)
+        return width
+
+    def _value_embed_hook(self, module, args, output):
+        tokens = getattr(self, '_ve_tokens', None)
+        if tokens is None or self.value_emb is None:
+            return output
+        B, T = tokens.shape
+        H = self.mla.num_heads
+        nope = self.mla.qk_nope_head_dim
+        vh = self.mla.v_head_dim
+        ve = self.value_emb(tokens).view(B, T, H, vh)
+        zeros = output.new_zeros(B, T, H, nope)
+        add = torch.cat([zeros, ve.to(dtype=output.dtype)], dim=-1)
+        return output + add.reshape(B, T, H * (nope + vh))
+
+    def forward(self, x, freqs_cis=None, cache=None, start_pos=0,
+                value_tokens=None):
         if cache is not None:
             raise NotImplementedError(
                 "MLA incremental cache not wired; use full forward"
             )
-        out, _, _ = self.mla(x, attention_mask=None, use_cache=False)
-        return out
+        if self.value_emb is not None:
+            self._ve_tokens = value_tokens
+        try:
+            out, _, _ = self.mla(x, attention_mask=None, use_cache=False)
+            return out
+        finally:
+            if self.value_emb is not None:
+                self._ve_tokens = None
 
 
 class VesperLinearLM(nn.Module):
@@ -268,6 +353,9 @@ class VesperLinearLM(nn.Module):
                           (see `_fused_ce_loss`); logits are not materialized
                           and forward returns logits=None when targets are
                           given.
+      VESPER_VALUE_EMBED=1 — token-id value embedding tables added to the
+                          attention values of the first/last layers
+                          (see `_attach_value_embeddings`).
     """
 
     def __init__(self, vocab_size=32000, dim=1024, n_layers=10, n_heads=8,
@@ -279,7 +367,8 @@ class VesperLinearLM(nn.Module):
                  kv_lora_rank=None, v_head_dim=128,
                  linear_force_fp32=True,
                  router_type="topk", passport_dim=64, router_expert_dropout=0.0,
-                 grad_checkpoint=True, compile_mode=None, fused_ce=None):
+                 grad_checkpoint=True, compile_mode=None, fused_ce=None,
+                 value_embed=None):
         super().__init__()
         self.pad_id = pad_id
         self.max_seq_len = max_seq_len
@@ -332,6 +421,11 @@ class VesperLinearLM(nn.Module):
 
         self.norm = RMSNorm(dim)
         self.output = nn.Linear(dim, vocab_size, bias=False)
+
+        # Speedrun opt: value embeddings (VESPER_VALUE_EMBED, default off).
+        # Attached before apply() so the tables get the standard Embedding
+        # init (N(0, 0.02)) alongside everything else.
+        self.value_embed_decision = self._attach_value_embeddings(value_embed)
 
         self.apply(self._init_weights)
         for pn, p in self.named_parameters():
@@ -398,6 +492,50 @@ class VesperLinearLM(nn.Module):
             )
         return _torch_chunked_linear_ce(x_flat, t_flat, weight,
                                         ignore_index=self.pad_id)
+
+    # --- speedrun opt: VESPER_VALUE_EMBED --------------------------------
+    def _attach_value_embeddings(self, value_embed=None):
+        """Env-gated modded-nanogpt-style value embeddings (default off).
+
+        A learned token-id-indexed embedding table per site, added to the
+        attention values of the first and last layers. Models with the flag
+        off are untouched (no hooks, no extra parameters — existing
+        checkpoints load byte-identically). With the flag on, the only new
+        state_dict keys are `layers.{0,L-1}.attn.value_emb.weight` (every
+        other key keeps its name and shape), so flag-on checkpoints are new
+        artifacts and cannot be loaded into a flag-off model.
+
+        Supported layer types: kda (post short-conv v), mla (v slice of the
+        kv latent), full/GQA (wv output). gla/mamba2 sites are skipped with
+        a logged warning. Tables use the repo's Embedding init N(0, 0.02).
+        """
+        raw = value_embed if value_embed is not None else _env_flag("VESPER_VALUE_EMBED")
+        if isinstance(raw, bool):
+            enabled = raw
+        else:
+            enabled = raw.strip().lower() in ("1", "true", "yes", "on")
+        if not enabled:
+            return "off (VESPER_VALUE_EMBED unset)"
+        n_layers = len(self.layers)
+        sites = list(dict.fromkeys([0, n_layers - 1]))
+        applied, skipped = [], []
+        for i in sites:
+            attn = self.layers[i]['attn']
+            layer_type = self.layer_types[i]
+            if layer_type in ('gla', 'mamba2'):
+                skipped.append(f"layer {i} ({layer_type})")
+                continue
+            width = attn.enable_value_embedding(self.tok_embeddings.num_embeddings)
+            applied.append(f"layer {i} ({layer_type}, width={width})")
+        decision = (f"VESPER_VALUE_EMBED=1: token-id value tables added to "
+                    f"attention values on first/last layers: "
+                    f"{', '.join(applied) if applied else 'none'}")
+        if skipped:
+            decision += (f"; SKIPPED {', '.join(skipped)} — value embedding "
+                         f"is implemented for kda/mla/gqa only")
+            print(f"[value-embed] warning: skipped {', '.join(skipped)}")
+        print(f"[value-embed] {decision}")
+        return decision
 
     # --- speedrun opt: VESPER_COMPILE ------------------------------------
     def _apply_compile(self, compile_mode=None):
@@ -506,27 +644,33 @@ class VesperLinearLM(nn.Module):
                 # shapes fine — routing is deterministic here (no dropout), so
                 # the backward recompute reproduces the same expert assignment.
                 # freqs_cis is a constant buffer, captured via closure.
-                def create_layer_forward(module_dict, linear, freqs):
+                # tokens is captured for value embeddings (VESPER_VALUE_EMBED);
+                # it is an integer tensor and needs no grad through the
+                # checkpoint boundary.
+                def create_layer_forward(module_dict, linear, freqs, value_tokens):
                     def custom_forward(x_in):
                         if linear:
-                            attn_out = module_dict['attn'](module_dict['attn_norm'](x_in))
+                            attn_out = module_dict['attn'](module_dict['attn_norm'](x_in),
+                                                           value_tokens=value_tokens)
                         else:
-                            attn_out = module_dict['attn'](module_dict['attn_norm'](x_in), freqs)
+                            attn_out = module_dict['attn'](module_dict['attn_norm'](x_in), freqs,
+                                                           value_tokens=value_tokens)
                         h = x_in + attn_out
                         ffn_out, aux = module_dict['ffn'](module_dict['ffn_norm'](h))
                         return h + ffn_out, aux
                     return custom_forward
 
                 x, aux_loss = cp.checkpoint(
-                    create_layer_forward(layer, is_linear, self.freqs_cis),
+                    create_layer_forward(layer, is_linear, self.freqs_cis, tokens),
                     x,
                     use_reentrant=False
                 )
             else:
                 if is_linear:
-                    attn_out = layer['attn'](layer['attn_norm'](x))
+                    attn_out = layer['attn'](layer['attn_norm'](x), value_tokens=tokens)
                 else:
-                    attn_out = layer['attn'](layer['attn_norm'](x), self.freqs_cis)
+                    attn_out = layer['attn'](layer['attn_norm'](x), self.freqs_cis,
+                                             value_tokens=tokens)
                 x = x + attn_out
                 ffn_out, aux_loss = layer['ffn'](layer['ffn_norm'](x))
                 x = x + ffn_out
@@ -615,10 +759,12 @@ class VesperLinearLM(nn.Module):
         for i, layer in enumerate(self.layers):
             if self.layer_types[i] == 'full':
                 attn_out = layer['attn'](layer['attn_norm'](x), self.freqs_cis,
-                                         cache=caches['kv'][i], start_pos=pos)
+                                         cache=caches['kv'][i], start_pos=pos,
+                                         value_tokens=tokens)
             else:
                 attn_out = layer['attn'](layer['attn_norm'](x),
-                                         cache=caches['linear'])
+                                         cache=caches['linear'],
+                                         value_tokens=tokens)
             x = x + attn_out
             ffn_out, aux_loss = layer['ffn'](layer['ffn_norm'](x))
             x = x + ffn_out
