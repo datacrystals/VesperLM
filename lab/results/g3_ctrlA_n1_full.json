@@ -1,0 +1,165 @@
+{
+  "gate": "G3",
+  "verdict": "PASS",
+  "n_episodes": 1,
+  "spine": {
+    "checkpoint": "/home/tliao/VesperLM/lab/sandbox/t1-diag-realdata-mb4/vesper_linear_checkpoints_lab_small/step_best",
+    "mode": "passport-native",
+    "expert_dropout": [
+      0.1
+    ],
+    "passport_dim": [
+      64
+    ],
+    "dim": 256,
+    "n_layers": 6,
+    "num_experts_base": 4,
+    "top_k": 2,
+    "plan_change": "\u00a78.4 G3 text said t2/tiny_agent_k; G1 showed the transplant fails purity so G3 runs on the passport-native lab_small spine (G1b recipe)"
+  },
+  "recipe": {
+    "consolidation_steps": 80,
+    "consolidation_lr": 0.002,
+    "text_kl_coef": 3.0,
+    "recal_steps": 800,
+    "recal_lr": 0.01,
+    "recal_objective": "section-4.4a mutual-exclusion mass target, all plug-in rows trained jointly with full home coverage, base rows frozen",
+    "owner_mass": 0.55,
+    "final_joint_steps": 0,
+    "prototype_init": "mean router query over the episode's home examples",
+    "fixture": "16 episodes, distinct prompt domains + distinct taught styles (episode 0 = G1's math/words-not-digits set)"
+  },
+  "pre_library_base_ce": 6.7735,
+  "criteria": {
+    "util_home_gt_0.5": {
+      "pass": true,
+      "final": {
+        "0": 0.9116
+      },
+      "bar": ">0.5 for every expert at N=16",
+      "all_inserts_pass": true
+    },
+    "contam_base_lt_0.3": {
+      "pass": true,
+      "final": {
+        "0": 0.2173
+      },
+      "bar": "<0.3 for every expert at N=16",
+      "all_inserts_pass": true
+    },
+    "base_ce_regression_lt_1pct": {
+      "pass": true,
+      "final_pct": 0.88,
+      "final_ce": 6.8331,
+      "pre_ce": 6.7735,
+      "bar": "<1% vs pre-library at N=16",
+      "all_inserts_pass": true
+    }
+  },
+  "first_purity_break_n": null,
+  "first_purity_break_per_criterion": {
+    "util_home": null,
+    "contam_base": null,
+    "base_ce": null
+  },
+  "bank_crowding": {
+    "mean_abs_cos_plug_vs_plug": null,
+    "mean_abs_cos_plug_vs_base": 0.0739
+  },
+  "post_final_joint": null,
+  "purity_trajectory": [
+    {
+      "n": 1,
+      "episode": "math_words",
+      "util_min": 0.9116,
+      "contam_max": 0.2173,
+      "ce_reg_pct": 0.88,
+      "entropy_base": 0.9155,
+      "p_any_plug_base": 0.2173,
+      "p_both_plug_base": 0.0,
+      "bank_norms": [
+        1.944,
+        2.183,
+        2.174,
+        1.95,
+        8.876
+      ],
+      "recal_s": 43.1,
+      "cons_s": 27.9
+    }
+  ],
+  "poison_check": {
+    "gate_decision": "ROLLBACK",
+    "gate_reason": "target collapse: one response is 100% of the batch",
+    "ce_before": 6.8331,
+    "ce_poison_plugged": 7.0527,
+    "poison_row_contam_base": 0.527480552593867,
+    "row_drop_hash_match": true,
+    "row_drop_ce_restored": true
+  },
+  "inserts": [
+    {
+      "n": 1,
+      "episode": "math_words",
+      "gate": "PROMOTE",
+      "gate_metrics": {
+        "mean_reward": 0.3333333333333333,
+        "unique_response_ratio": 0.7777777777777778,
+        "top_response_fraction": 0.2222222222222222,
+        "final_kl": 1.566345453262329
+      },
+      "consolidate_seconds": 27.9,
+      "recal_seconds": 43.1,
+      "train": {
+        "loss0": 0.4131324291229248,
+        "loss_final": -6.698678016662598,
+        "final_kl": 1.566345453262329,
+        "final_text_kl": 0.04035933315753937
+      },
+      "forced_nll_gain_first3": [
+        7.9935,
+        8.0091,
+        7.9569
+      ],
+      "util_home": {
+        "0": 0.9116
+      },
+      "contam_base": {
+        "0": 0.2173
+      },
+      "crosstalk_home": {
+        "0": {}
+      },
+      "base_ce": 6.8331,
+      "base_ce_regression_pct": 0.88,
+      "bank_norms": [
+        1.944,
+        2.183,
+        2.174,
+        1.95,
+        8.876
+      ],
+      "router_diag_home": {
+        "entropy": 1.0655,
+        "p_any_plug_in_top2": 0.9116,
+        "p_both_plug_in_top2": 0.0,
+        "mean_top1_weight": 0.5528
+      },
+      "router_diag_base": {
+        "entropy": 0.9155,
+        "p_any_plug_in_top2": 0.2173,
+        "p_both_plug_in_top2": 0.0,
+        "mean_top1_weight": 0.6049
+      },
+      "pass_util": true,
+      "pass_contam": true,
+      "pass_ce": true
+    }
+  ],
+  "shortcuts": [
+    "consolidation 80 steps/expert (G1b parity); G3's bar is coexistence purity, not per-expert quality",
+    "per-expert margin probes replaced by a 3-pair forced-NLL retention spot-check (forced_nll_gain_first3)",
+    "v1 fixture (one shared prompt template, one taught style) aborted at N=6 \u2014 see lab/results/g3_n16_v1_weaksep.json"
+  ],
+  "seconds": 109.0
+}
