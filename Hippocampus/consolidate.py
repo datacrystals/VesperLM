@@ -105,7 +105,7 @@ def enable_cpu_gla_shims() -> str:
         if activation in ("swish", "silu"):
             y = y * gf * torch.sigmoid(gf)
         elif activation == "sigmoid":
-            y = y * gf * torch.sigmoid(gf)
+            y = y * torch.sigmoid(gf)
         y = y.to(dtype)
         return (y, res_out.to(x.dtype)) if prenorm else y
 
@@ -125,8 +125,11 @@ def enable_cpu_kda_mla_shims() -> str:
     pure-torch equivalent built from fla.ops.kda.naive (plus fla's own
     torch gate references in fla.ops.kda.gate). MLA's flash-attn calls are
     replaced by fla's SDPA fallback so they also work when flash-attn is
-    installed but tensors live on CPU. Mirrors enable_cpu_gla_shims; must
-    run before the first model forward.
+    installed but tensors live on CPU. The KDA/MLA layers additionally
+    reach three other Triton-only fla ops — ShortConvolution's causal conv
+    (and its single-token update), MLA's rotary, and the plain RMSNorm in
+    MLA's kv_proj — which get pure-torch replacements here too. Mirrors
+    enable_cpu_gla_shims; must run before the first model forward.
     """
     global _CPU_KDA_MLA_SHIMS_INSTALLED
     if _CPU_KDA_MLA_SHIMS_INSTALLED:
@@ -193,6 +196,121 @@ def enable_cpu_kda_mla_shims() -> str:
 
     _fla_mla.flash_attn_func = _mla_flash_attn
     _fla_mla.flash_attn_varlen_func = _mla_flash_attn_varlen
+
+    # KDA/MLA layers call three more fla ops that are Triton-only:
+    # ShortConvolution's causal conv (KDA q/k/v short conv, incl. the
+    # single-token update used by incremental decode), MLA's rotary, and
+    # the plain RMSNorm inside MLA's kv_proj. Without these the layers die
+    # on CPU with "Pointer argument (at 0) cannot be accessed from Triton
+    # (cpu tensor?)" before the shims above are ever reached.
+    #
+    # GOTCHA: `import fla.modules.conv.causal_conv1d as m` binds the
+    # re-exported *function* (fla.modules.conv.__init__ shadows the
+    # submodule attribute with the same name), so a patch through it
+    # silently lands on a function object. Fetch the real modules from
+    # sys.modules and assert the patch landed.
+    import importlib
+    _cconv = importlib.import_module("fla.modules.conv.causal_conv1d")
+    _ctrit = importlib.import_module("fla.modules.conv.triton.ops")
+    _frot = importlib.import_module("fla.modules.rotary")
+    _lnorm = importlib.import_module("fla.modules.layernorm")
+
+    def _cpu_causal_conv1d(x, weight=None, bias=None, residual=None,
+                           initial_state=None, output_final_state=False,
+                           activation=None, cu_seqlens=None, **kw):
+        # Depthwise causal conv. x: [B, T, D]; weight: [D, W];
+        # initial/final state: [N, D, W] with the newest token at index
+        # W-1 (fla's Triton layout: y[t] = sum_i w[i] * x[t-W+1+i], and a
+        # state index w holds stream token at position w-W).
+        if cu_seqlens is not None:
+            raise NotImplementedError(
+                "CPU causal_conv1d shim does not support packed cu_seqlens")
+        B, T, D = x.shape
+        W = weight.shape[-1]
+        xt = x.transpose(1, 2)  # [B, D, T]
+        # state[0] is never read by the conv (oldest of W history tokens;
+        # the window at t=0 reaches back only W-1 steps)
+        left = (initial_state[:, :, 1:] if initial_state is not None
+                else xt.new_zeros(B, D, W - 1))
+        y = F.conv1d(torch.cat([left, xt], dim=-1),
+                     weight.unsqueeze(1), bias, groups=D)
+        if activation in ("silu", "swish"):
+            y = F.silu(y)
+        if residual is not None:
+            y = y + residual.transpose(1, 2)  # after activation, like the kernel
+        y = y.transpose(1, 2)
+        final_state = None
+        if output_final_state:
+            # final state = last W tokens of concat(state, x), zero-left-
+            # padded when the stream is shorter than W
+            hist = (torch.cat([initial_state, xt], dim=-1)
+                    if initial_state is not None else xt)
+            final_state = (hist[:, :, -W:] if hist.shape[-1] >= W
+                           else F.pad(hist, (W - hist.shape[-1], 0)))
+            final_state = final_state.contiguous()
+        return y, final_state
+
+    def _cpu_causal_conv1d_update(x, cache, residual=None, weight=None,
+                                  bias=None, activation=None, **kw):
+        # Single-token step used by ShortConvolution.step. cache: [N, D, W]
+        # updated in place: roll left, append new token at index W-1,
+        # y = (cache * weight).sum(-1)  (fla's own documented equivalent).
+        shape = x.shape
+        if x.dim() == 3 and x.shape[0] == 1 and x.shape[1] == cache.shape[0]:
+            xn = x[0]                    # (1, N, D) -> [N, D]
+        elif x.dim() == 3:
+            xn = x[:, -1, :]             # (N, 1, D) -> [N, D]
+        else:
+            xn = x                       # [N, D]
+        cache.copy_(cache.roll(shifts=-1, dims=-1))
+        cache[:, :, -1] = xn
+        y = (cache * weight.unsqueeze(0)).sum(-1)  # [N, D]
+        if bias is not None:
+            y = y + bias
+        if activation in ("silu", "swish"):
+            y = F.silu(y)
+        if residual is not None:
+            if residual.dim() == 3 and residual.shape[0] == 1:
+                res = residual[0]
+            elif residual.dim() == 3:
+                res = residual[:, -1, :]
+            else:
+                res = residual
+            y = y + res
+        return y.view(shape), cache
+
+    def _cpu_rotary(x, cos, sin, interleaved=False, inplace=False,
+                    seqlen_offsets=0, cu_seqlens=None, chunk_indices=None,
+                    **kw):
+        # fla's own torch reference + seqlen_offsets slicing. x: [B,T,H,D];
+        # cos/sin: [T_max, head_dim/2].
+        if cu_seqlens is not None:
+            raise NotImplementedError(
+                "CPU rotary shim does not support packed cu_seqlens")
+        off = (int(seqlen_offsets) if not torch.is_tensor(seqlen_offsets)
+               else int(seqlen_offsets.reshape(-1)[0]))
+        T = x.shape[1]
+        return _frot.rotary_embedding_ref(
+            x, cos[off:off + T], sin[off:off + T], interleaved=interleaved)
+
+    def _cpu_rms_norm(x, weight=None, bias=None, residual=None, eps=1e-5,
+                      prenorm=False, residual_in_fp32=False, **kw):
+        if weight is None:
+            weight = x.new_ones(x.shape[-1])
+        return _lnorm.rms_norm_ref(x, weight, bias, residual=residual,
+                                   eps=eps, prenorm=prenorm)
+
+    _cconv.causal_conv1d = _cpu_causal_conv1d
+    _ctrit.causal_conv1d_update = _cpu_causal_conv1d_update
+    _frot.rotary_embedding = _cpu_rotary
+    _lnorm.rms_norm = _cpu_rms_norm
+    for _mod, _name, _fn in ((_cconv, "causal_conv1d", _cpu_causal_conv1d),
+                             (_ctrit, "causal_conv1d_update", _cpu_causal_conv1d_update),
+                             (_frot, "rotary_embedding", _cpu_rotary),
+                             (_lnorm, "rms_norm", _cpu_rms_norm)):
+        if getattr(_mod, _name) is not _fn:
+            raise RuntimeError(
+                f"CPU shim failed to patch {_mod.__name__}.{_name}")
     _CPU_KDA_MLA_SHIMS_INSTALLED = True
     return "installed"
 

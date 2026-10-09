@@ -135,7 +135,10 @@ The gate entry points take `--target-profile` (`gla_gqa` default, or
   pure-torch CPU shims are installed lazily from `load_model()`: GLA shims as
   before, plus KDA (`chunk_kda`/`fused_recurrent_kda` → `fla.ops.kda.naive`
   with fla's own torch gate references) and MLA (flash-attn entry points →
-  SDPA) shims for `kda_mla` stacks.
+  SDPA) shims for `kda_mla` stacks — together with pure-torch replacements
+  for the other Triton-only fla ops those layers reach (ShortConvolution's
+  causal conv + its single-token update, MLA's rotary, the plain RMSNorm in
+  MLA's `kv_proj`), so KDA/MLA stacks generate end-to-end on CPU.
 - `generate()` falls back to full-forward greedy decode on stacks without an
   incremental cache (MLA), so probes/canaries run unchanged; drift feature
   extraction already used full forwards and is architecture-agnostic.
