@@ -1,8 +1,28 @@
 # VesperLM — Handoff for the Next Agent (updated 2026-10-09 ~01:30 UTC)
 
-**USER DIRECTIVE (standing):** maximally delegate implementation to subagents (cheap model)
-— the main agent architects, reviews, integrates, and manages droplet budget. Carry this
-forward through compactions.
+**USER DIRECTIVES (standing):** (1) maximally delegate implementation to subagents
+(cheap model) — the main agent architects, reviews, integrates, and manages droplet
+budget. (2) TOTAL AGENTIC FREEDOM (2026-10-08): never stop and wait on the user —
+make routine decisions, keep the program moving; the user drops in occasionally.
+A recurring heartbeat cron (every 2h, :43) drives autonomous progress; re-create it
+before its 7-day stale expiry. Carry both directives forward through compactions.
+
+## 2026-10-08 late — laptop suspend-proofed + true Vesper-K restart
+
+- GPU wedge (post-suspend "Unable to determine device handle") fixed by user reboot.
+  **Suspend now hard-blocked**: systemd user service `vesper-no-suspend.service`
+  (block inhibitor on sleep:idle, auto-starts at login) + PowerDevil AC/Battery/
+  LowBattery set to never-suspend via kwriteconfig6. Trainings also launch wrapped
+  in their own systemd-inhibit.
+- **Old step_500 ckpt ARCHIVED as `vesper_linear_checkpoints_tiny_agent_k_gqa_buggy_archived`**
+  — it predates the arch_keys fix (GQA weights in full layers; load fails against the
+  fixed trainer's MLA). Do NOT resume from it. Fresh true KDA+MLA tiny_agent_k run
+  started 21:35 PDT, micro_batch 2 (3 OOMs the dummy pass), ~4k tok/s at seq-256 ramp.
+- **cosmopedia_0.bin was 0 bytes** (builder died at source start, pre-wedge) → deleted;
+  `pod/rebuild_index.sh` now SKIPS empty shards with a warning (was: blindly included
+  → "cannot mmap an empty file" crash). Cosmopedia regen queued (heartbeat item a).
+- Mix now 18 bins (~33GB) until cosmopedia returns; phase-2 index rebuild picks it up
+  automatically once regenerated.
 
 ## 2026-10-09 — t2 VALIDATED: passport advantage is SCALE-STABLE (all evidence committed)
 
