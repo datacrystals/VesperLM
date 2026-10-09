@@ -178,7 +178,8 @@ def train():
                   f"| Context: {initial_seq_len}")
     else:
         if is_main:
-            print(f"\n[!] Starting fresh: {ACTIVE_CONFIG_NAME} (GLA hybrid, fp32)")
+            amp_desc = "bf16 autocast, GLA/KDA fp32" if VESPER_AMP else "fp32, no AMP"
+            print(f"\n[!] Starting fresh: {ACTIVE_CONFIG_NAME} (GLA hybrid, {amp_desc})")
         model_config = current_cfg
         os.makedirs(checkpoint_dir, exist_ok=True)
 

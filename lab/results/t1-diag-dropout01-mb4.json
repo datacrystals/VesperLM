@@ -1,0 +1,33 @@
+{
+  "id": "t1-diag-dropout01-mb4",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "flat CE~9.0 on the laptop farm is caused by VESPER_ROUTER_EXPERT_DROPOUT=0.2 (masking bug at 4 experts top-k 2); the cloud recipe with dropout 0.1 should bend CE below 9 by step 400",
+  "config": "lab_small",
+  "env": {
+    "VESPER_ROUTER_TYPE": "passport",
+    "VESPER_SEED": "2",
+    "VESPER_ROUTER_EXPERT_DROPOUT": "0.1",
+    "VESPER_MICRO_BATCH": "4",
+    "VESPER_ACCUM": "8"
+  },
+  "budget_minutes": 30,
+  "mutation_of": "t1-dropout02-passport",
+  "val_loss_final": 9.03,
+  "val_loss_series": [
+    [
+      150,
+      9.0608
+    ],
+    [
+      300,
+      9.03
+    ]
+  ],
+  "ce_last": 9.0217,
+  "tok_s_avg": 23814.4,
+  "steps_done": 390,
+  "seconds": 216.1,
+  "rc": 0,
+  "stopped": null
+}

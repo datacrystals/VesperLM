@@ -68,20 +68,60 @@ def parse_log(text):
     }
 
 
+LAB_CORPUS = (
+    ("phase1.bin", 3_000_000, "nemotron_phase1.bin"),
+    ("phase2.bin", 1_000_000, "nemotron_phase2.bin"),
+)
+CORPUS_DIR = os.path.join(REPO, "Dataset", "data", "pretrain")
+SYNTH_VOCAB = 65523  # len(Dataset/custom_tokenizer)
+
+
+def _write_markov_synthetic(path, n_tokens, seed):
+    """Learnable fallback when no real corpus is present: a Markov chain whose
+    successor is predictable 75% of the time. Uniform-random tokens are NOT
+    usable here: they make the irreducible loss ln(vocab) and every run
+    plateaus at chance (see FAILURES.md 2026-10-09)."""
+    rng = np.random.default_rng(seed)
+    pref = rng.integers(0, SYNTH_VOCAB, size=SYNTH_VOCAB, dtype=np.uint16)
+    out = np.empty(n_tokens, dtype=np.uint16)
+    state = int(rng.integers(0, SYNTH_VOCAB))
+    for i in range(n_tokens):
+        if rng.random() < 0.75:
+            state = int(pref[state])
+        else:
+            state = int(rng.integers(0, SYNTH_VOCAB))
+        out[i] = state
+    tmp = path + ".tmp"
+    out.tofile(tmp)
+    os.replace(tmp, path)
+
+
 def ensure_synth():
-    """Generate the shared synthetic token bins once (uint16, rng(0))."""
+    """Materialize the shared lab token bins once (uint16).
+
+    Prefers a real corpus slice (same format the trainer's load_dataset_index
+    reads); falls back to structured synthetic tokens. The old generator wrote
+    uniform-random ids in [0, 8192), which is unlearnable noise — see
+    lab/FAILURES.md 2026-10-09 before changing this.
+    """
     os.makedirs(SYNTH_DIR, exist_ok=True)
-    for name, n_tokens in (("phase1.bin", 3_000_000), ("phase2.bin", 1_000_000)):
+    for name, n_tokens, src_name in LAB_CORPUS:
         path = os.path.join(SYNTH_DIR, name)
         if os.path.exists(path):
             continue
-        tmp = path + ".tmp"
-        rng = np.random.default_rng(0)
-        mm = np.memmap(tmp, dtype=np.uint16, mode="w+", shape=(n_tokens,))
-        mm[:] = rng.integers(0, 8192, size=n_tokens, dtype=np.uint16)
-        mm.flush()
-        del mm
-        os.replace(tmp, path)
+        src = os.path.join(CORPUS_DIR, src_name)
+        if os.path.exists(src):
+            with open(src, "rb") as f:
+                blob = f.read(n_tokens * 2)
+            tmp = path + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(blob)
+            os.replace(tmp, path)
+            print("[runner] %s <- %d real tokens from %s" % (name, len(blob) // 2, src))
+        else:
+            _write_markov_synthetic(path, n_tokens, seed=len(name))
+            print("[runner] %s <- %d Markov-synthetic tokens (no corpus at %s)"
+                  % (name, n_tokens, src))
 
 
 def setup_sandbox(exp_id):

@@ -16,6 +16,54 @@ a lucky pass.
 - Next tried: <which fallback was queued and why>
 ```
 
+## Failure log
+
+## 2026-10-09 — t1-dropout02-passport / t0-8expert-passport — lab-farm pretrain runs barely learn (val stuck at ~9.02 = ln(8192) chance level)
+- Evidence:
+  - `lab/results/t1-dropout02-passport.1791549090.json` + `lab/logs/t1-dropout02-passport.log`: 1590 steps,
+    val 9.0618 -> 9.0126 -> 9.0161 (flat), ce_last 9.0059. `lab/results/t0-8expert-passport.json`:
+    390 steps, val 9.0711 -> 9.0295. Both plateau at ln(8192)=9.0109 while the tokenizer vocab is
+    65523 (step-0 CE 11.14 ~= ln(65523)=11.09): the model learned "uniform over ids 0..8191" and
+    nothing else.
+  - `lab/data_synth/phase{1,2}.bin` (md5 b199fb38e5f9e65690f0f9a1533d7a87 / 1572eff5a25ed2d9b0d6a55c5103825d)
+    are byte-identical to `lab/runner.py:ensure_synth` output — `rng(0).integers(0, 8192)` uniform
+    noise (12.99 bits/token, zero bigram correlation). Sandbox `data/` symlinks those bins and
+    `data/index.txt` points at them, so train AND val are pure noise.
+  - Droplet self-control (same MI300X box, same runner, same env dicts): first t0 farm
+    (`lab/imported/VesperLM/lab/results/`) val 9.02-9.03 with random-BPE-gibberish eval samples;
+    t0r rerun (`lab/imported/t0r/`) val 6.95-7.14 with coherent eval samples. Identical env,
+    identical `Hybrid stack: {'kda': 3, 'mla': 1}` print, identical batch/LR traces — only the bins
+    differed. Cloud t1s (`lab/imported/swarm1/`) learned to 5.97 on real bins (13.0M tokens, same
+    8192 tok/step — the "17k tok/step cloud budget" suspicion is wrong).
+  - Decisive laptop A/B, single variable = data: `lab/results/t1-diag-dropout01-mb4.json`
+    (noise bins, dropout 0.1, seed 2, mb4/accum8) val [150: 9.0608, 300: 9.03], ce_last 9.0217;
+    `lab/results/t1-diag-realdata-mb4.json` (same env/seed, real nemotron bins) val
+    [150: 6.5173, 300: 6.0353], ce_last 5.9885 — bends below 9 by step 50 and matches the cloud
+    trajectory scale, on the same GPU.
+- Root cause: `lab/runner.py:ensure_synth()` generated uniform-random token ids in [0, 8192) as the
+  lab corpus; on that distribution the irreducible CE is ln(8192)=9.01, so every run "barely
+  learns" by construction. The droplet's good runs had real corpus bins planted over
+  `lab/data_synth/` (manual, never committed to git); any fresh checkout regenerates the noise,
+  which is exactly what happened on the laptop at 05:01 today. Fixed: `ensure_synth` now slices
+  real uint16 tokens from `Dataset/data/pretrain/nemotron_phase*.bin` (same format the trainer's
+  `load_dataset_index` reads), with a learnable Markov-chain fallback when no corpus is present;
+  the old noise bins are preserved as `lab/data_synth/*.uniform_noise.bak`. Also fixed the
+  hardcoded `(GLA hybrid, fp32)` banner in `Pretrain/02_pretrain_linear.py` to print the actual
+  AMP flag — the string was a red herring; `runner.build_env` sets `VESPER_AMP=bf16` on every farm
+  run on both machines.
+- What it rules out: expert dropout 0.2 (dropout 0.1 reproduces the plateau bit-for-bit in shape),
+  NUM_EXPERTS=8, router type (topk-baseline plateaued identically in the first droplet t0 farm),
+  micro-batch/accum recipe (mb4x2 = mb8x1 = 8192 tok/step both; laptop and cloud trained the same
+  13.0M tokens over 1590 steps), LR schedule (identical traces), AMP/bf16-vs-fp32, seed, GPU/torch
+  correctness (Hippocampus LoRA demo fine; with real bins the same harness reaches CE 5.99 on this
+  3070), and the arch_keys/GQA theory (bad and good droplet runs print the same hybrid stack).
+- Next tried: `t1-diag-realdata-mb4` (queued and completed — it is the confirmation above).
+  Then `t1-dropout02-realdata-mb4` (dropout 0.2, everything else identical) on the fixed corpus:
+  val [150: 6.5593, 300: 6.0592], ce_last 5.9994 — statistically level with dropout 0.1
+  (6.5173/6.0353), so the original t1 claim ("dropout 0.2 does not hurt at t1 scale") survives on
+  valid data. All pre-fix laptop results (t0-8expert, t1-dropout02) must be treated as void and
+  re-baselined on the fixed corpus before any architecture conclusion is drawn from them.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.
