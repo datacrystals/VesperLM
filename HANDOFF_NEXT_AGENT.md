@@ -54,6 +54,14 @@ Droplet session ($~1.8 open at handoff; droplet destroyed+verified after):
     runtime smoke test on the training box is the only remaining gate.
 (d) Speedrun optimizations: torch.compile env-gate, fused linear+CE, value embeddings.
 
+**DROPLET SPEND PRE-APPROVED (2026-10-08, user):** autonomous swarm farm sessions on
+MI300X are expected to run without asking. Standing caps: ≤$12 per session, ledger cap
+$180 total, TTL mandatory on every droplet, destroy+verify (`pod/devcloud.py list` →
+"no vesper-* droplets") after EVERY session, results pulled home + committed+pushed.
+Session 1 launched 21:45 PDT (agent-9, droplet farm): t1 second-seed head-to-head,
+reject_w midpoint curve (rw10/rw12 at t1), Growth exact-upcycle live test at t0,
+3-expert multi-plug-in purity test at t0.
+
 ---
 
 ## 2026-10-09 — MODULAR-MOE THESIS VALIDATED AT t1 (all evidence committed)
