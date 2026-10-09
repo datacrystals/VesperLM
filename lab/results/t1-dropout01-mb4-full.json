@@ -1,0 +1,64 @@
+{
+  "id": "t1-dropout01-mb4-full",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "laptop control at dropout 0.1 mb4/accum2 (VRAM-forced) matches cloud t1s-passport val 5.9677 at 1600 steps \u2014 isolates the mb confound so the dropout02 comparison is clean",
+  "config": "lab_small",
+  "env": {
+    "VESPER_ROUTER_TYPE": "passport",
+    "VESPER_SEED": "2",
+    "VESPER_MICRO_BATCH": "4",
+    "VESPER_ACCUM": "8"
+  },
+  "budget_minutes": 120,
+  "mutation_of": "t1s-passport",
+  "val_loss_final": 5.139,
+  "val_loss_series": [
+    [
+      150,
+      6.504
+    ],
+    [
+      300,
+      5.9809
+    ],
+    [
+      450,
+      5.7647
+    ],
+    [
+      600,
+      5.5898
+    ],
+    [
+      750,
+      5.3857
+    ],
+    [
+      900,
+      5.2554
+    ],
+    [
+      1050,
+      5.2579
+    ],
+    [
+      1200,
+      5.0904
+    ],
+    [
+      1350,
+      5.0884
+    ],
+    [
+      1500,
+      5.139
+    ]
+  ],
+  "ce_last": 4.1926,
+  "tok_s_avg": 19505.5,
+  "steps_done": 1590,
+  "seconds": 918.8,
+  "rc": 0,
+  "stopped": null
+}
