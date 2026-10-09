@@ -53,16 +53,32 @@ class GroupedQueryAttention(nn.Module):
         self.q_norm = RMSNorm(self.head_dim) if qk_norm else None
         self.k_norm = RMSNorm(self.head_dim) if qk_norm else None
 
-    def forward(self, x, freqs_cis, cache=None, start_pos=0):
+        # Speedrun opt (VESPER_VALUE_EMBED): token-id value table added to
+        # the attention values; created via enable_value_embedding() so the
+        # dense VesperLLM path stays parameter-identical by default.
+        self.value_emb = None
+
+    def enable_value_embedding(self, vocab_size):
+        """Attach a token-id-indexed value table added to v (see
+        VesperLinearLM._attach_value_embeddings)."""
+        width = self.n_kv_heads * self.head_dim
+        self.value_emb = nn.Embedding(vocab_size, width)
+        return width
+
+    def forward(self, x, freqs_cis, cache=None, start_pos=0, value_tokens=None):
         # cache: optional dict with preallocated 'k'/'v' tensors of shape
         # (B, n_kv_heads, max_seq_len, head_dim) for incremental decoding;
         # start_pos is the absolute position of x's first token. With
         # cache=None and start_pos=0 the behavior is unchanged.
+        # value_tokens: (B, T) token ids for VESPER_VALUE_EMBED injection.
         B, T, C = x.size()
 
         q = self.wq(x).view(B, T, self.n_heads, self.head_dim)
         k = self.wk(x).view(B, T, self.n_kv_heads, self.head_dim)
-        v = self.wv(x).view(B, T, self.n_kv_heads, self.head_dim)
+        v = self.wv(x)
+        if self.value_emb is not None and value_tokens is not None:
+            v = v + self.value_emb(value_tokens).to(dtype=v.dtype)
+        v = v.view(B, T, self.n_kv_heads, self.head_dim)
 
         if self.q_norm is not None:
             q = self.q_norm(q)
