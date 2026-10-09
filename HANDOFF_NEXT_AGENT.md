@@ -29,8 +29,9 @@ Droplet session ($~1.8 open at handoff; droplet destroyed+verified after):
     lab/imported/ (user mentioned: beg AMD for credits → cluster → paper).
 (b) t3 = 470m_k full pretrain (~$41 projected, single MI300X ~20h) — possibly with
     passport router as the DEFAULT (it's now the better router at every scale tested).
-(c) Hippocampus/Immune teach-by-talking demo on fresh Vesper-K ckpt (needs agent-10's
-    KDA/MLA port, in flight at this writing).
+(c) Hippocampus/Immune teach-by-talking demo on fresh Vesper-K ckpt — KDA/MLA port
+    LANDED (fbf2fad: target profiles, lazy fla import, MLA CPU fallback); KDA shim
+    runtime smoke test on the training box is the only remaining gate.
 (d) Speedrun optimizations: torch.compile env-gate, fused linear+CE, value embeddings.
 
 ---
