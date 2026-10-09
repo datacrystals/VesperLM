@@ -30,15 +30,25 @@ replication). Metric: held-out val cross-entropy; lower is better.
 | t1 | `lab_small` | 33M | 6.2134 | 6.0921 | **+1.95%** |
 | t1 seed-2 | `lab_small` | 33M | 6.1159 | 5.9677 | **+2.42%** |
 | t2 | `tiny_agent_k` | 120M | 6.7316 | 6.5410 | **+2.83%** |
+| t3 probe | `470m_k` | 392M | 4.3604 | 4.3723 | **−0.27% (parity)** |
 
 Sources: `lab/imported/t0r/results/`, `lab/imported/t1/results/`,
 `lab/imported/swarm1/results/t1s-{passport,topk-baseline}.json`,
-`lab/imported/t2/results/t2-{passport,topk-baseline}.json`.
+`lab/imported/t2/results/t2-{passport,topk-baseline}.json`,
+`lab/imported/swarm3/results/t3-470m-{passport,topk-baseline}.json`.
 
 Three points worth the reader's attention:
 
-- **The advantage is scale-stable, not attenuating.** The t1 dip (1.95%) reversed at t2
-  (2.83%); the seed-2 replication at t1 (+2.42%) rules out seed luck.
+- **The advantage holds through 120M; at 392M we measure parity, and we report that.**
+  The t1 dip (1.95%) reversed at t2 (2.83%); the seed-2 replication at t1 (+2.42%)
+  rules out seed luck. At 392M a paired 970-step probe (seed 7, seq-8192 regime)
+  shows statistical parity (−0.27%, within single-seed noise) — passport leads early
+  (+3.2% at step 100) and top-k edges ahead after step 400. We do not claim a quality
+  win at 392M from a 970-step window; the full t3 run settles it. **The modularity
+  capability below is orthogonal to this race and is the actual product** — and the
+  two scale-dependent knobs we discovered (reject_w 15→10→9; owner_mass 0.55→0.50,
+  both weakening with capacity) suggest passport supervision needs per-scale tuning
+  at ≥392M, which the ladder below funds.
 - **At t2 this compounds to ~1.2× lower perplexity**: exp(6.7316 − 6.5410) = 1.21 — the
   top-k baseline's perplexity is 21% higher at the same compute. The gap opens *during*
   training (0.06 nats at step 100 → 0.29 at step 400) and holds to the final eval
@@ -72,7 +82,10 @@ Sources: `lab/imported/t1_plugin/plugin_t1_rw15.json`,
   `lab/imported/swarm1/plugin/plugin_t1_rw10.json`); at 120M it is rw9. Production
   heuristic from the curve: **larger model → lower reject weight**; start at 10 for
   ≥33M. The t2 sweep replays the exact phase-A checkpoint (`plugin_t2_tune.py`,
-  `verify_ce` delta 0.000000), so the rw comparison is controlled.
+  `verify_ce` delta 0.000000), so the rw comparison is controlled. The second
+  routing-supervision knob shows the same direction: multi-plug-in `owner_mass` is
+  0.55 at 11M but 0.50 at 33M (all 9 gates pass with wide margins;
+  `lab/imported/swarm3/results/swarm3_t1_m*.json`).
 - **Expert hot-expansion preserves performance.** Exact 4→6 expert surgery (bit-cloned
   experts + duplicated passport rows + top_k 2→4) trains on and matches an unexpanded
   control: Δ val −0.0008 (6.3508 vs 6.3516; `lab/imported/swarm1/expand/swarm_expand_t0.json`

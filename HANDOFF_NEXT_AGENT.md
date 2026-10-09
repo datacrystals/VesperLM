@@ -74,6 +74,27 @@ the literal `VESPER_ACCUM=16` matches only the probe's short-run batching.
 
 ---
 
+## 2026-10-09 — SWARM SESSION 3 ($2.83, destroyed+verified; slot handed to swarm4)
+
+- **owner_mass scale check at t1: PASS at 0.50, and the operating point SHIFTS with
+  scale** (t0 11M wants 0.55; t1 33M wants 0.50; 0.55 at t1 leaks code cross 0.331).
+  Same direction as reject_w (15→10→9): **all routing-supervision knobs weaken as
+  capacity grows; per-scale sweep required.** t1/0.50 margins are wide (code cross
+  0.255, wiki cross 0.086). Expect t2 (120M) ≈ 0.45 — swarm4 tests exactly that.
+- **470m_k A/B (392M, paired seed 7, 970 steps, seq ramp to 8192): PARITY, not a win.**
+  Passport leads early (+3.18% @ step 100), topk edges ahead after step 400, final
+  −0.27% (4.3723 vs 4.3604 — single-seed noise range). The passport quality advantage
+  is confirmed ≤120M and unproven at 392M in a short window. **Decision: t3 launches
+  with passport anyway** — parity-on-quality + free modularity (the actual product)
+  justifies it, and the full 4000-step run is itself the long-window test the 970-step
+  probe can't answer. AMD_PITCH.md updated with the honest 392M row.
+- Evidence: lab/imported/swarm3/ (commit e22c90b). Spend: $13.24 settled.
+- Droplet quota discovery (agent-15): **account allows ONE GPU droplet** — sessions
+  serialize. swarm4 holds the slot now; t3 launches when swarm4 finishes (its
+  passport_dim sweep result feeds the t3 config).
+
+---
+
 ## 2026-10-08 goal-mode run — deliverables 1–3 DONE (of 4)
 
 - **D2 Hippocampus demo on true KDA+MLA: PASS** (f64ed1b). tiny_agent_k step_3000,
