@@ -237,3 +237,94 @@ domain-B experts (a single pass could be luck).
 - **No public evidence above 10B total params.** BTX and PEER have the right
   shape but neither shows foreign-expert plug-in at scale. Treat every claim
   here as scaled from our t0-t3 ladder until measured.
+
+## 8. Episodic memory as experts (Hippocampus x PassportRouter)
+
+Status: design spec. Approved direction (user, 2026-10-09), gated on the
+build-up experiments listed in 8.4. Nothing here is implemented yet.
+
+### 8.1 The idea
+
+Hippocampus today learns from conversation by direct weight edits on the
+spine (LoRA wraps) + replay + Immune rollback. That has three structural
+limits: edits accumulate interference in shared weights, rollback means
+surgical reversal, and forgetting sets a hard ceiling on lifetime learning.
+
+The synthesis: **memories consolidate into contract experts.** Conversation
+feeds the Hippocampus replay buffer as today, but instead of editing the
+spine, an idle-time consolidation pass ("sleep cycle") distills a batch of
+buffered episodes into one small expert trained against the frozen section
+4.2 I/O contract. The expert gets a passport row and plugs in via the D55
+protocol. The spine stays byte-identical forever; "learning" is growth of
+the expert library, and the training-run/inference boundary dissolves into
+a continuous talk -> buffer -> consolidate -> plug-in loop.
+
+### 8.2 Why passport routing is the enabler
+
+- **Rollback = unplug.** Immune's poison response becomes dropping a
+  passport row: instant, complete, reversible, no weight surgery. The
+  incumbent-spine-intact invariant (verified in the teach-by-talking demo)
+  holds by construction instead of by careful restoration.
+- **Interference isolation.** Each consolidated generation of memories is
+  its own expert; D55's mutual-exclusion calibration keeps generations from
+  bleeding into each other. Interference stops accumulating in shared
+  weights because shared weights stop changing.
+- **Zero-shot reachability.** Expert dropout (4.3) trains the router to
+  match token content to passport content, so a freshly plugged memory
+  expert is reachable immediately. Passport init from the mean router query
+  over the expert's consolidation examples (Arrow-style prototype
+  signature) should make it fire in the right context from birth — this is
+  a measured claim, gate G2 below, not an assumption.
+- **Serving scales.** A lifetime of episodic experts is a PEER-style
+  library: large total, tiny active set, NVMe offload for the tail.
+
+### 8.3 Memory hierarchy
+
+1. **Working memory** — context window. Free, instant, gone on eviction.
+2. **Fast weights** — the current Hippocampus LoRA path. Minutes-scale
+  uptake, small capacity, decays or is absorbed at consolidation.
+3. **Episodic experts** — idle-time consolidation output. Permanent,
+  content-addressed, individually removable. One expert per consolidation
+  batch (NOT per fact — per-fact granularity wastes passports and invites
+  routing noise).
+4. **Aging** — experts with sustained near-zero routing mass and no val
+  contribution get merged into neighbors or pruned. The library is a
+  living structure, not an append-only log.
+
+### 8.4 Gates (in order; each blocks the next)
+
+- **G0 — prerequisites (DONE).** D55 purity gates pass at 11M and 120M
+  (swarm2/4); teach-by-talking demo PASS on a true KDA+MLA checkpoint with
+  poison rollback and incumbent intact (lab/imported/hippo_demo_vesperk.log,
+  hippo_demo_tiny_agent_k_12k.log).
+- **G1 — retention parity.** Hippocampus export mode (replay buffer ->
+  contract expert -> D55 plug-in) matches direct-edit Hippocampus on
+  retention (taught-fact margin gain, replay NLL delta) at t0 AND beats it
+  on rollback cleanliness (incident recovery = one row drop). Falsifier:
+  parity fails, or the expert path needs spine touches to work.
+- **G2 — content-init reachability.** A memory expert plugged in with
+  prototype-init passport and NO router recalibration reaches >50%
+  utilization on its home episodes and <30% contamination on the base mix.
+  Falsifier: needs recalibration anyway — then consolidation gets more
+  expensive and the loop slows, but the design survives.
+- **G3 — coexistence at N=16.** 16 episodic experts plugged sequentially
+  into t2 (tiny_agent_k); all section-6 purity gates still hold for every
+  expert, and base-mix val CE has not regressed >1% vs pre-library. This
+  is the direct stress test of the owner_mass/reject_w scale-weakness
+  finding (swarm3/4) in the memory setting.
+- **G4 — live loop at t3.** The 470M passport model runs the full
+  talk -> buffer -> consolidate -> plug-in cycle during serving, with
+  consolidation scheduled in serving idle time. Success = measurable
+  retention of taught facts after 48h of mixed conversation + adversarial
+  batches, zero spine writes, zero manual intervention.
+
+### 8.5 What would kill it
+
+- Passport routing advantage continues to shrink with scale (the 392M
+  parity probe) and G3 shows purity collapsing before N=16 — then memory
+  experts need a different addressing mechanism and passport stays a
+  domain-expert tool only.
+- Consolidation cost exceeds idle-time budget on hobbyist hardware —
+  then the loop needs a cheaper expert shape (smaller d_e, low-rank core)
+  or slower cadence. The design degrades gracefully here; this is a
+  tuning problem, not a fatal one.
