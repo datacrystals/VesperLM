@@ -81,6 +81,43 @@ a lucky pass.
   laptop 01-vs-02 delta: dropout 0.2 is +0.077 (1.5%) worse and a hair worse at all 10 evals —
   no longer a tie at full length, though still small for a single seed each.
 
+## 2026-10-09 — g1_export_mode v1/v2/v3 — G1 export-mode: retention parity + clean rollback PASS, but passport-row addressing fails purity (contam 0.70-0.90 vs bar 0.30) and drags base-mix CE to +188%
+- Evidence: `lab/results/g1_export_mode_v1.json` (D55 phase-B contrastive recal, 150 steps):
+  util_home 0.809 / contam_base 0.893, base CE +278.7%; `g1_export_mode_v2.json` (hinge ranking
+  margins, 400 steps, + section-4.5 text-KL consolidation): 0.177 / 0.176, CE +353.6%;
+  `g1_export_mode_v3.json` (section-4.4a mutual-exclusion mass target, 800 steps): 0.812 / 0.903,
+  CE +188.0%. Logs `lab/logs/g1_export_mode_v1..v3.log`. All three: margins move (v3
+  -5.00/-5.68/-4.50 -> -1.29/+0.16/-0.02, mean gain +4.68 vs direct-edit +3.22), poison batch
+  ROLLBACK by the same stub gate (target collapse), one-row-drop recovery with incumbent state
+  hash byte-identical and margins bit-equal. Prototype rows alone: literal mean-query
+  (util 0.71 / contam 0.70, home top-2 weight 0.002 — bank row norms ~370 vs prototype ~9),
+  norm-matched (util 0.44-0.81 / contam 0.78-0.89, CE +279% to +440%).
+- Root cause: addressing, not retention. At top-2-of-5, any base-token top-2 membership of the
+  memory row displaces a base expert and rewrites that token's FFN mix, so contamination alone
+  explains the base-CE regressions. A per-layer passport row is ONE dot-product direction in
+  ffn-input space; the home-episode and general-text score distributions overlap too heavily to
+  threshold — measured as a hard trade-off curve with no feasible operating point (hinge:
+  util 0.18/contam 0.18 vs softmax-mex: util 0.81/contam 0.87-0.90). Contributing: the 12k
+  checkpoint is TopK-trained (no expert-dropout content matching), so its score space was never
+  trained for content-matched row placement (G2's premise), and episodic home data is ~150 tokens
+  by construction (9 triples).
+- What it rules out: prototype passport init (literal mean-query AND norm-matched), D55 phase-B
+  contrastive recal, hinge ranking recal, and the section-4.4a mutual-exclusion mass-target recal
+  as sufficient addressing for episodic-memory experts on a TopK-trained 118M spine. D55's
+  synthetic token-range domain purity (code↔math) does not transfer to overlapping language
+  domains at N=1, before N=16 is even attempted. Also rules out "the expert path needs spine
+  touches": zero spine weights were written (the TopK->Passport transplant is function-preserving
+  to 7.6e-6 on router logits and is the only structural change).
+- Next tried (same cycle): v2 = hinge ranking + section-4.5 text-KL consolidation; v3 = the
+  validated section-4.4a mutual-exclusion objective at 800 steps. Both falsified (above).
+  Next queued (fallback tree "Episodic memory" rung 2 + "Live self-learning" rung 4): hybrid
+  cadence — direct-edit Hippocampus stays the fast-weight path (it passed G0); episodic experts
+  wait for an addressing pivot: (a) sidecar kNN retrieval over episode embeddings feeding
+  context (no weight change; safety floor), (b) cross-attention sidecar memory network,
+  (c) hierarchical passports (domain → memory, two-stage routing). Re-run G1 on an
+  expert-dropout-trained (passport) spine before spending on G2 — the transplant keeps G1 honest
+  on today's checkpoint but cannot test content-match reachability.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.
@@ -100,6 +137,10 @@ Do not retry a falsified method unchanged.
 1. Contract-expert consolidation via D55 (current design)
 2. If G1 (retention parity) fails: keep direct-edit Hippocampus for fast
    weights, use experts only for long-term consolidation (hybrid cadence)
+   -> ACTIVE 2026-10-09: G1 falsified on routing purity + base CE, NOT on
+   retention or rollback (see the g1_export_mode entry). Fast weights stay
+   direct-edit; the expert path is blocked on addressing, so rung 3's
+   retrieval/cross-attention sidecar is the next build before any G2 spend.
 3. If G2 (zero-shot reachability) fails: accept router recalibration per
    insert (slower loop, design survives); or sidecar kNN-retrieval over
    episode embeddings feeding context (no weight change at all)
