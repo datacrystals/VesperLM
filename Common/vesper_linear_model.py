@@ -32,6 +32,27 @@ def _env_flag(name: str) -> str:
     return os.environ.get(name, "").strip().lower()
 
 
+def _torch_chunked_linear_ce(x, target, weight, ignore_index=-100, num_chunks=8):
+    """Pure-torch chunked linear+CE used when fla's Triton FLCE cannot run
+    (CPU smoke/probes). Same contract as
+    fla.modules.fused_linear_cross_entropy_loss with reduction="mean":
+    per-chunk logits [C, V], loss summed and divided by the number of
+    non-ignored targets — i.e. exactly F.cross_entropy(...,
+    ignore_index=..., reduction="mean") without holding the full [N, V].
+    """
+    N = x.shape[0]
+    chunk = max(1, (N + num_chunks - 1) // num_chunks)
+    total = target.ne(ignore_index).sum().clamp_min(1)
+    loss_sum = x.new_zeros((), dtype=torch.float32)
+    for s in range(0, N, chunk):
+        logits = F.linear(x[s:s + chunk], weight)
+        loss_sum = loss_sum + F.cross_entropy(
+            logits, target[s:s + chunk], ignore_index=ignore_index,
+            reduction="sum",
+        )
+    return loss_sum / total
+
+
 class RecurrentStateCache(list):
     """Minimal fla-compatible past_key_values container for incremental
     decoding: a list of per-layer state dicts keyed by the layer's own
@@ -243,6 +264,10 @@ class VesperLinearLM(nn.Module):
     Speedrun opts (all env-gated, default OFF, checkpoint keys unchanged):
       VESPER_COMPILE=1  — torch.compile the dense submodules (see
                           `_apply_compile`); "whole" tries the full forward.
+      VESPER_FUSED_CE=1 — fused logits+CE via fla FusedLinearCrossEntropy
+                          (see `_fused_ce_loss`); logits are not materialized
+                          and forward returns logits=None when targets are
+                          given.
     """
 
     def __init__(self, vocab_size=32000, dim=1024, n_layers=10, n_heads=8,
@@ -254,7 +279,7 @@ class VesperLinearLM(nn.Module):
                  kv_lora_rank=None, v_head_dim=128,
                  linear_force_fp32=True,
                  router_type="topk", passport_dim=64, router_expert_dropout=0.0,
-                 grad_checkpoint=True, compile_mode=None):
+                 grad_checkpoint=True, compile_mode=None, fused_ce=None):
         super().__init__()
         self.pad_id = pad_id
         self.max_seq_len = max_seq_len
@@ -318,6 +343,61 @@ class VesperLinearLM(nn.Module):
 
         # Speedrun opt: optional torch.compile (VESPER_COMPILE, default off)
         self._compile_decision = self._apply_compile(compile_mode)
+
+        # Speedrun opt: fused logits+CE (VESPER_FUSED_CE, default off)
+        self.fused_ce, self._fused_ce_decision = self._resolve_fused_ce(fused_ce)
+        if self.fused_ce:
+            print(f"[fused-ce] {self._fused_ce_decision}")
+
+    # --- speedrun opt: VESPER_FUSED_CE -----------------------------------
+    def _resolve_fused_ce(self, fused_ce=None):
+        """Env-gated fused linear-cross-entropy (default off).
+
+        The trainer computes loss as
+            F.cross_entropy(logits.view(-1, V), targets.view(-1),
+                            ignore_index=pad_id)
+        with pad_id = tokenizer.pad_token_id (== eos when the tokenizer has
+        no pad token). fla's FusedLinearCrossEntropyLoss takes the same
+        `ignore_index` and its reduction="mean" divides by the count of
+        non-ignored targets — identical masking/normalization semantics —
+        so the mask convention is preserved exactly. Chunked logsumexp may
+        differ from the unfused path in the last ULP only.
+        """
+        raw = fused_ce if fused_ce is not None else _env_flag("VESPER_FUSED_CE")
+        if isinstance(raw, bool):
+            enabled = raw
+        else:
+            enabled = raw.strip().lower() in ("1", "true", "yes", "on")
+        decision = (f"VESPER_FUSED_CE=1: logits+softmax+CE replaced by fla "
+                    f"FusedLinearCrossEntropyLoss (ignore_index=pad_id={self.pad_id}, "
+                    f"mean over non-ignored targets); full logits are never "
+                    f"materialized and forward() returns logits=None whenever "
+                    f"targets are passed. fla's FLCE is Triton-only — on CPU "
+                    f"(smoke/probes) a pure-torch chunked equivalent with the "
+                    f"same masking is used instead. Generation (targets=None) "
+                    f"still returns real logits.")
+        return enabled, decision
+
+    def _fused_ce_loss(self, x, targets):
+        """Chunked linear+CE over (x, targets) without materializing [N, V].
+
+        Uses fla's FusedLinearCrossEntropyLoss on accelerator devices
+        (Triton kernels); falls back to a pure-torch chunked equivalent on
+        CPU where those kernels cannot run (same ignore_index/mean
+        semantics — see `_torch_chunked_linear_ce`).
+        """
+        x_flat = x.reshape(-1, x.shape[-1])
+        t_flat = targets.reshape(-1)
+        weight = self.output.weight
+        if x.device.type in ("cuda", "npu", "xpu"):
+            from fla.modules.fused_linear_cross_entropy import fused_linear_cross_entropy_loss
+            return fused_linear_cross_entropy_loss(
+                x=x_flat, target=t_flat, weight=weight, bias=None,
+                ignore_index=self.pad_id, label_smoothing=0.0,
+                num_chunks=8, reduction="mean",
+            )
+        return _torch_chunked_linear_ce(x_flat, t_flat, weight,
+                                        ignore_index=self.pad_id)
 
     # --- speedrun opt: VESPER_COMPILE ------------------------------------
     def _apply_compile(self, compile_mode=None):
@@ -454,15 +534,22 @@ class VesperLinearLM(nn.Module):
             total_aux_loss += aux_loss
 
         x = self.norm(x)
-        logits = self.output(x)
-
-        ce_loss = None
-        if targets is not None:
-            ce_loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)),
-                targets.view(-1),
-                ignore_index=self.pad_id
-            )
+        if targets is not None and self.fused_ce:
+            # Speedrun opt: skip logits materialization entirely (V=65536
+            # logits are the dominant activation at long T). Logits are
+            # returned as None; callers that need them must call forward
+            # without targets (the generation path).
+            logits = None
+            ce_loss = self._fused_ce_loss(x, targets)
+        else:
+            logits = self.output(x)
+            ce_loss = None
+            if targets is not None:
+                ce_loss = F.cross_entropy(
+                    logits.view(-1, logits.size(-1)),
+                    targets.view(-1),
+                    ignore_index=self.pad_id
+                )
 
         return logits, ce_loss, total_aux_loss
 
