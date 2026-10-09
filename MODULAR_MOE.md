@@ -464,3 +464,15 @@ Adapter rank is the capacity knob; if adapters dominate, the fallback
   bridgeable at useful fidelity — then variant A only: one grafted host per
   donor family, mixed at the serving layer (model routing), not the expert
   layer.
+
+### 9.6 Product path (what "plug-and-play" actually means)
+
+G2 falsified zero-shot plug-in: every insert pays ~800 router-only recal
+steps (seconds-to-minutes scale, thousands of params — a JIT compile, not a
+training run). The product consequence: ship frozen VERSIONED spines; the
+registry ships experts with PRECOMPUTED passports per spine version (the
+compile cost is paid once by the author/registry, never by the end user).
+Custom/foreign experts pay the local recal at install time — a driver
+install, not a research project. VRAM selects spine size + resident expert
+cache only; total library knowledge is VRAM-independent via NVMe offload
+(section 5), so "pick your VRAM" picks speed, not capability.
