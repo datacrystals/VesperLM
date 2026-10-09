@@ -511,3 +511,14 @@ T. Metrics: held-out cosine/MSE between transplanted output and the expert's
 native donor output (target: >0.9 cosine on the expert's top singular
 directions), then end-to-end section-6 purity gates. If fidelity <0.7 even
 in-domain, variant B is deprioritized to variant-A-only per 9.5.
+
+### 9.7 Harvest granularity: co-adaptation clusters
+
+Donor experts co-adapt under their router — each is shaped to complement its
+siblings (expert 5 handles what expert 3 leaves behind). Harvesting singletons
+risks orphaning that function. The D0 profiling pass already logs per-token
+top-k sets, so measure the co-activation graph and harvest in CLUSTERS
+(frequently co-selected experts travel together, sharing one plug-in recal).
+Graft order within a cluster follows the donor router's own activation
+margins. Singleton vs cluster fidelity is measured at D1.5 — if singletons
+hold >0.9 cosine anyway, skip the clustering complexity.
