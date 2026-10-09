@@ -476,3 +476,38 @@ Custom/foreign experts pay the local recal at install time — a driver
 install, not a research project. VRAM selects spine size + resident expert
 cache only; total library knowledge is VRAM-independent via NVMe offload
 (section 5), so "pick your VRAM" picks speed, not capability.
+
+### 9.3a Telemetry-trained translators (upgrade to the 9.3 adapters)
+
+User idea (2026-10-09): replace blind plug-in-time linear adapters with
+translators trained on DONOR TELEMETRY. Donor weights are white-box — run a
+shared calibration corpus through both models and capture (per layer) the
+donor's pre-FFN residual x_donor, the host's x_host, and the donor router's
+top-k choice. Train T: x_host -> x_donor (small nonlinear MLP, residual) as
+paired-activation regression. Prior art: stitching layers (Bansal 2021) show
+linear stitching between networks recovers most function when trained on
+activations; we go nonlinear and route-conditioned.
+
+Two sharpenings over naive basis translation:
+
+1. **Route-conditioned targets.** We do not need the whole donor basis — only
+   the input manifold of the ONE expert being transplanted (the distribution
+   of activations the donor router sent it). That is a much narrower target
+   than full-basis translation, and the donor router's decisions define it
+   for free.
+2. **Layer correspondence.** Donor depth (60+) does not map 1:1 onto the host
+   (10). Options: soft attention over donor layers, or per-(expert, layer)
+   translators conditioned on donor layer index. Measure both at D-scale.
+
+Falsifier (stated in advance): the translator can only re-express features
+the host spine already encodes — host quality bounds transplant fidelity. If
+paired-activation regression fits train but fidelity collapses on held-out
+domains, the host spine lacks the features, not the translator the capacity;
+the fix is spine scale, not adapter size.
+
+D-gate insertion before D2: **D1.5 — translator fidelity.** Transplant one
+expert between two small open MoEs (OLMoE <-> DSv2-Lite) via telemetry-trained
+T. Metrics: held-out cosine/MSE between transplanted output and the expert's
+native donor output (target: >0.9 cosine on the expert's top singular
+directions), then end-to-end section-6 purity gates. If fidelity <0.7 even
+in-domain, variant B is deprioritized to variant-A-only per 9.5.
