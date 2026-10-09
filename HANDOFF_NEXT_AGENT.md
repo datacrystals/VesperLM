@@ -6,6 +6,10 @@ budget. (2) TOTAL AGENTIC FREEDOM (2026-10-08): never stop and wait on the user 
 make routine decisions, keep the program moving; the user drops in occasionally.
 A recurring heartbeat cron (every 2h, :43) drives autonomous progress; re-create it
 before its 7-day stale expiry. Carry both directives forward through compactions.
+(3) FAILURE PROTOCOL (2026-10-09): never stop on failure — document it in
+lab/FAILURES.md (entry template + fallback tree live there), pick the next
+untried branch (cheapest first), and queue it in the same heartbeat cycle.
+Only interrupt the user for budget or architecture-direction decisions.
 
 ---
 
