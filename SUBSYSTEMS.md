@@ -3,8 +3,9 @@
 Status: design spec (user request, 2026-10-09). Third layer of the stack:
 LMbus owns modality plug-ins, MODULAR_MOE owns expert/memory plug-ins, this
 owns the control layer — slow internal states that modulate what the system
-learns, when, and how much it trusts. Gated like the others; nothing here is
-implemented yet.
+learns, when, and how much it trusts. Gated like the others; only **E0 (drive
+telemetry instrumentation)** is implemented so far — everything else here is
+still design.
 
 ## 1. Honest framing
 
@@ -54,6 +55,31 @@ visible and revertible, not to pretend it won't.
   normal operation: reject mass over time, val NLL trend, feedback events,
   Immune verdicts. No actuation. You cannot design drive dynamics without
   seeing the signals.
+  **Status 2026-10-10: DONE (logging only).** `Common/telemetry.py` is the
+  sink: append-only JSONL in the session_log conventions (`{"ts", "type", ...}`
+  records, flush+fsync), **off by default** — `VESPER_TELEMETRY=1` enables it,
+  `VESPER_TELEMETRY_DIR` sets the directory (default `<repo>/logs/telemetry`),
+  size rotation at `VESPER_TELEMETRY_MAX_BYTES` (8 MiB default, keeps
+  `VESPER_TELEMETRY_KEEP`=4 rotated `telemetry-<stamp>.jsonl` files). Pure
+  stdlib, zero GPU; every emitter is a no-op when the flag is off, and a sink
+  failure is warned to stderr rather than raised. What it emits (and where
+  the events are wired):
+
+  | event | wired at | payload (beyond `ts`/`type`) |
+  |---|---|---|
+  | `immune_verdict` | `Immune/gate.py` on every decision, and `Hippocampus/consolidate.py` after each gate call | verdict (PROMOTE/REJECT/ROLLBACK), source, action/reason, checks, aggregate, drift or metrics |
+  | `reject_mass` | `Immune/score.py::build_report` — once per scored probe batch | reject_mass (mean per-probe failure mass = 1 − mean score; for the 0/1 scorers the failed fraction of the batch), aggregate, n_probes, protected_reject_mass, per_category, probe_set_sha, ckpt |
+  | `val_nll` | `Pretrain/02_pretrain_linear.py` validation loop (rank 0) | step, val_nll, best_val_nll, prev_val_nll, delta |
+  | `feedback` | `Hippocampus/session_log.py::mark_feedback` | session_id, turn_id, mark, confidence, has_correction |
+  | `consolidation` | `Hippocampus/consolidate.py::consolidate` at completion | decision, user_id, n_triples, batch stats (mean_reward, unique_response_ratio, top_response_fraction), loss0/loss_final/final_kl, train_seconds, promoted |
+
+  Honest limits: (a) `reject_mass` is a batch-level stand-in for the curiosity
+  drive's "reject-option mass" — the router has no true reject option yet;
+  when it grows one, its per-token mass belongs in this event too; (b) nothing
+  reads the log yet and nothing actuates on it (by design — the drives that
+  consume these signals are E1+); (c) probe-style NLL
+  (`Hippocampus/consolidate.py::response_nll`) is not a val run and does not
+  emit; only real validation runs do.
 - **E1 — one drive, one actuator.** Curiosity only: reject-mass spikes bump
   consolidation-queue priority for those contexts. Pass = taught-gap closure
   measurably faster than FIFO order, no regression on base val.
