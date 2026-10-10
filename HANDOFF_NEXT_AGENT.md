@@ -702,3 +702,10 @@ agent-25; SFT ckpts save per-step so partial progress is usable (eval any
 step_*/chat_model with SFT/eval_chat.py). Farm runner + attach-pollers die
 with the laptop; restart runner (`systemd-inhibit ... python3 lab/runner.py
 --slots 1 --watch`) on return. Nothing was left mid-queue.
+
+**SENSITIVITY RULE (2026-10-10, explicit user directive):** ops-sensitive
+material — OneClick/devcloud lane mechanics, free-tier details, "how we get
+cheap MI300X" — is LOCAL-ONLY, never committed (the repo is public). The
+field guide lives at /home/tliao/HACKATHON_MI300.md (outside the repo).
+HACKATHON_MI300.md was briefly committed (7233212) then scrubbed via
+reset+force-push on user demand.
