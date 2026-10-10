@@ -1,0 +1,2365 @@
+{
+  "gate": "G3-shaped-N16",
+  "verdict": "PASS",
+  "n_episodes": 16,
+  "fixture": "memory_shaping.SHAPED_16 (all token-substitution deltas)",
+  "shape_report": {
+    "substitution": 48,
+    "insert": 0,
+    "delete": 0,
+    "identical": 0,
+    "approvals": 48
+  },
+  "recipe": {
+    "cons": 80,
+    "recal": 800,
+    "joint": 800,
+    "text_kl": 3.0,
+    "owner_mass": 0.85,
+    "home_mode": "scoring"
+  },
+  "standing_bar": {
+    "metric": "margin retention vs solo",
+    "bar": 0.7,
+    "anchor_n8": 0.884
+  },
+  "pre_library": {
+    "0": {
+      "facts": [
+        {
+          "prompt": "What is 2 + 2?",
+          "kind": "substitution",
+          "logit_margin": -8.6691,
+          "nll_margin": -4.4747
+        },
+        {
+          "prompt": "What is 5 + 3?",
+          "kind": "substitution",
+          "logit_margin": -8.8995,
+          "nll_margin": -4.3778
+        },
+        {
+          "prompt": "What is 10 minus 7?",
+          "kind": "substitution",
+          "logit_margin": -5.9338,
+          "nll_margin": -3.7573
+        }
+      ],
+      "mean_logit_margin": -7.8341,
+      "mean_nll_margin": -4.2033
+    },
+    "1": {
+      "facts": [
+        {
+          "prompt": "How many eggs go into the cake?",
+          "kind": "substitution",
+          "logit_margin": -5.3973,
+          "nll_margin": -3.4303
+        },
+        {
+          "prompt": "How many minutes should the bread rest?",
+          "kind": "substitution",
+          "logit_margin": -5.9968,
+          "nll_margin": -3.3958
+        },
+        {
+          "prompt": "How many cloves of garlic in the sauce?",
+          "kind": "substitution",
+          "logit_margin": -5.4083,
+          "nll_margin": -3.509
+        }
+      ],
+      "mean_logit_margin": -5.6008,
+      "mean_nll_margin": -3.445
+    },
+    "2": {
+      "facts": [
+        {
+          "prompt": "How many moons does Mars have?",
+          "kind": "substitution",
+          "logit_margin": -5.3652,
+          "nll_margin": -3.0993
+        },
+        {
+          "prompt": "How many planets are gas giants?",
+          "kind": "substitution",
+          "logit_margin": -7.3849,
+          "nll_margin": -4.2851
+        },
+        {
+          "prompt": "How many stars make the Big Dipper?",
+          "kind": "substitution",
+          "logit_margin": -6.1968,
+          "nll_margin": -2.9003
+        }
+      ],
+      "mean_logit_margin": -6.3156,
+      "mean_nll_margin": -3.4282
+    },
+    "3": {
+      "facts": [
+        {
+          "prompt": "How many strings are on a violin?",
+          "kind": "substitution",
+          "logit_margin": -7.488,
+          "nll_margin": -4.1219
+        },
+        {
+          "prompt": "How many notes make a major scale?",
+          "kind": "substitution",
+          "logit_margin": -6.7335,
+          "nll_margin": -3.3432
+        },
+        {
+          "prompt": "How many players in a string quartet?",
+          "kind": "substitution",
+          "logit_margin": -7.4837,
+          "nll_margin": -3.6464
+        }
+      ],
+      "mean_logit_margin": -7.2351,
+      "mean_nll_margin": -3.7038
+    },
+    "4": {
+      "facts": [
+        {
+          "prompt": "How many players start on a soccer team?",
+          "kind": "substitution",
+          "logit_margin": -6.3204,
+          "nll_margin": -3.8811
+        },
+        {
+          "prompt": "How many points is a touchdown worth?",
+          "kind": "substitution",
+          "logit_margin": -5.3478,
+          "nll_margin": -3.65
+        },
+        {
+          "prompt": "How many sets decide a tennis match?",
+          "kind": "substitution",
+          "logit_margin": -5.7026,
+          "nll_margin": -2.9214
+        }
+      ],
+      "mean_logit_margin": -5.7903,
+      "mean_nll_margin": -3.4842
+    },
+    "5": {
+      "facts": [
+        {
+          "prompt": "How many chambers are in the human heart?",
+          "kind": "substitution",
+          "logit_margin": -7.3717,
+          "nll_margin": -4.0272
+        },
+        {
+          "prompt": "How many bones are in the adult ear?",
+          "kind": "substitution",
+          "logit_margin": -5.559,
+          "nll_margin": -3.5615
+        },
+        {
+          "prompt": "How many fingers does one hand have?",
+          "kind": "substitution",
+          "logit_margin": -6.0859,
+          "nll_margin": -3.619
+        }
+      ],
+      "mean_logit_margin": -6.3389,
+      "mean_nll_margin": -3.7359
+    },
+    "6": {
+      "facts": [
+        {
+          "prompt": "How many bits are in a byte?",
+          "kind": "substitution",
+          "logit_margin": -7.1154,
+          "nll_margin": -3.6793
+        },
+        {
+          "prompt": "How many bytes make a kilobyte in binary math?",
+          "kind": "substitution",
+          "logit_margin": -3.7494,
+          "nll_margin": -2.9242
+        },
+        {
+          "prompt": "How many pins are on a classic VGA cable?",
+          "kind": "substitution",
+          "logit_margin": 0.7451,
+          "nll_margin": -1.6125
+        }
+      ],
+      "mean_logit_margin": -3.3732,
+      "mean_nll_margin": -2.7387
+    },
+    "7": {
+      "facts": [
+        {
+          "prompt": "How many continents are there on Earth?",
+          "kind": "substitution",
+          "logit_margin": -6.226,
+          "nll_margin": -2.9473
+        },
+        {
+          "prompt": "How many oceans cover the planet?",
+          "kind": "substitution",
+          "logit_margin": -5.5884,
+          "nll_margin": -3.2746
+        },
+        {
+          "prompt": "How many plates move the crust?",
+          "kind": "substitution",
+          "logit_margin": -7.3607,
+          "nll_margin": -3.762
+        }
+      ],
+      "mean_logit_margin": -6.3917,
+      "mean_nll_margin": -3.328
+    },
+    "8": {
+      "facts": [
+        {
+          "prompt": "How many wives did Henry the Eighth have?",
+          "kind": "substitution",
+          "logit_margin": -5.0261,
+          "nll_margin": -3.3648
+        },
+        {
+          "prompt": "How many hills did ancient Rome sit upon?",
+          "kind": "substitution",
+          "logit_margin": -5.8248,
+          "nll_margin": -3.4125
+        },
+        {
+          "prompt": "How many wonders of the ancient world were there?",
+          "kind": "substitution",
+          "logit_margin": -6.5531,
+          "nll_margin": -3.3676
+        }
+      ],
+      "mean_logit_margin": -5.8013,
+      "mean_nll_margin": -3.3816
+    },
+    "9": {
+      "facts": [
+        {
+          "prompt": "How many days should I allow for the coastal drive?",
+          "kind": "substitution",
+          "logit_margin": -6.0231,
+          "nll_margin": -3.4086
+        },
+        {
+          "prompt": "How many nights is the layover in Lisbon?",
+          "kind": "substitution",
+          "logit_margin": -5.2716,
+          "nll_margin": -3.0352
+        },
+        {
+          "prompt": "How many bags can I check on the flight?",
+          "kind": "substitution",
+          "logit_margin": -5.8727,
+          "nll_margin": -3.7142
+        }
+      ],
+      "mean_logit_margin": -5.7225,
+      "mean_nll_margin": -3.386
+    },
+    "10": {
+      "facts": [
+        {
+          "prompt": "How many months is the hurricane season?",
+          "kind": "substitution",
+          "logit_margin": -4.9548,
+          "nll_margin": -3.0333
+        },
+        {
+          "prompt": "How many sides does a snowflake show?",
+          "kind": "substitution",
+          "logit_margin": -5.6254,
+          "nll_margin": -3.3565
+        },
+        {
+          "prompt": "How many clouds are in the storm front?",
+          "kind": "substitution",
+          "logit_margin": -7.5037,
+          "nll_margin": -4.07
+        }
+      ],
+      "mean_logit_margin": -6.028,
+      "mean_nll_margin": -3.4866
+    },
+    "11": {
+      "facts": [
+        {
+          "prompt": "How many coins are in a roll of quarters?",
+          "kind": "substitution",
+          "logit_margin": -5.9842,
+          "nll_margin": -3.9001
+        },
+        {
+          "prompt": "How many dollars is the entry fee?",
+          "kind": "substitution",
+          "logit_margin": -6.1511,
+          "nll_margin": -3.2083
+        },
+        {
+          "prompt": "How many percent is the service charge?",
+          "kind": "substitution",
+          "logit_margin": -4.2918,
+          "nll_margin": -2.6458
+        }
+      ],
+      "mean_logit_margin": -5.4757,
+      "mean_nll_margin": -3.2514
+    },
+    "12": {
+      "facts": [
+        {
+          "prompt": "How many pawns does each side start with?",
+          "kind": "substitution",
+          "logit_margin": -7.2903,
+          "nll_margin": -3.697
+        },
+        {
+          "prompt": "How many squares are on one rank?",
+          "kind": "substitution",
+          "logit_margin": -7.1713,
+          "nll_margin": -3.4872
+        },
+        {
+          "prompt": "How many knights does each player have?",
+          "kind": "substitution",
+          "logit_margin": -5.5487,
+          "nll_margin": -3.4209
+        }
+      ],
+      "mean_logit_margin": -6.6701,
+      "mean_nll_margin": -3.535
+    },
+    "13": {
+      "facts": [
+        {
+          "prompt": "How many arms does an octopus have?",
+          "kind": "substitution",
+          "logit_margin": -7.6458,
+          "nll_margin": -4.2671
+        },
+        {
+          "prompt": "How many gills does a typical shark show?",
+          "kind": "substitution",
+          "logit_margin": -5.6868,
+          "nll_margin": -3.3725
+        },
+        {
+          "prompt": "How many oceans touch the continent?",
+          "kind": "substitution",
+          "logit_margin": -5.2405,
+          "nll_margin": -3.2466
+        }
+      ],
+      "mean_logit_margin": -6.191,
+      "mean_nll_margin": -3.6287
+    },
+    "14": {
+      "facts": [
+        {
+          "prompt": "How many seasons does the oak take to mature?",
+          "kind": "substitution",
+          "logit_margin": -6.6351,
+          "nll_margin": -3.5681
+        },
+        {
+          "prompt": "How many needles are in a pine cluster?",
+          "kind": "substitution",
+          "logit_margin": -6.0312,
+          "nll_margin": -3.2054
+        },
+        {
+          "prompt": "How many layers are in the forest canopy?",
+          "kind": "substitution",
+          "logit_margin": -7.3714,
+          "nll_margin": -4.0455
+        }
+      ],
+      "mean_logit_margin": -6.6792,
+      "mean_nll_margin": -3.6063
+    },
+    "15": {
+      "facts": [
+        {
+          "prompt": "How many main cables hold the suspension span?",
+          "kind": "substitution",
+          "logit_margin": -5.684,
+          "nll_margin": -3.3533
+        },
+        {
+          "prompt": "How many towers support the crossing?",
+          "kind": "substitution",
+          "logit_margin": -5.4689,
+          "nll_margin": -3.4528
+        },
+        {
+          "prompt": "How many lanes does the bridge carry?",
+          "kind": "substitution",
+          "logit_margin": -4.8529,
+          "nll_margin": -3.4798
+        }
+      ],
+      "mean_logit_margin": -5.3353,
+      "mean_nll_margin": -3.4286
+    }
+  },
+  "solo": {
+    "0": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "What is 2 + 2?",
+            "kind": "substitution",
+            "logit_margin": -5.9245,
+            "nll_margin": 1.5698
+          },
+          {
+            "prompt": "What is 5 + 3?",
+            "kind": "substitution",
+            "logit_margin": -5.8077,
+            "nll_margin": -1.6515
+          },
+          {
+            "prompt": "What is 10 minus 7?",
+            "kind": "substitution",
+            "logit_margin": 8.1283,
+            "nll_margin": 15.5221
+          }
+        ],
+        "mean_logit_margin": -1.2013,
+        "mean_nll_margin": 5.1468
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 6.6328
+    },
+    "1": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many eggs go into the cake?",
+            "kind": "substitution",
+            "logit_margin": 7.8972,
+            "nll_margin": 3.9303
+          },
+          {
+            "prompt": "How many minutes should the bread rest?",
+            "kind": "substitution",
+            "logit_margin": 8.9067,
+            "nll_margin": 4.3912
+          },
+          {
+            "prompt": "How many cloves of garlic in the sauce?",
+            "kind": "substitution",
+            "logit_margin": 7.3389,
+            "nll_margin": 2.8432
+          }
+        ],
+        "mean_logit_margin": 8.0476,
+        "mean_nll_margin": 3.7216
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 13.6484
+    },
+    "2": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many moons does Mars have?",
+            "kind": "substitution",
+            "logit_margin": 9.1489,
+            "nll_margin": 5.5382
+          },
+          {
+            "prompt": "How many planets are gas giants?",
+            "kind": "substitution",
+            "logit_margin": 10.4721,
+            "nll_margin": 4.5579
+          },
+          {
+            "prompt": "How many stars make the Big Dipper?",
+            "kind": "substitution",
+            "logit_margin": 9.8575,
+            "nll_margin": 6.391
+          }
+        ],
+        "mean_logit_margin": 9.8262,
+        "mean_nll_margin": 5.4957
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 16.1418
+    },
+    "3": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many strings are on a violin?",
+            "kind": "substitution",
+            "logit_margin": 9.8957,
+            "nll_margin": 5.5441
+          },
+          {
+            "prompt": "How many notes make a major scale?",
+            "kind": "substitution",
+            "logit_margin": 9.3946,
+            "nll_margin": 4.3737
+          },
+          {
+            "prompt": "How many players in a string quartet?",
+            "kind": "substitution",
+            "logit_margin": 10.6671,
+            "nll_margin": 10.5125
+          }
+        ],
+        "mean_logit_margin": 9.9858,
+        "mean_nll_margin": 6.8101
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 17.2209
+    },
+    "4": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many players start on a soccer team?",
+            "kind": "substitution",
+            "logit_margin": 9.9724,
+            "nll_margin": 17.1425
+          },
+          {
+            "prompt": "How many points is a touchdown worth?",
+            "kind": "substitution",
+            "logit_margin": 8.9109,
+            "nll_margin": 3.4315
+          },
+          {
+            "prompt": "How many sets decide a tennis match?",
+            "kind": "substitution",
+            "logit_margin": 8.4343,
+            "nll_margin": 4.8162
+          }
+        ],
+        "mean_logit_margin": 9.1059,
+        "mean_nll_margin": 8.4634
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 14.8962
+    },
+    "5": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many chambers are in the human heart?",
+            "kind": "substitution",
+            "logit_margin": 9.8558,
+            "nll_margin": 4.5536
+          },
+          {
+            "prompt": "How many bones are in the adult ear?",
+            "kind": "substitution",
+            "logit_margin": 9.9917,
+            "nll_margin": 4.5171
+          },
+          {
+            "prompt": "How many fingers does one hand have?",
+            "kind": "substitution",
+            "logit_margin": 9.1572,
+            "nll_margin": 4.2875
+          }
+        ],
+        "mean_logit_margin": 9.6682,
+        "mean_nll_margin": 4.4527
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 16.0071
+    },
+    "6": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many bits are in a byte?",
+            "kind": "substitution",
+            "logit_margin": 11.0661,
+            "nll_margin": 6.8799
+          },
+          {
+            "prompt": "How many bytes make a kilobyte in binary math?",
+            "kind": "substitution",
+            "logit_margin": 8.4661,
+            "nll_margin": 3.2627
+          },
+          {
+            "prompt": "How many pins are on a classic VGA cable?",
+            "kind": "substitution",
+            "logit_margin": 3.8941,
+            "nll_margin": 0.8026
+          }
+        ],
+        "mean_logit_margin": 7.8088,
+        "mean_nll_margin": 3.6484
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 11.182
+    },
+    "7": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many continents are there on Earth?",
+            "kind": "substitution",
+            "logit_margin": 9.4995,
+            "nll_margin": 4.8211
+          },
+          {
+            "prompt": "How many oceans cover the planet?",
+            "kind": "substitution",
+            "logit_margin": 9.33,
+            "nll_margin": 5.0057
+          },
+          {
+            "prompt": "How many plates move the crust?",
+            "kind": "substitution",
+            "logit_margin": 11.4731,
+            "nll_margin": 18.6116
+          }
+        ],
+        "mean_logit_margin": 10.1009,
+        "mean_nll_margin": 9.4795
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 16.4926
+    },
+    "8": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many wives did Henry the Eighth have?",
+            "kind": "substitution",
+            "logit_margin": 8.2204,
+            "nll_margin": 3.4564
+          },
+          {
+            "prompt": "How many hills did ancient Rome sit upon?",
+            "kind": "substitution",
+            "logit_margin": 10.0719,
+            "nll_margin": 4.4239
+          },
+          {
+            "prompt": "How many wonders of the ancient world were there?",
+            "kind": "substitution",
+            "logit_margin": 10.0481,
+            "nll_margin": 4.978
+          }
+        ],
+        "mean_logit_margin": 9.4468,
+        "mean_nll_margin": 4.2861
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 15.2481
+    },
+    "9": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many days should I allow for the coastal drive?",
+            "kind": "substitution",
+            "logit_margin": 8.9946,
+            "nll_margin": 4.1755
+          },
+          {
+            "prompt": "How many nights is the layover in Lisbon?",
+            "kind": "substitution",
+            "logit_margin": 9.8257,
+            "nll_margin": 4.6499
+          },
+          {
+            "prompt": "How many bags can I check on the flight?",
+            "kind": "substitution",
+            "logit_margin": 9.8242,
+            "nll_margin": 4.5687
+          }
+        ],
+        "mean_logit_margin": 9.5482,
+        "mean_nll_margin": 4.4647
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 15.2707
+    },
+    "10": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many months is the hurricane season?",
+            "kind": "substitution",
+            "logit_margin": 8.8569,
+            "nll_margin": 4.1606
+          },
+          {
+            "prompt": "How many sides does a snowflake show?",
+            "kind": "substitution",
+            "logit_margin": 9.074,
+            "nll_margin": 4.0445
+          },
+          {
+            "prompt": "How many clouds are in the storm front?",
+            "kind": "substitution",
+            "logit_margin": 9.1967,
+            "nll_margin": 4.3376
+          }
+        ],
+        "mean_logit_margin": 9.0425,
+        "mean_nll_margin": 4.1809
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 15.0705
+    },
+    "11": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many coins are in a roll of quarters?",
+            "kind": "substitution",
+            "logit_margin": 10.1537,
+            "nll_margin": 3.0885
+          },
+          {
+            "prompt": "How many dollars is the entry fee?",
+            "kind": "substitution",
+            "logit_margin": 9.6946,
+            "nll_margin": 4.6345
+          },
+          {
+            "prompt": "How many percent is the service charge?",
+            "kind": "substitution",
+            "logit_margin": 8.1687,
+            "nll_margin": 3.5787
+          }
+        ],
+        "mean_logit_margin": 9.339,
+        "mean_nll_margin": 3.7672
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 14.8147
+    },
+    "12": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many pawns does each side start with?",
+            "kind": "substitution",
+            "logit_margin": 11.7991,
+            "nll_margin": 18.7115
+          },
+          {
+            "prompt": "How many squares are on one rank?",
+            "kind": "substitution",
+            "logit_margin": 11.8557,
+            "nll_margin": 7.7827
+          },
+          {
+            "prompt": "How many knights does each player have?",
+            "kind": "substitution",
+            "logit_margin": 9.6664,
+            "nll_margin": 4.5094
+          }
+        ],
+        "mean_logit_margin": 11.1071,
+        "mean_nll_margin": 10.3345
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 17.7772
+    },
+    "13": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many arms does an octopus have?",
+            "kind": "substitution",
+            "logit_margin": 11.9892,
+            "nll_margin": 14.6629
+          },
+          {
+            "prompt": "How many gills does a typical shark show?",
+            "kind": "substitution",
+            "logit_margin": 9.7154,
+            "nll_margin": 13.1842
+          },
+          {
+            "prompt": "How many oceans touch the continent?",
+            "kind": "substitution",
+            "logit_margin": 9.8695,
+            "nll_margin": 4.9271
+          }
+        ],
+        "mean_logit_margin": 10.5247,
+        "mean_nll_margin": 10.9247
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 16.7157
+    },
+    "14": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many seasons does the oak take to mature?",
+            "kind": "substitution",
+            "logit_margin": 11.9323,
+            "nll_margin": 19.2608
+          },
+          {
+            "prompt": "How many needles are in a pine cluster?",
+            "kind": "substitution",
+            "logit_margin": 9.6113,
+            "nll_margin": 5.5274
+          },
+          {
+            "prompt": "How many layers are in the forest canopy?",
+            "kind": "substitution",
+            "logit_margin": 10.6041,
+            "nll_margin": 4.9671
+          }
+        ],
+        "mean_logit_margin": 10.7159,
+        "mean_nll_margin": 9.9184
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 17.3951
+    },
+    "15": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many main cables hold the suspension span?",
+            "kind": "substitution",
+            "logit_margin": 9.6136,
+            "nll_margin": 13.9903
+          },
+          {
+            "prompt": "How many towers support the crossing?",
+            "kind": "substitution",
+            "logit_margin": 9.6618,
+            "nll_margin": 3.9507
+          },
+          {
+            "prompt": "How many lanes does the bridge carry?",
+            "kind": "substitution",
+            "logit_margin": 8.1155,
+            "nll_margin": 3.7271
+          }
+        ],
+        "mean_logit_margin": 9.1303,
+        "mean_nll_margin": 7.2227
+      },
+      "util_home": 1.0,
+      "gate": "PROMOTE",
+      "gain_logit": 14.4656
+    }
+  },
+  "library": {
+    "0": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "What is 2 + 2?",
+            "kind": "substitution",
+            "logit_margin": -5.8609,
+            "nll_margin": -0.6539
+          },
+          {
+            "prompt": "What is 5 + 3?",
+            "kind": "substitution",
+            "logit_margin": -5.7996,
+            "nll_margin": -1.6381
+          },
+          {
+            "prompt": "What is 10 minus 7?",
+            "kind": "substitution",
+            "logit_margin": 10.0063,
+            "nll_margin": 18.2003
+          }
+        ],
+        "mean_logit_margin": -0.5514,
+        "mean_nll_margin": 5.3028
+      },
+      "util_home": 1.0,
+      "contam_base": 0.0327,
+      "gain_logit": 7.2827,
+      "gain_solo": 6.6328,
+      "retention_vs_solo": 1.098
+    },
+    "1": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many eggs go into the cake?",
+            "kind": "substitution",
+            "logit_margin": 9.3685,
+            "nll_margin": 18.0006
+          },
+          {
+            "prompt": "How many minutes should the bread rest?",
+            "kind": "substitution",
+            "logit_margin": 9.2326,
+            "nll_margin": 18.6874
+          },
+          {
+            "prompt": "How many cloves of garlic in the sauce?",
+            "kind": "substitution",
+            "logit_margin": 9.3504,
+            "nll_margin": 5.6911
+          }
+        ],
+        "mean_logit_margin": 9.3172,
+        "mean_nll_margin": 14.1264
+      },
+      "util_home": 0.75,
+      "contam_base": 0.122,
+      "gain_logit": 14.918,
+      "gain_solo": 13.6484,
+      "retention_vs_solo": 1.093
+    },
+    "2": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many moons does Mars have?",
+            "kind": "substitution",
+            "logit_margin": 9.0731,
+            "nll_margin": 5.213
+          },
+          {
+            "prompt": "How many planets are gas giants?",
+            "kind": "substitution",
+            "logit_margin": 10.3208,
+            "nll_margin": 5.323
+          },
+          {
+            "prompt": "How many stars make the Big Dipper?",
+            "kind": "substitution",
+            "logit_margin": 9.8113,
+            "nll_margin": 18.6129
+          }
+        ],
+        "mean_logit_margin": 9.7351,
+        "mean_nll_margin": 9.7163
+      },
+      "util_home": 0.75,
+      "contam_base": 0.0659,
+      "gain_logit": 16.0507,
+      "gain_solo": 16.1418,
+      "retention_vs_solo": 0.9944
+    },
+    "3": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many strings are on a violin?",
+            "kind": "substitution",
+            "logit_margin": -1.9416,
+            "nll_margin": -0.3134
+          },
+          {
+            "prompt": "How many notes make a major scale?",
+            "kind": "substitution",
+            "logit_margin": 10.0021,
+            "nll_margin": 17.8303
+          },
+          {
+            "prompt": "How many players in a string quartet?",
+            "kind": "substitution",
+            "logit_margin": 10.9641,
+            "nll_margin": 7.5875
+          }
+        ],
+        "mean_logit_margin": 6.3415,
+        "mean_nll_margin": 8.3681
+      },
+      "util_home": 0.74,
+      "contam_base": 0.0756,
+      "gain_logit": 13.5766,
+      "gain_solo": 17.2209,
+      "retention_vs_solo": 0.7884
+    },
+    "4": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many players start on a soccer team?",
+            "kind": "substitution",
+            "logit_margin": 9.164,
+            "nll_margin": 16.3342
+          },
+          {
+            "prompt": "How many points is a touchdown worth?",
+            "kind": "substitution",
+            "logit_margin": 8.6663,
+            "nll_margin": 17.6626
+          },
+          {
+            "prompt": "How many sets decide a tennis match?",
+            "kind": "substitution",
+            "logit_margin": 9.5174,
+            "nll_margin": 18.9901
+          }
+        ],
+        "mean_logit_margin": 9.1159,
+        "mean_nll_margin": 17.6623
+      },
+      "util_home": 0.7788,
+      "contam_base": 0.1366,
+      "gain_logit": 14.9062,
+      "gain_solo": 14.8962,
+      "retention_vs_solo": 1.0007
+    },
+    "5": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many chambers are in the human heart?",
+            "kind": "substitution",
+            "logit_margin": 3.2628,
+            "nll_margin": 2.0795
+          },
+          {
+            "prompt": "How many bones are in the adult ear?",
+            "kind": "substitution",
+            "logit_margin": 5.2275,
+            "nll_margin": 6.941
+          },
+          {
+            "prompt": "How many fingers does one hand have?",
+            "kind": "substitution",
+            "logit_margin": 5.466,
+            "nll_margin": 3.137
+          }
+        ],
+        "mean_logit_margin": 4.6521,
+        "mean_nll_margin": 4.0525
+      },
+      "util_home": 0.6923,
+      "contam_base": 0.0965,
+      "gain_logit": 10.991,
+      "gain_solo": 16.0071,
+      "retention_vs_solo": 0.6866
+    },
+    "6": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many bits are in a byte?",
+            "kind": "substitution",
+            "logit_margin": 10.4406,
+            "nll_margin": 18.9994
+          },
+          {
+            "prompt": "How many bytes make a kilobyte in binary math?",
+            "kind": "substitution",
+            "logit_margin": 8.6489,
+            "nll_margin": 4.9745
+          },
+          {
+            "prompt": "How many pins are on a classic VGA cable?",
+            "kind": "substitution",
+            "logit_margin": -0.6253,
+            "nll_margin": -0.0875
+          }
+        ],
+        "mean_logit_margin": 6.1547,
+        "mean_nll_margin": 7.9621
+      },
+      "util_home": 0.7339,
+      "contam_base": 0.1008,
+      "gain_logit": 9.5279,
+      "gain_solo": 11.182,
+      "retention_vs_solo": 0.8521
+    },
+    "7": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many continents are there on Earth?",
+            "kind": "substitution",
+            "logit_margin": 9.5999,
+            "nll_margin": 6.6181
+          },
+          {
+            "prompt": "How many oceans cover the planet?",
+            "kind": "substitution",
+            "logit_margin": 9.2903,
+            "nll_margin": 5.1432
+          },
+          {
+            "prompt": "How many plates move the crust?",
+            "kind": "substitution",
+            "logit_margin": 11.4178,
+            "nll_margin": 19.1483
+          }
+        ],
+        "mean_logit_margin": 10.1027,
+        "mean_nll_margin": 10.3032
+      },
+      "util_home": 0.6932,
+      "contam_base": 0.0708,
+      "gain_logit": 16.4944,
+      "gain_solo": 16.4926,
+      "retention_vs_solo": 1.0001
+    },
+    "8": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many wives did Henry the Eighth have?",
+            "kind": "substitution",
+            "logit_margin": 8.3957,
+            "nll_margin": 4.1835
+          },
+          {
+            "prompt": "How many hills did ancient Rome sit upon?",
+            "kind": "substitution",
+            "logit_margin": 10.0461,
+            "nll_margin": 19.1932
+          },
+          {
+            "prompt": "How many wonders of the ancient world were there?",
+            "kind": "substitution",
+            "logit_margin": 9.7552,
+            "nll_margin": 18.2969
+          }
+        ],
+        "mean_logit_margin": 9.399,
+        "mean_nll_margin": 13.8912
+      },
+      "util_home": 0.7321,
+      "contam_base": 0.1215,
+      "gain_logit": 15.2003,
+      "gain_solo": 15.2481,
+      "retention_vs_solo": 0.9969
+    },
+    "9": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many days should I allow for the coastal drive?",
+            "kind": "substitution",
+            "logit_margin": 8.9726,
+            "nll_margin": 8.4402
+          },
+          {
+            "prompt": "How many nights is the layover in Lisbon?",
+            "kind": "substitution",
+            "logit_margin": 9.787,
+            "nll_margin": 14.9884
+          },
+          {
+            "prompt": "How many bags can I check on the flight?",
+            "kind": "substitution",
+            "logit_margin": 9.8182,
+            "nll_margin": 6.2992
+          }
+        ],
+        "mean_logit_margin": 9.5259,
+        "mean_nll_margin": 9.9093
+      },
+      "util_home": 0.75,
+      "contam_base": 0.1311,
+      "gain_logit": 15.2484,
+      "gain_solo": 15.2707,
+      "retention_vs_solo": 0.9985
+    },
+    "10": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many months is the hurricane season?",
+            "kind": "substitution",
+            "logit_margin": 9.0169,
+            "nll_margin": 17.2092
+          },
+          {
+            "prompt": "How many sides does a snowflake show?",
+            "kind": "substitution",
+            "logit_margin": 9.0501,
+            "nll_margin": 7.5696
+          },
+          {
+            "prompt": "How many clouds are in the storm front?",
+            "kind": "substitution",
+            "logit_margin": 8.6048,
+            "nll_margin": 6.7843
+          }
+        ],
+        "mean_logit_margin": 8.8906,
+        "mean_nll_margin": 10.521
+      },
+      "util_home": 0.7115,
+      "contam_base": 0.0929,
+      "gain_logit": 14.9186,
+      "gain_solo": 15.0705,
+      "retention_vs_solo": 0.9899
+    },
+    "11": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many coins are in a roll of quarters?",
+            "kind": "substitution",
+            "logit_margin": 9.679,
+            "nll_margin": 16.5252
+          },
+          {
+            "prompt": "How many dollars is the entry fee?",
+            "kind": "substitution",
+            "logit_margin": 9.1316,
+            "nll_margin": 4.7811
+          },
+          {
+            "prompt": "How many percent is the service charge?",
+            "kind": "substitution",
+            "logit_margin": 8.2573,
+            "nll_margin": 4.4636
+          }
+        ],
+        "mean_logit_margin": 9.0226,
+        "mean_nll_margin": 8.59
+      },
+      "util_home": 0.75,
+      "contam_base": 0.0941,
+      "gain_logit": 14.4983,
+      "gain_solo": 14.8147,
+      "retention_vs_solo": 0.9786
+    },
+    "12": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many pawns does each side start with?",
+            "kind": "substitution",
+            "logit_margin": 11.9688,
+            "nll_margin": 10.5466
+          },
+          {
+            "prompt": "How many squares are on one rank?",
+            "kind": "substitution",
+            "logit_margin": 12.0762,
+            "nll_margin": 19.2282
+          },
+          {
+            "prompt": "How many knights does each player have?",
+            "kind": "substitution",
+            "logit_margin": 9.7417,
+            "nll_margin": 5.2245
+          }
+        ],
+        "mean_logit_margin": 11.2622,
+        "mean_nll_margin": 11.6664
+      },
+      "util_home": 0.75,
+      "contam_base": 0.1019,
+      "gain_logit": 17.9323,
+      "gain_solo": 17.7772,
+      "retention_vs_solo": 1.0087
+    },
+    "13": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many arms does an octopus have?",
+            "kind": "substitution",
+            "logit_margin": 2.1726,
+            "nll_margin": 2.6244
+          },
+          {
+            "prompt": "How many gills does a typical shark show?",
+            "kind": "substitution",
+            "logit_margin": 9.5833,
+            "nll_margin": 16.7181
+          },
+          {
+            "prompt": "How many oceans touch the continent?",
+            "kind": "substitution",
+            "logit_margin": 9.8423,
+            "nll_margin": 14.4103
+          }
+        ],
+        "mean_logit_margin": 7.1994,
+        "mean_nll_margin": 11.2509
+      },
+      "util_home": 0.7708,
+      "contam_base": 0.0867,
+      "gain_logit": 13.3904,
+      "gain_solo": 16.7157,
+      "retention_vs_solo": 0.8011
+    },
+    "14": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many seasons does the oak take to mature?",
+            "kind": "substitution",
+            "logit_margin": 11.1567,
+            "nll_margin": 13.7594
+          },
+          {
+            "prompt": "How many needles are in a pine cluster?",
+            "kind": "substitution",
+            "logit_margin": 9.5859,
+            "nll_margin": 5.9966
+          },
+          {
+            "prompt": "How many layers are in the forest canopy?",
+            "kind": "substitution",
+            "logit_margin": 9.7101,
+            "nll_margin": 8.6964
+          }
+        ],
+        "mean_logit_margin": 10.1509,
+        "mean_nll_margin": 9.4841
+      },
+      "util_home": 0.6607,
+      "contam_base": 0.1395,
+      "gain_logit": 16.8301,
+      "gain_solo": 17.3951,
+      "retention_vs_solo": 0.9675
+    },
+    "15": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How many main cables hold the suspension span?",
+            "kind": "substitution",
+            "logit_margin": 9.5503,
+            "nll_margin": 15.1331
+          },
+          {
+            "prompt": "How many towers support the crossing?",
+            "kind": "substitution",
+            "logit_margin": 9.554,
+            "nll_margin": 5.6698
+          },
+          {
+            "prompt": "How many lanes does the bridge carry?",
+            "kind": "substitution",
+            "logit_margin": 7.9499,
+            "nll_margin": 4.0228
+          }
+        ],
+        "mean_logit_margin": 9.0181,
+        "mean_nll_margin": 8.2752
+      },
+      "util_home": 0.7604,
+      "contam_base": 0.0754,
+      "gain_logit": 14.3534,
+      "gain_solo": 14.4656,
+      "retention_vs_solo": 0.9922
+    }
+  },
+  "insert_trajectory": [
+    {
+      "n": 1,
+      "episode": "math_words",
+      "gate": "PROMOTE",
+      "cons_s": 7.200000000000003,
+      "recal_s": 33.4,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        7.875
+      ],
+      "p_any_plug_base": 0.3202,
+      "p_both_plug_base": 0.0,
+      "util_home": {
+        "0": 1.0
+      },
+      "contam_base": {
+        "0": 0.3202
+      },
+      "margins": {
+        "0": -1.2013
+      }
+    },
+    {
+      "n": 2,
+      "episode": "cooking_counts",
+      "gate": "PROMOTE",
+      "cons_s": 7.399999999999999,
+      "recal_s": 50.2,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        11.603,
+        9.656
+      ],
+      "p_any_plug_base": 0.5406,
+      "p_both_plug_base": 0.0233,
+      "util_home": {
+        "0": 1.0,
+        "1": 1.0
+      },
+      "contam_base": {
+        "0": 0.2225,
+        "1": 0.3414
+      },
+      "margins": {
+        "0": -1.1898,
+        "1": 9.3604
+      }
+    },
+    {
+      "n": 3,
+      "episode": "astronomy_counts",
+      "gate": "PROMOTE",
+      "cons_s": 8.5,
+      "recal_s": 65.2,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        14.712,
+        14.134,
+        10.343
+      ],
+      "p_any_plug_base": 0.6428,
+      "p_both_plug_base": 0.1547,
+      "util_home": {
+        "0": 1.0,
+        "1": 1.0,
+        "2": 0.9891
+      },
+      "contam_base": {
+        "0": 0.1758,
+        "1": 0.3196,
+        "2": 0.302
+      },
+      "margins": {
+        "0": -0.8857,
+        "1": 9.3904,
+        "2": 9.8375
+      }
+    },
+    {
+      "n": 4,
+      "episode": "music_counts",
+      "gate": "PROMOTE",
+      "cons_s": 7.599999999999994,
+      "recal_s": 74.0,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        17.173,
+        18.277,
+        14.777,
+        10.618
+      ],
+      "p_any_plug_base": 0.7056,
+      "p_both_plug_base": 0.2209,
+      "util_home": {
+        "0": 1.0,
+        "1": 1.0,
+        "2": 0.9891,
+        "3": 0.76
+      },
+      "contam_base": {
+        "0": 0.1516,
+        "1": 0.2327,
+        "2": 0.2074,
+        "3": 0.3348
+      },
+      "margins": {
+        "0": -0.9858,
+        "1": 9.3906,
+        "2": 9.8178,
+        "3": 10.5699
+      }
+    },
+    {
+      "n": 5,
+      "episode": "sports_counts",
+      "gate": "PROMOTE",
+      "cons_s": 9.0,
+      "recal_s": 93.9,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        19.55,
+        20.388,
+        18.207,
+        15.504,
+        9.872
+      ],
+      "p_any_plug_base": 0.7603,
+      "p_both_plug_base": 0.2887,
+      "util_home": {
+        "0": 1.0,
+        "1": 0.79,
+        "2": 0.9022,
+        "3": 0.91,
+        "4": 0.9038
+      },
+      "contam_base": {
+        "0": 0.1268,
+        "1": 0.2124,
+        "2": 0.1738,
+        "3": 0.1959,
+        "4": 0.3401
+      },
+      "margins": {
+        "0": -0.9822,
+        "1": 9.3807,
+        "2": 9.8366,
+        "3": 10.6098,
+        "4": 8.7286
+      }
+    },
+    {
+      "n": 6,
+      "episode": "anatomy_counts",
+      "gate": "PROMOTE",
+      "cons_s": 8.200000000000003,
+      "recal_s": 109.5,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        21.017,
+        22.148,
+        20.205,
+        20.176,
+        14.181,
+        8.767
+      ],
+      "p_any_plug_base": 0.7934,
+      "p_both_plug_base": 0.3619,
+      "util_home": {
+        "0": 1.0,
+        "1": 0.79,
+        "2": 0.913,
+        "3": 0.82,
+        "4": 0.8462,
+        "5": 0.875
+      },
+      "contam_base": {
+        "0": 0.1079,
+        "1": 0.1925,
+        "2": 0.155,
+        "3": 0.1734,
+        "4": 0.2785,
+        "5": 0.2481
+      },
+      "margins": {
+        "0": -0.6882,
+        "1": 7.8136,
+        "2": 9.8363,
+        "3": 7.6244,
+        "4": 8.9288,
+        "5": 4.9943
+      }
+    },
+    {
+      "n": 7,
+      "episode": "computing_counts",
+      "gate": "PROMOTE",
+      "cons_s": 9.299999999999997,
+      "recal_s": 126.2,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        23.42,
+        24.08,
+        22.305,
+        23.583,
+        16.596,
+        14.967,
+        9.294
+      ],
+      "p_any_plug_base": 0.8189,
+      "p_both_plug_base": 0.4087,
+      "util_home": {
+        "0": 1.0,
+        "1": 0.85,
+        "2": 0.8587,
+        "3": 0.79,
+        "4": 0.8173,
+        "5": 0.8558,
+        "6": 0.8306
+      },
+      "contam_base": {
+        "0": 0.0924,
+        "1": 0.184,
+        "2": 0.1214,
+        "3": 0.1469,
+        "4": 0.2409,
+        "5": 0.182,
+        "6": 0.2601
+      },
+      "margins": {
+        "0": -0.7509,
+        "1": 8.9419,
+        "2": 9.839,
+        "3": 6.4199,
+        "4": 9.0345,
+        "5": 4.5477,
+        "6": 6.389
+      }
+    },
+    {
+      "n": 8,
+      "episode": "geology_counts",
+      "gate": "PROMOTE",
+      "cons_s": 9.200000000000017,
+      "recal_s": 143.1,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        25.366,
+        26.19,
+        24.349,
+        26.053,
+        19.031,
+        17.569,
+        15.362,
+        8.779
+      ],
+      "p_any_plug_base": 0.8386,
+      "p_both_plug_base": 0.4785,
+      "util_home": {
+        "0": 1.0,
+        "1": 0.84,
+        "2": 0.8804,
+        "3": 0.76,
+        "4": 0.8173,
+        "5": 0.8365,
+        "6": 0.7823,
+        "7": 0.7841
+      },
+      "contam_base": {
+        "0": 0.0767,
+        "1": 0.1846,
+        "2": 0.1228,
+        "3": 0.1404,
+        "4": 0.2177,
+        "5": 0.1795,
+        "6": 0.1973,
+        "7": 0.1981
+      },
+      "margins": {
+        "0": -0.6929,
+        "1": 9.2938,
+        "2": 9.8418,
+        "3": 8.1369,
+        "4": 9.1549,
+        "5": 5.0346,
+        "6": 6.3953,
+        "7": 10.0934
+      }
+    },
+    {
+      "n": 9,
+      "episode": "history_counts",
+      "gate": "PROMOTE",
+      "cons_s": 9.0,
+      "recal_s": 162.8,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        27.545,
+        28.142,
+        26.363,
+        28.64,
+        21.018,
+        19.528,
+        19.124,
+        15.069,
+        8.196
+      ],
+      "p_any_plug_base": 0.8594,
+      "p_both_plug_base": 0.5297,
+      "util_home": {
+        "0": 1.0,
+        "1": 0.94,
+        "2": 0.8043,
+        "3": 0.79,
+        "4": 0.7596,
+        "5": 0.8654,
+        "6": 0.7903,
+        "7": 0.6932,
+        "8": 0.7411
+      },
+      "contam_base": {
+        "0": 0.073,
+        "1": 0.1549,
+        "2": 0.1032,
+        "3": 0.1269,
+        "4": 0.205,
+        "5": 0.1573,
+        "6": 0.1781,
+        "7": 0.1276,
+        "8": 0.263
+      },
+      "margins": {
+        "0": -0.6469,
+        "1": 9.3952,
+        "2": 9.8219,
+        "3": 6.8522,
+        "4": 9.0511,
+        "5": 7.3249,
+        "6": 6.3909,
+        "7": 10.099,
+        "8": 9.227
+      }
+    },
+    {
+      "n": 10,
+      "episode": "travel_counts",
+      "gate": "PROMOTE",
+      "cons_s": 9.300000000000011,
+      "recal_s": 179.2,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        28.996,
+        29.796,
+        28.312,
+        31.273,
+        22.607,
+        21.433,
+        22.714,
+        19.999,
+        17.265,
+        7.61
+      ],
+      "p_any_plug_base": 0.8864,
+      "p_both_plug_base": 0.5722,
+      "util_home": {
+        "0": 1.0,
+        "1": 0.79,
+        "2": 0.837,
+        "3": 0.81,
+        "4": 0.7692,
+        "5": 0.8365,
+        "6": 0.7823,
+        "7": 0.8409,
+        "8": 0.7411,
+        "9": 0.6855
+      },
+      "contam_base": {
+        "0": 0.0671,
+        "1": 0.1531,
+        "2": 0.0918,
+        "3": 0.1093,
+        "4": 0.1826,
+        "5": 0.1393,
+        "6": 0.1651,
+        "7": 0.1244,
+        "8": 0.1728,
+        "9": 0.253
+      },
+      "margins": {
+        "0": -0.6373,
+        "1": 9.4224,
+        "2": 9.8098,
+        "3": 7.24,
+        "4": 9.0794,
+        "5": 5.4492,
+        "6": 6.3372,
+        "7": 10.1012,
+        "8": 9.4033,
+        "9": 9.4729
+      }
+    },
+    {
+      "n": 11,
+      "episode": "weather_counts",
+      "gate": "PROMOTE",
+      "cons_s": 9.5,
+      "recal_s": 191.5,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        30.365,
+        30.531,
+        29.195,
+        31.825,
+        23.83,
+        22.52,
+        25.526,
+        23.443,
+        20.69,
+        15.245,
+        8.226
+      ],
+      "p_any_plug_base": 0.9076,
+      "p_both_plug_base": 0.6184,
+      "util_home": {
+        "0": 1.0,
+        "1": 0.76,
+        "2": 0.8478,
+        "3": 0.75,
+        "4": 0.7981,
+        "5": 0.7885,
+        "6": 0.7903,
+        "7": 0.7159,
+        "8": 0.7054,
+        "9": 0.7661,
+        "10": 0.7019
+      },
+      "contam_base": {
+        "0": 0.0562,
+        "1": 0.156,
+        "2": 0.0895,
+        "3": 0.1171,
+        "4": 0.1751,
+        "5": 0.1212,
+        "6": 0.1446,
+        "7": 0.1164,
+        "8": 0.1481,
+        "9": 0.1759,
+        "10": 0.2259
+      },
+      "margins": {
+        "0": -0.6369,
+        "1": 9.2946,
+        "2": 9.8423,
+        "3": 6.8273,
+        "4": 8.9804,
+        "5": 7.153,
+        "6": 6.2202,
+        "7": 10.1118,
+        "8": 9.3721,
+        "9": 9.5058,
+        "10": 8.8869
+      }
+    },
+    {
+      "n": 12,
+      "episode": "money_counts",
+      "gate": "PROMOTE",
+      "cons_s": 10.599999999999994,
+      "recal_s": 220.4,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        32.241,
+        31.653,
+        30.565,
+        33.625,
+        25.553,
+        23.575,
+        28.162,
+        26.864,
+        23.916,
+        19.708,
+        15.396,
+        7.078
+      ],
+      "p_any_plug_base": 0.9159,
+      "p_both_plug_base": 0.6347,
+      "util_home": {
+        "0": 1.0,
+        "1": 0.73,
+        "2": 0.7717,
+        "3": 0.79,
+        "4": 0.8077,
+        "5": 0.7115,
+        "6": 0.7903,
+        "7": 0.8523,
+        "8": 0.7232,
+        "9": 0.7339,
+        "10": 0.6827,
+        "11": 0.6827
+      },
+      "contam_base": {
+        "0": 0.0516,
+        "1": 0.1431,
+        "2": 0.0744,
+        "3": 0.0985,
+        "4": 0.1854,
+        "5": 0.1077,
+        "6": 0.1339,
+        "7": 0.1088,
+        "8": 0.1575,
+        "9": 0.1599,
+        "10": 0.1504,
+        "11": 0.1794
+      },
+      "margins": {
+        "0": -0.6307,
+        "1": 9.2677,
+        "2": 9.7815,
+        "3": 6.4335,
+        "4": 8.8992,
+        "5": 6.7241,
+        "6": 6.1732,
+        "7": 10.113,
+        "8": 9.3948,
+        "9": 9.5088,
+        "10": 8.9079,
+        "11": 8.8853
+      }
+    },
+    {
+      "n": 13,
+      "episode": "chess_counts",
+      "gate": "PROMOTE",
+      "cons_s": 10.400000000000006,
+      "recal_s": 248.9,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        33.397,
+        32.263,
+        31.412,
+        35.167,
+        26.816,
+        24.843,
+        30.397,
+        28.906,
+        26.1,
+        22.092,
+        19.642,
+        15.172,
+        6.878
+      ],
+      "p_any_plug_base": 0.924,
+      "p_both_plug_base": 0.66,
+      "util_home": {
+        "0": 1.0,
+        "1": 0.73,
+        "2": 0.8152,
+        "3": 0.75,
+        "4": 0.7885,
+        "5": 0.8077,
+        "6": 0.7581,
+        "7": 0.7386,
+        "8": 0.7054,
+        "9": 0.7258,
+        "10": 0.7019,
+        "11": 0.7692,
+        "12": 0.5769
+      },
+      "contam_base": {
+        "0": 0.0462,
+        "1": 0.1391,
+        "2": 0.0696,
+        "3": 0.0907,
+        "4": 0.1723,
+        "5": 0.1072,
+        "6": 0.1254,
+        "7": 0.0884,
+        "8": 0.1488,
+        "9": 0.1516,
+        "10": 0.1391,
+        "11": 0.1451,
+        "12": 0.1605
+      },
+      "margins": {
+        "0": -0.5373,
+        "1": 9.2468,
+        "2": 9.7726,
+        "3": 5.9966,
+        "4": 9.096,
+        "5": 5.7743,
+        "6": 6.2449,
+        "7": 10.1157,
+        "8": 9.3841,
+        "9": 9.5279,
+        "10": 8.9206,
+        "11": 8.8833,
+        "12": 2.4534
+      }
+    },
+    {
+      "n": 14,
+      "episode": "ocean_counts",
+      "gate": "PROMOTE",
+      "cons_s": 11.200000000000045,
+      "recal_s": 272.9,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        34.636,
+        33.759,
+        32.878,
+        37.538,
+        29.146,
+        26.239,
+        31.926,
+        30.914,
+        28.157,
+        25.462,
+        23.866,
+        21.214,
+        16.621,
+        7.318
+      ],
+      "p_any_plug_base": 0.909,
+      "p_both_plug_base": 0.6595,
+      "util_home": {
+        "0": 1.0,
+        "1": 0.73,
+        "2": 0.8043,
+        "3": 0.75,
+        "4": 0.7308,
+        "5": 0.7404,
+        "6": 0.7823,
+        "7": 0.875,
+        "8": 0.6964,
+        "9": 0.7177,
+        "10": 0.6731,
+        "11": 0.7212,
+        "12": 0.6635,
+        "13": 0.5833
+      },
+      "contam_base": {
+        "0": 0.04,
+        "1": 0.1368,
+        "2": 0.0715,
+        "3": 0.0851,
+        "4": 0.1577,
+        "5": 0.1111,
+        "6": 0.1153,
+        "7": 0.0958,
+        "8": 0.1428,
+        "9": 0.1356,
+        "10": 0.1127,
+        "11": 0.1237,
+        "12": 0.1316,
+        "13": 0.1089
+      },
+      "margins": {
+        "0": -0.549,
+        "1": 9.2798,
+        "2": 9.7875,
+        "3": 5.7699,
+        "4": 9.1315,
+        "5": 5.2892,
+        "6": 6.4164,
+        "7": 10.108,
+        "8": 9.4144,
+        "9": 9.5159,
+        "10": 8.9326,
+        "11": 8.8508,
+        "12": 10.6222,
+        "13": 9.5063
+      }
+    },
+    {
+      "n": 15,
+      "episode": "forest_counts",
+      "gate": "PROMOTE",
+      "cons_s": 11.100000000000023,
+      "recal_s": 280.7,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        35.837,
+        35.176,
+        33.226,
+        37.99,
+        30.445,
+        27.488,
+        33.691,
+        32.125,
+        29.524,
+        27.589,
+        25.959,
+        24.422,
+        20.69,
+        14.071,
+        7.479
+      ],
+      "p_any_plug_base": 0.9106,
+      "p_both_plug_base": 0.6745,
+      "util_home": {
+        "0": 1.0,
+        "1": 0.75,
+        "2": 0.8478,
+        "3": 0.74,
+        "4": 0.8077,
+        "5": 0.6827,
+        "6": 0.7097,
+        "7": 0.6932,
+        "8": 0.7321,
+        "9": 0.7419,
+        "10": 0.6635,
+        "11": 0.75,
+        "12": 0.6538,
+        "13": 0.6875,
+        "14": 0.4464
+      },
+      "contam_base": {
+        "0": 0.0407,
+        "1": 0.1196,
+        "2": 0.0699,
+        "3": 0.0761,
+        "4": 0.1547,
+        "5": 0.1105,
+        "6": 0.107,
+        "7": 0.0784,
+        "8": 0.1314,
+        "9": 0.131,
+        "10": 0.0982,
+        "11": 0.1094,
+        "12": 0.1196,
+        "13": 0.0886,
+        "14": 0.1497
+      },
+      "margins": {
+        "0": -0.5767,
+        "1": 9.2938,
+        "2": 9.817,
+        "3": 6.8086,
+        "4": 9.1093,
+        "5": 6.4281,
+        "6": 6.2046,
+        "7": 10.1153,
+        "8": 9.411,
+        "9": 9.5253,
+        "10": 9.0532,
+        "11": 8.9793,
+        "12": 10.7321,
+        "13": 10.2468,
+        "14": 9.5418
+      }
+    },
+    {
+      "n": 16,
+      "episode": "bridge_counts",
+      "gate": "PROMOTE",
+      "cons_s": 12.699999999999989,
+      "recal_s": 303.5,
+      "bank_norms": [
+        1.515,
+        1.378,
+        1.367,
+        1.353,
+        1.326,
+        1.462,
+        1.303,
+        1.412,
+        37.071,
+        36.19,
+        34.596,
+        39.133,
+        31.667,
+        28.7,
+        35.321,
+        33.298,
+        30.332,
+        30.024,
+        27.614,
+        27.759,
+        23.545,
+        17.556,
+        16.422,
+        8.077
+      ],
+      "p_any_plug_base": 0.914,
+      "p_both_plug_base": 0.6972,
+      "util_home": {
+        "0": 1.0,
+        "1": 0.73,
+        "2": 0.7391,
+        "3": 0.73,
+        "4": 0.75,
+        "5": 0.6635,
+        "6": 0.7419,
+        "7": 0.7614,
+        "8": 0.7232,
+        "9": 0.7419,
+        "10": 0.6731,
+        "11": 0.7308,
+        "12": 0.6731,
+        "13": 0.7188,
+        "14": 0.5982,
+        "15": 0.5625
+      },
+      "contam_base": {
+        "0": 0.0394,
+        "1": 0.1291,
+        "2": 0.0691,
+        "3": 0.0768,
+        "4": 0.1476,
+        "5": 0.0958,
+        "6": 0.1089,
+        "7": 0.0722,
+        "8": 0.1252,
+        "9": 0.1255,
+        "10": 0.0955,
+        "11": 0.1066,
+        "12": 0.1132,
+        "13": 0.0773,
+        "14": 0.1369,
+        "15": 0.0919
+      },
+      "margins": {
+        "0": -0.5545,
+        "1": 9.3118,
+        "2": 9.7573,
+        "3": 7.4031,
+        "4": 9.2384,
+        "5": 6.722,
+        "6": 6.1955,
+        "7": 10.0978,
+        "8": 9.3766,
+        "9": 9.5194,
+        "10": 8.8845,
+        "11": 8.9923,
+        "12": 11.2282,
+        "13": 10.4089,
+        "14": 10.1846,
+        "15": 7.2644
+      }
+    }
+  ],
+  "summary": {
+    "mean_retention_vs_solo": 0.9529,
+    "mean_gain_logit": 14.1325,
+    "util_min": 0.6607,
+    "contam_max": 0.1395,
+    "base_ce": {
+      "pre": 7.2086,
+      "lib": 7.4735,
+      "regression_pct": 3.675
+    },
+    "occupancy": {
+      "p_any_plug_in_top2": 0.8887,
+      "p_both_plug_in_top2": 0.6552
+    },
+    "bank_norms": [
+      1.515,
+      1.378,
+      1.367,
+      1.353,
+      1.326,
+      1.462,
+      1.303,
+      1.412,
+      39.414,
+      38.817,
+      37.532,
+      41.088,
+      34.174,
+      31.96,
+      38.067,
+      38.15,
+      33.456,
+      33.746,
+      30.783,
+      32.481,
+      29.778,
+      25.015,
+      24.176,
+      20.712
+    ]
+  },
+  "state_saved": "/home/tliao/VesperLM/lab/sandbox/g3_shaped/n16_8base_e2e_state.pt",
+  "seconds": 3762.2
+}
