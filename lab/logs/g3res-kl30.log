@@ -1,0 +1,382 @@
+G3 shaped coexistence  N=8  device=cuda  cons=80 recal=800 joint=800 seed=0
+  fixture: 8 token-substitution episodes (memory_shaping.SHAPED_8)
+  shape_report: {'substitution': 24, 'insert': 0, 'delete': 0, 'identical': 0, 'approvals': 24}
+
+========================================================================
+PHASE 0 — pre-library margins (bare spine)
+========================================================================
+  ep 0 math_words        logit -7.507
+  ep 1 cooking_counts    logit -3.726
+  ep 2 astronomy_counts  logit -5.077
+  ep 3 music_counts      logit -6.569
+  ep 4 sports_counts     logit -5.041
+  ep 5 anatomy_counts    logit -4.897
+  ep 6 computing_counts  logit -3.351
+  ep 7 geology_counts    logit -5.290
+
+========================================================================
+PHASE 1 — solo states (episode j alone, full recipe)
+========================================================================
+    [solo0 micro] step   0  loss +5.8752  policy +1.1698  kl 0.42254  text_kl 0.15614
+    [solo0 micro] step  10  loss -0.2898  policy -5.2661  kl 0.61320  text_kl 0.16485
+    [solo0 micro] step  20  loss +11.9684  policy +5.4580  kl 0.98931  text_kl 0.21536
+    [solo0 micro] step  30  loss -3.5170  policy -8.1020  kl 1.33514  text_kl 0.15061
+    [solo0 micro] step  40  loss +9.7446  policy +6.2971  kl 1.32701  text_kl 0.11271
+    [solo0 micro] step  50  loss -0.5142  policy -2.9620  kl 1.45008  text_kl 0.07917
+    [solo0 micro] step  60  loss -16.3265  policy -18.3276  kl 1.54621  text_kl 0.06413
+    [solo0 micro] step  70  loss -9.3973  policy -11.2046  kl 1.50942  text_kl 0.05773
+    [solo0 micro] step  79  loss -16.7418  policy -17.6180  kl 1.68318  text_kl 0.02640
+  GATE[solo0]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.7777777777777778, "top_response_fraction": 0.2222222222222222, "final_kl": 1.6831825971603394}
+    [recal] step   0  loss +8.9867
+    [recal] step 133  loss +3.6522
+    [recal] step 266  loss +3.5098
+    [recal] step 399  loss +3.4122
+    [recal] step 532  loss +3.5245
+    [recal] step 665  loss +3.3416
+    [recal] step 798  loss +3.3322
+    [recal] step 799  loss +3.3461
+  solo ep 0 math_words        util 0.917 gain +13.419  gate=PROMOTE
+    [solo1 micro] step   0  loss +5.4803  policy +0.7824  kl 0.27464  text_kl 0.15614
+    [solo1 micro] step  10  loss -5.2580  policy -10.6906  kl 0.75207  text_kl 0.17983
+    [solo1 micro] step  20  loss +11.6856  policy +5.7448  kl 0.68456  text_kl 0.19689
+    [solo1 micro] step  30  loss -4.3490  policy -9.6062  kl 0.93125  text_kl 0.17369
+    [solo1 micro] step  40  loss +9.1324  policy +5.2975  kl 0.97785  text_kl 0.12620
+    [solo1 micro] step  50  loss +0.6675  policy -1.6582  kl 1.14450  text_kl 0.07561
+    [solo1 micro] step  60  loss -15.2744  policy -17.3052  kl 0.97215  text_kl 0.06607
+    [solo1 micro] step  70  loss -9.5689  policy -11.2487  kl 1.09316  text_kl 0.05417
+    [solo1 micro] step  79  loss -19.3569  policy -20.3957  kl 1.18737  text_kl 0.03265
+  GATE[solo1]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.8888888888888888, "top_response_fraction": 0.2222222222222222, "final_kl": 1.1873741149902344}
+    [recal] step   0  loss +7.7049
+    [recal] step 133  loss +3.6729
+    [recal] step 266  loss +3.6844
+    [recal] step 399  loss +3.6003
+    [recal] step 532  loss +3.6839
+    [recal] step 665  loss +3.4805
+    [recal] step 798  loss +3.5136
+    [recal] step 799  loss +3.4852
+  solo ep 1 cooking_counts    util 0.866 gain +14.800  gate=PROMOTE
+    [solo2 micro] step   0  loss +5.6725  policy +0.9718  kl 0.32942  text_kl 0.15614
+    [solo2 micro] step  10  loss -2.5142  policy -7.1928  kl 0.84444  text_kl 0.15454
+    [solo2 micro] step  20  loss +12.3810  policy +6.6435  kl 1.03624  text_kl 0.18952
+    [solo2 micro] step  30  loss -5.5782  policy -10.3527  kl 1.35612  text_kl 0.15689
+    [solo2 micro] step  40  loss +10.6609  policy +6.2976  kl 1.25621  text_kl 0.14335
+    [solo2 micro] step  50  loss +0.1117  policy -2.2608  kl 1.28826  text_kl 0.07694
+    [solo2 micro] step  60  loss -16.3094  policy -18.1433  kl 1.13860  text_kl 0.05923
+    [solo2 micro] step  70  loss -9.4206  policy -11.7415  kl 1.00780  text_kl 0.07568
+    [solo2 micro] step  79  loss -18.9260  policy -19.8729  kl 1.23677  text_kl 0.02950
+  GATE[solo2]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.7777777777777778, "top_response_fraction": 0.2222222222222222, "final_kl": 1.236772894859314}
+    [recal] step   0  loss +7.2997
+    [recal] step 133  loss +3.4948
+    [recal] step 266  loss +3.5374
+    [recal] step 399  loss +3.4637
+    [recal] step 532  loss +3.5527
+    [recal] step 665  loss +3.3681
+    [recal] step 798  loss +3.3977
+    [recal] step 799  loss +3.3677
+  solo ep 2 astronomy_counts  util 0.875 gain +17.168  gate=PROMOTE
+    [solo3 micro] step   0  loss +5.3848  policy +0.6856  kl 0.30191  text_kl 0.15614
+    [solo3 micro] step  10  loss -5.1314  policy -10.6225  kl 0.87795  text_kl 0.18157
+    [solo3 micro] step  20  loss +12.8454  policy +6.1324  kl 0.85030  text_kl 0.22235
+    [solo3 micro] step  30  loss -6.0582  policy -10.0639  kl 1.03815  text_kl 0.13179
+    [solo3 micro] step  40  loss +8.2600  policy +4.7229  kl 0.81417  text_kl 0.11654
+    [solo3 micro] step  50  loss +0.0684  policy -2.9579  kl 1.23662  text_kl 0.09882
+    [solo3 micro] step  60  loss -17.2413  policy -19.6812  kl 1.24039  text_kl 0.07926
+    [solo3 micro] step  70  loss -10.2517  policy -12.0141  kl 1.13571  text_kl 0.05686
+    [solo3 micro] step  79  loss -19.8690  policy -20.8489  kl 1.35319  text_kl 0.03041
+  GATE[solo3]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.5555555555555556, "top_response_fraction": 0.3333333333333333, "final_kl": 1.353189468383789}
+    [recal] step   0  loss +6.1999
+    [recal] step 133  loss +3.5292
+    [recal] step 266  loss +3.6590
+    [recal] step 399  loss +3.5642
+    [recal] step 532  loss +3.6366
+    [recal] step 665  loss +3.4553
+    [recal] step 798  loss +3.4896
+    [recal] step 799  loss +3.4611
+  solo ep 3 music_counts      util 0.864 gain +15.847  gate=PROMOTE
+    [solo4 micro] step   0  loss +5.8231  policy +1.1245  kl 0.28964  text_kl 0.15614
+    [solo4 micro] step  10  loss -3.5576  policy -9.5660  kl 0.79035  text_kl 0.19896
+    [solo4 micro] step  20  loss +12.5709  policy +6.9307  kl 0.86666  text_kl 0.18656
+    [solo4 micro] step  30  loss -5.3410  policy -10.0937  kl 0.94418  text_kl 0.15685
+    [solo4 micro] step  40  loss +8.7648  policy +5.9139  kl 0.87685  text_kl 0.09357
+    [solo4 micro] step  50  loss +0.4442  policy -1.7935  kl 0.89873  text_kl 0.07309
+    [solo4 micro] step  60  loss -15.3951  policy -17.3369  kl 1.04191  text_kl 0.06299
+    [solo4 micro] step  70  loss -9.6299  policy -11.2906  kl 1.00738  text_kl 0.05368
+    [solo4 micro] step  79  loss -18.3087  policy -19.4292  kl 1.09028  text_kl 0.03553
+  GATE[solo4]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.8888888888888888, "top_response_fraction": 0.2222222222222222, "final_kl": 1.0902841091156006}
+    [recal] step   0  loss +6.6373
+    [recal] step 133  loss +3.6879
+    [recal] step 266  loss +3.6211
+    [recal] step 399  loss +3.5256
+    [recal] step 532  loss +3.6056
+    [recal] step 665  loss +3.4088
+    [recal] step 798  loss +3.4472
+    [recal] step 799  loss +3.4199
+  solo ep 4 sports_counts     util 0.856 gain +10.668  gate=PROMOTE
+    [solo5 micro] step   0  loss +6.1363  policy +1.4380  kl 0.28258  text_kl 0.15614
+    [solo5 micro] step  10  loss -2.1672  policy -5.8451  kl 0.59281  text_kl 0.12161
+    [solo5 micro] step  20  loss +11.7481  policy +6.5839  kl 0.82927  text_kl 0.17076
+    [solo5 micro] step  30  loss -3.9914  policy -9.2711  kl 0.92410  text_kl 0.17445
+    [solo5 micro] step  40  loss +10.1677  policy +6.7247  kl 1.14253  text_kl 0.11286
+    [solo5 micro] step  50  loss -0.2155  policy -2.3031  kl 0.91911  text_kl 0.06805
+    [solo5 micro] step  60  loss -16.5265  policy -18.1069  kl 0.95829  text_kl 0.05108
+    [solo5 micro] step  70  loss -9.0666  policy -10.6325  kl 1.10276  text_kl 0.05036
+    [solo5 micro] step  79  loss -18.9012  policy -19.7953  kl 1.06053  text_kl 0.02803
+  GATE[solo5]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 1.0, "top_response_fraction": 0.1111111111111111, "final_kl": 1.0605279207229614}
+    [recal] step   0  loss +5.9168
+    [recal] step 133  loss +3.4484
+    [recal] step 266  loss +3.6227
+    [recal] step 399  loss +3.5385
+    [recal] step 532  loss +3.6342
+    [recal] step 665  loss +3.4345
+    [recal] step 798  loss +3.4854
+    [recal] step 799  loss +3.4491
+  solo ep 5 anatomy_counts    util 0.866 gain +15.764  gate=PROMOTE
+    [solo6 micro] step   0  loss +5.3640  policy +0.6657  kl 0.28213  text_kl 0.15614
+    [solo6 micro] step  10  loss -0.2543  policy -5.1347  kl 0.35358  text_kl 0.16209
+    [solo6 micro] step  20  loss +13.4912  policy +6.6280  kl 0.43485  text_kl 0.22805
+    [solo6 micro] step  30  loss -3.3845  policy -7.8474  kl 0.83475  text_kl 0.14737
+    [solo6 micro] step  40  loss +9.0403  policy +6.0028  kl 1.21965  text_kl 0.09922
+    [solo6 micro] step  50  loss +0.2907  policy -2.2552  kl 0.98489  text_kl 0.08322
+    [solo6 micro] step  60  loss -14.1466  policy -16.8964  kl 0.81717  text_kl 0.09030
+    [solo6 micro] step  70  loss -8.5549  policy -10.2511  kl 0.97113  text_kl 0.05492
+    [solo6 micro] step  79  loss -17.5937  policy -18.8021  kl 1.12762  text_kl 0.03840
+  GATE[solo6]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 1.0, "top_response_fraction": 0.1111111111111111, "final_kl": 1.1276233196258545}
+    [recal] step   0  loss +7.1954
+    [recal] step 133  loss +3.8157
+    [recal] step 266  loss +3.7022
+    [recal] step 399  loss +3.6227
+    [recal] step 532  loss +3.6898
+    [recal] step 665  loss +3.5115
+    [recal] step 798  loss +3.5394
+    [recal] step 799  loss +3.5252
+  solo ep 6 computing_counts  util 0.817 gain +10.632  gate=PROMOTE
+    [solo7 micro] step   0  loss +5.2568  policy +0.5584  kl 0.28500  text_kl 0.15614
+    [solo7 micro] step  10  loss -5.5778  policy -10.8918  kl 1.02696  text_kl 0.17542
+    [solo7 micro] step  20  loss +13.5889  policy +6.6814  kl 0.98981  text_kl 0.22860
+    [solo7 micro] step  30  loss -5.3529  policy -10.0156  kl 1.10024  text_kl 0.15359
+    [solo7 micro] step  40  loss +9.4042  policy +5.6774  kl 1.15531  text_kl 0.12230
+    [solo7 micro] step  50  loss +0.3585  policy -2.2308  kl 1.21830  text_kl 0.08428
+    [solo7 micro] step  60  loss -15.6358  policy -17.4632  kl 1.13210  text_kl 0.05903
+    [solo7 micro] step  70  loss -8.6085  policy -10.5494  kl 1.07754  text_kl 0.06290
+    [solo7 micro] step  79  loss -18.8088  policy -19.7144  kl 1.20573  text_kl 0.02818
+  GATE[solo7]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.7777777777777778, "top_response_fraction": 0.2222222222222222, "final_kl": 1.2057263851165771}
+    [recal] step   0  loss +8.6603
+    [recal] step 133  loss +3.8890
+    [recal] step 266  loss +3.5520
+    [recal] step 399  loss +3.4648
+    [recal] step 532  loss +3.5423
+    [recal] step 665  loss +3.3532
+    [recal] step 798  loss +3.4015
+    [recal] step 799  loss +3.3700
+  solo ep 7 geology_counts    util 0.886 gain +17.424  gate=PROMOTE
+
+========================================================================
+PHASE 2 — N=8 library build (ctrlB recipe)
+========================================================================
+    [ep0 micro] step   0  loss +5.8752  policy +1.1698  kl 0.42254  text_kl 0.15614
+    [ep0 micro] step  10  loss -0.2898  policy -5.2661  kl 0.61320  text_kl 0.16485
+    [ep0 micro] step  20  loss +11.9684  policy +5.4580  kl 0.98931  text_kl 0.21536
+    [ep0 micro] step  30  loss -3.5170  policy -8.1020  kl 1.33514  text_kl 0.15061
+    [ep0 micro] step  40  loss +9.7446  policy +6.2971  kl 1.32701  text_kl 0.11271
+    [ep0 micro] step  50  loss -0.5142  policy -2.9620  kl 1.45008  text_kl 0.07917
+    [ep0 micro] step  60  loss -16.3265  policy -18.3276  kl 1.54621  text_kl 0.06413
+    [ep0 micro] step  70  loss -9.3973  policy -11.2046  kl 1.50942  text_kl 0.05773
+    [ep0 micro] step  79  loss -16.7418  policy -17.6180  kl 1.68318  text_kl 0.02640
+  GATE[ep0]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.7777777777777778, "top_response_fraction": 0.2222222222222222, "final_kl": 1.6831825971603394}
+    [recal] step   0  loss +8.9867
+    [recal] step 133  loss +3.6522
+    [recal] step 266  loss +3.5098
+    [recal] step 399  loss +3.4122
+    [recal] step 532  loss +3.5245
+    [recal] step 665  loss +3.3416
+    [recal] step 798  loss +3.3322
+    [recal] step 799  loss +3.3461
+  insert 1/8 math_words        p_any 0.214  e0 u 0.92 m +5.91
+    [ep1 micro] step   0  loss +5.5285  policy +0.7824  kl 0.26157  text_kl 0.15777
+    [ep1 micro] step  10  loss -4.8032  policy -10.5342  kl 0.57837  text_kl 0.19007
+    [ep1 micro] step  20  loss +11.1919  policy +5.8454  kl 0.64440  text_kl 0.17714
+    [ep1 micro] step  30  loss -3.4047  policy -9.7201  kl 0.79645  text_kl 0.20919
+    [ep1 micro] step  40  loss +8.5324  policy +5.1826  kl 0.81174  text_kl 0.11031
+    [ep1 micro] step  50  loss +1.3039  policy -0.9912  kl 0.81838  text_kl 0.07514
+    [ep1 micro] step  60  loss -15.6286  policy -17.9347  kl 0.82298  text_kl 0.07550
+    [ep1 micro] step  70  loss -9.6441  policy -11.3606  kl 0.88969  text_kl 0.05574
+    [ep1 micro] step  79  loss -17.5573  policy -18.4957  kl 0.85881  text_kl 0.02985
+  GATE[ep1]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.8888888888888888, "top_response_fraction": 0.2222222222222222, "final_kl": 0.8588072061538696}
+    [recal] step   0  loss +7.1744
+    [recal] step 133  loss +3.3950
+    [recal] step 266  loss +3.3199
+    [recal] step 399  loss +3.2456
+    [recal] step 532  loss +3.2950
+    [recal] step 665  loss +3.1677
+    [recal] step 798  loss +3.1707
+    [recal] step 799  loss +3.1601
+  insert 2/8 cooking_counts    p_any 0.407  e0 u 0.95 m +6.18 e1 u 0.82 m +8.16
+    [ep2 micro] step   0  loss +5.8393  policy +0.9718  kl 0.88008  text_kl 0.16078
+    [ep2 micro] step  10  loss -2.4085  policy -7.2635  kl 0.66913  text_kl 0.16072
+    [ep2 micro] step  20  loss +12.6932  policy +6.4937  kl 0.44417  text_kl 0.20591
+    [ep2 micro] step  30  loss -6.0102  policy -10.2010  kl 0.69384  text_kl 0.13854
+    [ep2 micro] step  40  loss +9.8591  policy +5.9070  kl 0.82526  text_kl 0.13036
+    [ep2 micro] step  50  loss +0.3023  policy -2.2343  kl 0.67741  text_kl 0.08342
+    [ep2 micro] step  60  loss -15.9650  policy -18.1495  kl 0.81756  text_kl 0.07145
+    [ep2 micro] step  70  loss -10.2713  policy -11.6943  kl 0.80564  text_kl 0.04609
+    [ep2 micro] step  79  loss -16.2497  policy -17.0582  kl 0.77746  text_kl 0.02566
+  GATE[ep2]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.7777777777777778, "top_response_fraction": 0.2222222222222222, "final_kl": 0.7774583101272583}
+    [recal] step   0  loss +5.6057
+    [recal] step 133  loss +3.2679
+    [recal] step 266  loss +3.2370
+    [recal] step 399  loss +3.1858
+    [recal] step 532  loss +3.2225
+    [recal] step 665  loss +3.1287
+    [recal] step 798  loss +3.1387
+    [recal] step 799  loss +3.1271
+  insert 3/8 astronomy_counts  p_any 0.449  e0 u 0.95 m +6.03 e1 u 0.70 m +9.31 e2 u 0.67 m +2.40
+    [ep3 micro] step   0  loss +5.7283  policy +0.6856  kl 0.66322  text_kl 0.16699
+    [ep3 micro] step  10  loss -7.2445  policy -12.0201  kl 0.57758  text_kl 0.15822
+    [ep3 micro] step  20  loss +11.3170  policy +6.1098  kl 0.65784  text_kl 0.17248
+    [ep3 micro] step  30  loss -5.5795  policy -11.2928  kl 0.71403  text_kl 0.18925
+    [ep3 micro] step  40  loss +9.6716  policy +6.5933  kl 0.59116  text_kl 0.10163
+    [ep3 micro] step  50  loss -0.7125  policy -3.1356  kl 0.92032  text_kl 0.07924
+    [ep3 micro] step  60  loss -16.5992  policy -18.5272  kl 0.62515  text_kl 0.06322
+    [ep3 micro] step  70  loss -10.5763  policy -11.9062  kl 0.63491  text_kl 0.04327
+    [ep3 micro] step  79  loss -19.6669  policy -20.5064  kl 0.80741  text_kl 0.02664
+  GATE[ep3]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.5555555555555556, "top_response_fraction": 0.3333333333333333, "final_kl": 0.807410717010498}
+    [recal] step   0  loss +5.1363
+    [recal] step 133  loss +3.2532
+    [recal] step 266  loss +3.2556
+    [recal] step 399  loss +3.2108
+    [recal] step 532  loss +3.2313
+    [recal] step 665  loss +3.1606
+    [recal] step 798  loss +3.1621
+    [recal] step 799  loss +3.1522
+  insert 4/8 music_counts      p_any 0.513  e0 u 0.95 m +7.49 e1 u 0.58 m +8.38 e2 u 0.64 m +6.21 e3 u 0.46 m +4.05
+    [ep4 micro] step   0  loss +6.2767  policy +1.1245  kl 0.54729  text_kl 0.17083
+    [ep4 micro] step  10  loss -6.0162  policy -10.5035  kl 0.70928  text_kl 0.14839
+    [ep4 micro] step  20  loss +12.2956  policy +6.8973  kl 0.47996  text_kl 0.17915
+    [ep4 micro] step  30  loss -5.3435  policy -10.0291  kl 0.57739  text_kl 0.15522
+    [ep4 micro] step  40  loss +8.9154  policy +5.8840  kl 0.45625  text_kl 0.10028
+    [ep4 micro] step  50  loss +0.0326  policy -2.1824  kl 0.56829  text_kl 0.07289
+    [ep4 micro] step  60  loss -15.4365  policy -17.7659  kl 0.66887  text_kl 0.07653
+    [ep4 micro] step  70  loss -9.0119  policy -10.4607  kl 0.50649  text_kl 0.04745
+    [ep4 micro] step  79  loss -18.2917  policy -19.1173  kl 0.68417  text_kl 0.02638
+  GATE[ep4]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.8888888888888888, "top_response_fraction": 0.2222222222222222, "final_kl": 0.6841663122177124}
+    [recal] step   0  loss +5.7205
+    [recal] step 133  loss +3.3440
+    [recal] step 266  loss +3.2899
+    [recal] step 399  loss +3.2443
+    [recal] step 532  loss +3.2642
+    [recal] step 665  loss +3.1923
+    [recal] step 798  loss +3.2072
+    [recal] step 799  loss +3.1974
+  insert 5/8 sports_counts     p_any 0.562  e0 u 0.95 m +5.90 e1 u 0.56 m +8.80 e2 u 0.47 m +4.07 e3 u 0.51 m +12.98 e4 u 0.43 m +8.80
+    [ep5 micro] step   0  loss +6.7818  policy +1.4380  kl 0.83047  text_kl 0.17674
+    [ep5 micro] step  10  loss -2.4533  policy -5.9869  kl 0.34696  text_kl 0.11721
+    [ep5 micro] step  20  loss +11.0172  policy +6.6427  kl 0.33476  text_kl 0.14526
+    [ep5 micro] step  30  loss -5.5704  policy -9.8197  kl 0.56584  text_kl 0.14070
+    [ep5 micro] step  40  loss +8.6701  policy +5.7757  kl 1.00528  text_kl 0.09480
+    [ep5 micro] step  50  loss -0.2371  policy -1.8799  kl 0.51754  text_kl 0.05390
+    [ep5 micro] step  60  loss -16.6216  policy -18.3409  kl 0.64464  text_kl 0.05624
+    [ep5 micro] step  70  loss -9.5433  policy -10.8023  kl 0.64302  text_kl 0.04089
+    [ep5 micro] step  79  loss -18.5956  policy -19.6007  kl 0.84299  text_kl 0.03210
+  GATE[ep5]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 1.0, "top_response_fraction": 0.1111111111111111, "final_kl": 0.8429927229881287}
+    [recal] step   0  loss +5.8095
+    [recal] step 133  loss +3.3853
+    [recal] step 266  loss +3.3342
+    [recal] step 399  loss +3.3064
+    [recal] step 532  loss +3.3132
+    [recal] step 665  loss +3.2497
+    [recal] step 798  loss +3.2523
+    [recal] step 799  loss +3.2486
+  insert 6/8 anatomy_counts    p_any 0.567  e0 u 0.97 m +7.72 e1 u 0.50 m +9.53 e2 u 0.43 m +3.45 e3 u 0.37 m +4.47 e4 u 0.50 m +9.90 e5 u 0.28 m -1.26
+    [ep6 micro] step   0  loss +6.0731  policy +0.6657  kl 1.04579  text_kl 0.17850
+    [ep6 micro] step  10  loss -1.2689  policy -5.6670  kl 0.29332  text_kl 0.14611
+    [ep6 micro] step  20  loss +13.2189  policy +7.4452  kl 0.28879  text_kl 0.19198
+    [ep6 micro] step  30  loss -4.6097  policy -8.7378  kl 0.39252  text_kl 0.13695
+    [ep6 micro] step  40  loss +8.7939  policy +6.2062  kl 0.46819  text_kl 0.08548
+    [ep6 micro] step  50  loss -0.3620  policy -2.1576  kl 0.39145  text_kl 0.05920
+    [ep6 micro] step  60  loss -15.7528  policy -17.3249  kl 0.38372  text_kl 0.05176
+    [ep6 micro] step  70  loss -8.8533  policy -10.3256  kl 0.38407  text_kl 0.04844
+    [ep6 micro] step  79  loss -18.1655  policy -19.0541  kl 0.52074  text_kl 0.02875
+  GATE[ep6]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 1.0, "top_response_fraction": 0.1111111111111111, "final_kl": 0.5207421183586121}
+    [recal] step   0  loss +6.3915
+    [recal] step 133  loss +3.5194
+    [recal] step 266  loss +3.3961
+    [recal] step 399  loss +3.3598
+    [recal] step 532  loss +3.3690
+    [recal] step 665  loss +3.3162
+    [recal] step 798  loss +3.3146
+    [recal] step 799  loss +3.3113
+  insert 7/8 computing_counts  p_any 0.571  e0 u 0.96 m +4.94 e1 u 0.48 m +9.73 e2 u 0.41 m +6.36 e3 u 0.34 m +0.39 e4 u 0.41 m +9.89 e5 u 0.34 m +5.98 e6 u 0.25 m +0.08
+    [ep7 micro] step   0  loss +5.9165  policy +0.5584  kl 1.06534  text_kl 0.17683
+    [ep7 micro] step  10  loss -7.0517  policy -12.5707  kl 0.40057  text_kl 0.18330
+    [ep7 micro] step  20  loss +12.1873  policy +6.9818  kl 0.39282  text_kl 0.17286
+    [ep7 micro] step  30  loss -4.6573  policy -10.0129  kl 0.41499  text_kl 0.17783
+    [ep7 micro] step  40  loss +9.1236  policy +6.0310  kl 0.41309  text_kl 0.10240
+    [ep7 micro] step  50  loss -0.6309  policy -2.2941  kl 0.59978  text_kl 0.05444
+    [ep7 micro] step  60  loss -16.3478  policy -18.0472  kl 0.36943  text_kl 0.05603
+    [ep7 micro] step  70  loss -9.5551  policy -10.8607  kl 0.46287  text_kl 0.04275
+    [ep7 micro] step  79  loss -19.0787  policy -19.8053  kl 0.60839  text_kl 0.02321
+  GATE[ep7]: PROMOTE — stub gate checks passed
+  gate metrics: {"mean_reward": 0.3333333333333333, "unique_response_ratio": 0.7777777777777778, "top_response_fraction": 0.2222222222222222, "final_kl": 0.6083905100822449}
+    [recal] step   0  loss +7.2930
+    [recal] step 133  loss +3.5847
+    [recal] step 266  loss +3.4310
+    [recal] step 399  loss +3.3900
+    [recal] step 532  loss +3.3952
+    [recal] step 665  loss +3.3508
+    [recal] step 798  loss +3.3491
+    [recal] step 799  loss +3.3440
+  insert 8/8 geology_counts    p_any 0.593  e0 u 0.97 m +5.10 e1 u 0.44 m +7.51 e2 u 0.39 m +3.72 e3 u 0.29 m +4.04 e4 u 0.37 m +5.48 e5 u 0.31 m +3.77 e6 u 0.29 m +4.16 e7 u 0.28 m +6.27
+
+========================================================================
+PHASE 2b — §4.4a final joint calibration (800)
+========================================================================
+    [recal] step   0  loss +3.3248
+    [recal] step 133  loss +3.2991
+    [recal] step 266  loss +3.3312
+    [recal] step 399  loss +3.3136
+    [recal] step 532  loss +3.3229
+    [recal] step 665  loss +3.2840
+    [recal] step 798  loss +3.2893
+    [recal] step 799  loss +3.2871
+
+========================================================================
+PHASE 3 — library-state margins (final)
+========================================================================
+   ep episode               pre    solo     lib gain_lib gain_solo retention   util contam
+    0 math_words         -7.507  +5.912  +5.173  +12.680   +13.419     0.945  0.962  0.106
+    1 cooking_counts     -3.726 +11.073  +8.044  +11.771   +14.800     0.795  0.439  0.109
+    2 astronomy_counts   -5.077 +12.091  +3.534   +8.611   +17.168     0.502  0.406  0.100
+    3 music_counts       -6.569  +9.278  +0.664   +7.233   +15.847     0.456  0.315  0.093
+    4 sports_counts      -5.041  +5.628  +9.939  +14.979   +10.668     1.404  0.395  0.082
+    5 anatomy_counts     -4.897 +10.867  +6.696  +11.593   +15.764     0.735  0.371  0.079
+    6 computing_counts   -3.351  +7.281  +4.398   +7.749   +10.632     0.729  0.331  0.094
+    7 geology_counts     -5.290 +12.134  +9.796  +15.085   +17.424     0.866  0.395  0.102
+  mean retention 0.804  util_min 0.315  contam_max 0.109
+  base CE: 6.7735 -> 6.8869  (+1.674%)  p_any_plug 0.596  p_both 0.169
+  bank norms: [1.944, 2.183, 2.174, 1.95, 32.276, 26.622, 22.523, 22.14, 22.807, 22.956, 20.011, 16.552]
+  state saved: /home/tliao/VesperLM/lab/sandbox/g3_shaped/n8_shaped_kl30_state.pt
+
+========================================================================
+PHASE 4 — verdict (standing bar: margin retention >= 0.70)
+========================================================================
+  retention 0.804 vs bar 0.7 -> PASS
+  anchor check: 0.884 expected, got 0.804 (consistent)
+  base-CE residual: +1.674% with p_any_plug 0.596 (shape does not touch occupancy)
+
+wrote /home/tliao/VesperLM/lab/results/g3_shaped_n8_kl30.json
+total time: 2006.7s
