@@ -1,0 +1,100 @@
+{
+  "gate": "G3-family-ab",
+  "signal": "MIXED",
+  "verdict": "CE/occupancy improve but memory delivery collapses \u2014 family argmax needs calibration before it counts",
+  "state": "/home/tliao/VesperLM/lab/sandbox/g3_pivot/n8_shape_state.pt",
+  "families": [
+    [
+      0
+    ],
+    [
+      1
+    ],
+    [
+      2
+    ],
+    [
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  ],
+  "k_families": 4,
+  "ce": {
+    "flat": 7.0528,
+    "family": 6.8086,
+    "delta_pct": -3.462
+  },
+  "occupancy": {
+    "flat": {
+      "entropy": 1.4716713031133015,
+      "p_any_plug_in_top2": 0.5884403189023336,
+      "p_both_plug_in_top2": 0.16942282766103745,
+      "mean_top1_weight": 0.4821357975403468
+    },
+    "family": {
+      "entropy": 1.4248322049776714,
+      "p_any_plug_in_top2": 0.7007133464018503,
+      "p_both_plug_in_top2": 0.3038261979818344,
+      "mean_top1_weight": 0.50333405037721
+    }
+  },
+  "margins": {
+    "flat": {
+      "math_words": -6.1162,
+      "cooking_counts": 10.8284,
+      "astronomy_counts": 7.1717,
+      "music_counts": 4.0716,
+      "sports_counts": 12.0882,
+      "anatomy_counts": 10.8277,
+      "computing_counts": 6.7043,
+      "geology_counts": 12.0938
+    },
+    "family": {
+      "math_words": -7.6763,
+      "cooking_counts": -3.786,
+      "astronomy_counts": -5.2179,
+      "music_counts": -6.7125,
+      "sports_counts": -4.5049,
+      "anatomy_counts": -4.2743,
+      "computing_counts": -2.7702,
+      "geology_counts": -4.6012
+    }
+  },
+  "util_home_family": {
+    "math_words": 0.375,
+    "cooking_counts": 0.2348,
+    "astronomy_counts": 0.2639,
+    "music_counts": 0.3385,
+    "sports_counts": 0.2513,
+    "anatomy_counts": 0.1989,
+    "computing_counts": 0.2952,
+    "geology_counts": 0.2778
+  },
+  "retention": {
+    "flat": {
+      "math_words": -0.5605,
+      "cooking_counts": 0.947,
+      "astronomy_counts": 0.6709,
+      "music_counts": 0.521,
+      "sports_counts": 1.0809,
+      "anatomy_counts": 0.9241,
+      "computing_counts": 0.8523,
+      "geology_counts": 0.9542
+    },
+    "family": {
+      "math_words": -0.7848,
+      "cooking_counts": -0.0039,
+      "astronomy_counts": -0.0077,
+      "music_counts": -0.007,
+      "sports_counts": 0.0338,
+      "anatomy_counts": 0.0366,
+      "computing_counts": 0.0493,
+      "geology_counts": 0.0378
+    }
+  },
+  "note": "pure inference-time routing swap on one fixed N=8 shaped library state \u2014 no training, isolates the addressing mechanism; family rows are untrained means of member rows (the sketch's prototype rule)",
+  "seconds": 34.5
+}

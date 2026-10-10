@@ -1,0 +1,24 @@
+{
+  "id": "g3sh-n8-shaped",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "G3 coexistence with shaped (token-substitution) memories holds margin retention >= 0.70 at N=8 (anchor 0.884 from g3_pivot_shape) while base-CE occupancy residual persists",
+  "config": "lab_small",
+  "script": "lab/g3_shaped_run.py",
+  "env": {
+    "G3S_N": "8",
+    "G3S_OUT": "lab/results/g3_shaped_n8.json",
+    "G3S_STATE": "lab/sandbox/g3_shaped/n8_shaped_state.pt",
+    "G3S_DEVICE": "cuda"
+  },
+  "budget_minutes": 60,
+  "mutation_of": "g3sh-family-ab",
+  "val_loss_final": null,
+  "val_loss_series": [],
+  "ce_last": null,
+  "tok_s_avg": null,
+  "steps_done": 0,
+  "seconds": 2064.1,
+  "rc": 0,
+  "stopped": null
+}

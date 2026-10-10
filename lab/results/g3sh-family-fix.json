@@ -1,0 +1,25 @@
+{
+  "id": "g3sh-family-fix",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "the g3_family_ab MIXED collapse was an index-space bug (family rows built from base rows, stage-2 emitting local ids as global expert ids); with the fix, family-row two-stage routing drops the group top-2 base-CE residual without collapsing margin retention",
+  "config": "lab_small",
+  "script": "lab/g3_family_ab.py",
+  "env": {
+    "G3F_STATE": "lab/sandbox/g3_pivot/n8_shape_state.pt",
+    "G3F_SOLO_JSON": "lab/results/g3_pivot_shape.json",
+    "G3F_OUT": "lab/results/g3_family_ab_fix.json",
+    "G3F_K": "4",
+    "G3F_DEVICE": "cuda"
+  },
+  "budget_minutes": 15,
+  "mutation_of": "g3sh-family-ab",
+  "val_loss_final": null,
+  "val_loss_series": [],
+  "ce_last": null,
+  "tok_s_avg": null,
+  "steps_done": 0,
+  "seconds": 42.5,
+  "rc": 0,
+  "stopped": null
+}

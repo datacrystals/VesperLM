@@ -1,0 +1,19 @@
+family-row A/B  state=/home/tliao/VesperLM/lab/sandbox/g3_pivot/n8_shape_state.pt  K=4  device=cuda
+  families (4): [[0], [1], [2], [3, 4, 5, 6, 7]]
+
+== A: flat top-2 routing (as saved) ==
+  base CE 7.0528  p_any 0.588 p_both 0.169
+  margins: -6.12 +10.83 +7.17 +4.07 +12.09 +10.83 +6.70 +12.09
+
+== B: family two-stage routing (same state) ==
+  base CE 6.8086  p_any 0.701 p_both 0.304
+  margins: -7.68 -3.79 -5.22 -6.71 -4.50 -4.27 -2.77 -4.60
+  util_home: {'math_words': 0.375, 'cooking_counts': 0.2348, 'astronomy_counts': 0.2639, 'music_counts': 0.3385, 'sports_counts': 0.2513, 'anatomy_counts': 0.1989, 'computing_counts': 0.2952, 'geology_counts': 0.2778}
+  retention A: {'math_words': -0.5605, 'cooking_counts': 0.947, 'astronomy_counts': 0.6709, 'music_counts': 0.521, 'sports_counts': 1.0809, 'anatomy_counts': 0.9241, 'computing_counts': 0.8523, 'geology_counts': 0.9542}
+  retention B: {'math_words': -0.7848, 'cooking_counts': -0.0039, 'astronomy_counts': -0.0077, 'music_counts': -0.007, 'sports_counts': 0.0338, 'anatomy_counts': 0.0366, 'computing_counts': 0.0493, 'geology_counts': 0.0378}
+
+  SIGNAL: MIXED — CE/occupancy improve but memory delivery collapses — family argmax needs calibration before it counts
+  CE A 7.0528 -> B 6.8086 (-3.46% vs flat); p_any A 0.588 -> B 0.701; retention A 0.6737375 -> B -0.0807375
+
+wrote /home/tliao/VesperLM/lab/results/g3_family_ab.json
+total time: 34.5s
