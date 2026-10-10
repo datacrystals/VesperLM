@@ -270,6 +270,70 @@ a lucky pass.
   recipe; §8.5 kill criterion 1 remains fired; hierarchical domain→memory passports
   ACTIVE with capacity rungs as alternates.
 
+## 2026-10-09 — g3_margin_rescore — OUTCOME LOG: taught-fact margins COLLAPSE at N=8 (retention 0.39 vs 0.70 bar) — addressing pivot CONFIRMED, hierarchical passports stay ACTIVE; but the util bar mispredicts in both directions and should be replaced by a margin-retention bar anyway
+*(outcome log — the decisive cheap check on whether G3's util failure is a product failure or a metric artifact.  It is a product failure, and the metric is ALSO bad.)*
+- Method: `lab/g3_margin_rescore.py` — the g3 N=8 full-recipe build (ctrlB recipe:
+  80-step consolidation, 800-step mex recal/insert, 800-step §4.4a joint, text-KL 3.0,
+  t1-diag-realdata-mb4 spine, same fixtures) rebuilt from scratch since
+  `g3_coexistence.py` never persisted a state dict (only hashes), then taught-fact
+  margins measured in three states: **pre** (bare spine), **solo** (episode j alone at
+  the G1b N=1 condition = full-delivery reference), **lib** (the N=8 library state).
+  Margin = logit(taught token) − logit(rejected token) at the first divergence of the
+  correction pair, conditioned on prompt + shared prefix (for episode 0 this IS the
+  G1b word-digit margin; demo probes measured alongside for direct G1b continuity).
+  N=8 state saved to `lab/sandbox/g3_margin/n8_state.pt` (not committed).
+- Headline numbers (`lab/results/g3_margin_n8.json`, `lab/logs/g3_margin_n8.log`):
+  **mean retention vs solo 0.390** (bar 0.70) · mean margin gain lib +2.68 vs the
+  70%-of-G1b bar +3.21 · Pearson(util_home, retention) = **0.61**.
+  Per episode (util / retention / gain_lib / gain_solo):
+  ep0 math_words 0.90 / **1.07** / +7.46 / +6.96 · ep1 travel_rain 0.34 / 0.55 /
+  +2.00 / +3.66 · ep2 author_marco 0.42 / **0.10** / +0.46 / +4.59 · ep3
+  distance_metric 0.45 / **−0.06** / −0.31 / +5.32 · ep4 treasure_pirate 0.38 /
+  **0.77** / +8.05 / +10.51 · ep5 eval_indeed 0.41 / **0.10** / +0.85 / +8.62 ·
+  ep6 emphasis_star 0.57 / 0.39 / +1.95 / +4.97 · ep7 dining_merci 0.30 / **0.20** /
+  +1.00 / +4.95.  NLL margins agree (ep5: +11.3 solo → +1.27 lib).
+  Demo-probe continuity (G1b's exact metric): pre −3.685 → solo −1.986 (gain +1.70,
+  consolidation run-variance vs G1b's +4.59 — same pre-library baselines to 4
+  decimals) → lib −2.041 (**retention 0.97**).
+- Finding 1 (the product question): **margins collapse with the library** — 6 of 8
+  experts below util 0.5 average +2.01 gain vs +6.27 solo, and the low-retention
+  episodes (ep2/ep3/ep5/ep7 → 0.10/−0.06/0.10/0.20) lose essentially the whole
+  taught fact. The memory does NOT "fire less often but land hard": it degrades.
+  Even the counter-example set is small: ep4 holds 0.77 at util 0.385 (low util
+  CAN deliver) but that is 1 of 8. Verdict per the pre-registered rule: **margins
+  collapse → addressing pivot CONFIRMED, hierarchical domain→memory passports
+  stay ACTIVE.**
+- Finding 2 (the metric question): **util_home is a bad product gate in BOTH
+  directions** — ep6 PASSED the util bar (0.567) and kept only 0.39 of its margin;
+  ep4 FAILED the util bar (0.385) and kept 0.77. Util and retention are only
+  moderately correlated (r=0.61). So the G3 bar should be revised to a
+  margin-retention bar regardless of the architecture verdict (G1b criterion-a
+  measurement on every insert, cheap: 3 forwards per expert). The architecture
+  still fails the revised bar (0.39 vs 0.70) — the bar revision does NOT rescue
+  passport coexistence at N=8, it just stops the gate from lying.
+- Finding 3 (episode-shape note): episode 0 (G1's math/words fact, token-substitution
+  shape) survives intact (fact retention 1.07, demo-probe retention 0.97) while
+  most synthetic tag-append facts (ep2/ep3/ep5/ep7) collapse. Tag-append memories
+  may be intrinsically more fragile under row competition — worth one control
+  (margin re-score at N=8 with 8 math-style episodes) before blaming all of it on
+  the bank; recorded as an open question, not a conclusion.
+- Metric caveat (be honest about units): the "+2.68 vs 70%-of-G1b +3.21" comparison
+  mixes divergence-logit margins (per-fact) with G1b's demo word-digit margins
+  (per-probe) — scales are similar for ep0 (the same fact) but not identical for
+  tag-style episodes (divergence vs EOS). The retention ratio (lib/solo, same
+  metric within episode) is the scale-free evidence and it is unambiguous (0.39).
+- What it rules out: "the util bar is wrong and the product survives" — FALSE
+  (retention collapses). "Low util still delivers the memory in general" — FALSE
+  (ep4 is the exception, not the rule). "Margins collapse strictly as a function
+  of util" — too strong (r=0.61; same-util episodes differ wildly: ep3 0.45→−0.06
+  vs ep4 0.38→0.77) — crowding hurts through channel competition, not just
+  firing rate.
+- What it confirms: §8.5 kill criterion 1; the G3 FAIL verdict on product grounds
+  (retention), not just routing statistics; hierarchical domain→memory passports
+  ACTIVE as the addressing build, with the rung-4 capacity/orthogonality
+  candidates (orthogonal inits, larger passport_dim, per-domain sub-banks) still
+  queued as cheaper attempts inside the current bank.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.
@@ -319,6 +383,15 @@ Do not retry a falsified method unchanged.
    (c) per-domain sub-banks (the hierarchical rung's degenerate form),
    (d) cosine scoring + learned temperature (domain-expert rung 2) to stop
    norm-driven row capture.
+   -> margin re-score (same day): taught-fact retention at N=8 is 0.39 of the
+   solo delivery (bar 0.70) — margins collapse with the library, so the
+   pivot is confirmed on PRODUCT grounds (retention), not just routing
+   stats. Also: util_home mispredicts both ways (0.567-util expert kept 0.39
+   margin; 0.385-util expert kept 0.77) — the G3 bar gets revised to a
+   margin-retention bar (3 forwards/expert) in any case. Open question:
+   ep0 math-style fact survived intact (retention ~1.0) while tag-append
+   facts collapsed — one control with 8 math-style episodes before final
+   blame on the bank.
 5. If G4 (live loop at t3) fails on hardware: consolidation on a second
    machine over LAN (the P40 box), serving never blocks
 
