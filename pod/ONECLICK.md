@@ -559,3 +559,27 @@ Budget note: 1 of the 2 allowed creations was used (`gh-ca7ead92`, 2026-10-09
 the idle reaper (10 min) reclaims it once quiet — nothing to clean up by hand. A
 second (retry) creation is still available for a fixable failure; re-attach to
 `gh-ca7ead92` costs nothing first.
+
+### Retry 2026-10-10 00:42–01:03 UTC (attach-only, no creation) — still queue-blocked
+
+Budgeted 20 min of status polling (`GET /api/github/notebook/status?instance_id=
+gh-ca7ead92`, 10 s cadence, 120 polls): **`pending` / "Waiting for resources..." for
+all 120 polls**. Instance **not expired** — status endpoint still serves it and
+`data.url` (with token) is still returned, so the attach path remains free whenever
+the queue clears. `CHAIN_EXIT=9` (never ready); no cells executed; no second
+creation used (still **1 of 2**).
+
+Cumulative queue behavior (2026-10-09 22:58 UTC → 2026-10-10 01:03 UTC, 2 h 05 min):
+one scheduling window only — `ready` at ~23:32 after ~34 min in queue, then lost
+within ~1 min (502 / back to pending), then 90+ continuous minutes of `pending`.
+The queue is real capacity starvation, not a wedged instance (the id keeps being
+served; `not_found`/`error` never appeared).
+
+**Retry-cadence recommendation for heartbeats:** do not poll in tight loops for
+hours; windows are rare (1 in ~2 h so far) and brief. Cheap pattern: every heartbeat
+cycle (~2 h) spend at most 10–20 min of 10 s status polls; if `ready`/`running`
+appears, attach **immediately** (`pod/oneclick_run.py --attach "$(status data.url)"`
+— zero creations) and drive the smoke; if still `pending`, drop it and try the next
+heartbeat. Watch for `not_found`/`error` — that means the instance was reaped and
+the lane needs the 2nd (last) creation. UTC daytime/evening (22:00–01:00) showed
+continuous starvation; other hours untested.

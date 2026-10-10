@@ -1,7 +1,7 @@
 # VesperLM — Handoff for the Next Agent (updated 2026-10-09 ~09:55 UTC)
 
 **ONECLICK FREE LANE (2026-10-10):** launch = `python3 pod/oneclick_run.py --notebook pod/oneclick_boot.ipynb --job-url https://raw.githubusercontent.com/datacrystals/VesperLM/main/lab/oneclick_jobs/smoke.json --minutes 50` (free AMD OneClick GPU box, 6h max / 10min idle-reap, keepalive + RESULT_JSON exfil via cell stdout; job JSONs in `lab/oneclick_jobs/`, see `pod/ONECLICK.md` §9–10).
-**STATUS:** orchestrator + boot notebook built, local end-to-end dry-run green; live smoke **BLOCKED** — create works (instance `gh-ca7ead92` 2026-10-09 22:58 UTC) but the free tier never scheduled the pod (60+ min "Waiting for resources...", one ~1min ready window then 502); **GPU count / box egress / trainer-on-box UNVERIFIED**. Retry = re-attach first (`--attach <url>`), only 1 of 2 creations used.
+**STATUS:** orchestrator + boot notebook built, local end-to-end dry-run green; live smoke **BLOCKED** — create works (instance `gh-ca7ead92` 2026-10-09 22:58 UTC) but the free tier never scheduled it (1 brief ready window 23:32 + 502, then `pending` through 2026-10-10 01:03 UTC; 20-min attach-retry poll = 120/120 pending); **GPU count / box egress / trainer-on-box UNVERIFIED**. Retry = re-attach first (`--attach "$(status data.url)"`, zero creations; cadence in `pod/ONECLICK.md` §10), only 1 of 2 creations used.
 **RULES:** no credentials on the box; never commit instance URLs (Jupyter token embedded); admin endpoints off-limits; laptop GPU stays free (all GPU work runs on the box).
 
 **USER DIRECTIVES (standing):** (1) maximally delegate implementation to subagents
