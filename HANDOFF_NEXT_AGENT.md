@@ -25,17 +25,19 @@ layer, gates E0-E4; E0 = telemetry instrumentation only, do it first and
 cheap). Build order: laptop farm queue → G1 → E0 can start anytime (logging
 only, no GPU).
 
-**§8/SUBSYSTEMS FRONTIER (2026-10-10):** G1b PASS (passport-native recipe) →
-G3 FAIL at N=8/16 (util-decay bar was wrong) → SHAPE pivot: token-substitution
-episodes PASS at N=8 (ret 1.071) and **N=16 (ret 0.737, first N=16 pass)** —
-`lab/memory_shaping.py`, commit 55fe242. **Open residual: group top-2 occupancy
-costs base CE +6–9% (bar <1%). Row-side fixes exhausted (family-row zero-train
-NEGATIVE after index-bug fix; plug-logit bias sweep: bars mutually exclusive;
-family-mex cal: ret holds but CE only +8.9→7.45%) — residual is STRUCTURAL.
-Next: N-scaled base-neutrality, re-scope bar at real expert counts (occupancy
-dilution argument — verify at t2 120M scale), or hierarchical addressing.**
-SUBSYSTEMS: **E0 DONE** (9aae150, Common/telemetry.py, off-by-default
-VESPER_TELEMETRY=1). Next gates: E1 (curiosity actuation) needs E0 data first.
+**§8/SUBSYSTEMS FRONTIER (2026-10-10, current):** G1b PASS (passport-native
+recipe) → SHAPE pivot: token-substitution episodes PASS at N=8 (1.071) and N=16
+(0.737) — `lab/memory_shaping.py`, 55fe242 → **spine-portability SOLVED
+(c58c900): delivery collapse on real 8-base spine was owner_mass below the
+delivery cliff at scoring positions; fix = owner_mass 0.55→0.85 closing recal
+→ retention 0.397→1.100, base CE ~+1.5%**. KL sweep saturates (905f236: KL
+3→30 gives +8.9%→+1.5% then flat) — <1% CE bar NOT reachable output-side;
+residual is routing displacement, needs addressing-side change (hierarchical)
+or an explicit bar re-scope; on the real spine with the fix the cost is only
+~+1.5%. **Next: end-to-end 8-base pipeline run with owner_mass 0.85 in-recipe
+(natural G3-confirmation), then G4.** SUBSYSTEMS: **E0 DONE** (9aae150,
+Common/telemetry.py, off-by-default VESPER_TELEMETRY=1). Next: E1 needs E0
+data first.
 
 ---
 
