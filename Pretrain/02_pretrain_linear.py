@@ -12,6 +12,13 @@ via import; only the model class and the training loop differ:
     (their wrappers force it).
   - Triton caches are pinned to /tmp so the ~250s one-time JIT compile
     of the FLA chunk kernels only ever happens once.
+  - Data routing (t3 postmortem fix): non-phase data/index.txt sources
+    (vesperk/* etc.) can be routed into training as an always-on stream
+    alongside the phase-1/phase-2 curriculum via the config key
+    `route_nonphase` / env VESPER_ROUTE_NONPHASE=1 (share of micro-batches:
+    `nonphase_share` / VESPER_NONPHASE_SHARE, default 0.3). DEFAULT OFF —
+    with the flag off the data pipeline (and therefore the training
+    trajectory) is bit-identical to the t0/t1/t2/t3 ladder behavior.
 """
 
 import os
@@ -80,6 +87,15 @@ VESPER_AMP = os.environ.get("VESPER_AMP", "").lower() in ("bf16", "1", "true")
 # model init and data sampling so two arms differ only in the treatment.
 VESPER_SEED = os.environ.get("VESPER_SEED", "")
 
+# t3 postmortem data-pipeline fix: route non-phase data/index.txt sources
+# (vesperk/* etc.) into training as an always-on stream alongside the phase-1
+# curriculum, and honor index.txt weights. DEFAULT OFF — with the flag off the
+# data pipeline is bit-identical to the t0/t1/t2/t3 ladder (non-phase bins
+# dropped, streams uniform-over-files). Opt-in: config key `route_nonphase`
+# (the Vesper-K next-pretrain config sets it) or env VESPER_ROUTE_NONPHASE=1.
+# Share of micro-batches from the always-on stream: config `nonphase_share` /
+# env VESPER_NONPHASE_SHARE (default 0.3).
+
 
 def _amp_ctx(device):
     return torch.autocast(device_type=device.type, dtype=torch.bfloat16,
@@ -119,6 +135,21 @@ def train():
     if os.environ.get("VESPER_NUM_EXPERTS"):
         current_cfg["num_experts"] = int(os.environ["VESPER_NUM_EXPERTS"])
 
+    # Data-pipeline routing flag (default OFF — see module docstring)
+    route_nonphase = (os.environ.get("VESPER_ROUTE_NONPHASE", "").lower()
+                      in ("1", "true", "yes")
+                      or bool(current_cfg.get("route_nonphase", False)))
+    nonphase_share = float(os.environ.get(
+        "VESPER_NONPHASE_SHARE", current_cfg.get("nonphase_share", 0.3)))
+    if is_main:
+        if route_nonphase:
+            print(f"[data] route_nonphase ON — non-phase index.txt sources enter an "
+                  f"always-on stream at {nonphase_share:.2f} of micro-batches "
+                  f"(weights from index.txt)")
+        else:
+            print("[data] route_nonphase OFF — non-phase index.txt sources are dropped "
+                  "(historical ladder behavior; VESPER_ROUTE_NONPHASE=1 to enable)")
+
     batch_size = int(os.environ.get("VESPER_MICRO_BATCH",
                                     current_cfg.get("micro_batch_size", 1)))
     target_acc_steps = int(os.environ.get("VESPER_ACCUM",
@@ -156,6 +187,8 @@ def train():
     phase1_stream_state = None
     phase2_stream_state = None
     val_stream_state = None
+    nonphase_stream_state = None
+    val_group_stream_states = None
 
     latest_ckpt_path = p01.get_latest_checkpoint(checkpoint_dir)
     if latest_ckpt_path and os.path.exists(latest_ckpt_path):
@@ -171,6 +204,8 @@ def train():
         phase1_stream_state = checkpoint.get('phase1_stream_state', None)
         phase2_stream_state = checkpoint.get('phase2_stream_state', None)
         val_stream_state = checkpoint.get('val_stream_state', None)
+        nonphase_stream_state = checkpoint.get('nonphase_stream_state', None)
+        val_group_stream_states = checkpoint.get('val_group_stream_states', None)
         best_val_loss = checkpoint.get('best_val_loss', float("inf"))
         if is_main:
             initial_seq_len = p01.get_seq_len(start_step, seq_len_warmup,
@@ -264,32 +299,48 @@ def train():
         model = torch.nn.parallel.DistributedDataParallel(
             model, device_ids=[local_rank], find_unused_parameters=True)
 
-    datasets_dict, _ = p01.load_dataset_index("data/index.txt")
+    datasets_dict, index_probs = p01.load_dataset_index("data/index.txt")
 
-    phase1_train = {n: d for n, d in datasets_dict['train'].items() if 'phase1' in n}
-    phase2_train = {n: d for n, d in datasets_dict['train'].items() if 'phase2' in n}
-    if not phase1_train or not phase2_train:
-        raise ValueError("Nemotron curriculum requires both phase1 and phase2 datasets in data/index.txt")
+    streams = p01.build_curriculum_streams(
+        datasets_dict, index_probs,
+        batch_size=batch_size, start_step=start_step,
+        phase2_start_step=max(0, start_step - phase_switch_step),
+        accumulation_steps=accumulation_steps,
+        seq_len_warmup=seq_len_warmup,
+        max_seq_len=model_config["max_seq_len"],
+        seq_len_start=seq_len_start, is_distributed=is_distributed,
+        route_nonphase=route_nonphase, nonphase_share=nonphase_share,
+        resume={'phase1': phase1_stream_state, 'phase2': phase2_stream_state,
+                'nonphase': nonphase_stream_state, 'val': val_stream_state,
+                'val_groups': val_group_stream_states})
+    phase1_stream = streams.phase1_stream
+    phase2_stream = streams.phase2_stream
+    nonphase_stream = streams.nonphase_stream
+    val_stream = streams.val_stream
+    val_group_streams = streams.val_group_streams
 
-    val_datasets = {n: d for n, d in datasets_dict['val'].items() if 'phase1' in n or 'phase2' in n}
-    _n_p1 = sum(1 for n in val_datasets if 'phase1' in n)
-    _n_p2 = max(len(val_datasets) - _n_p1, 1)
-    val_probs = {n: (0.8 / max(_n_p1, 1) if 'phase1' in n else 0.2 / _n_p2)
-                 for n in val_datasets}
-
-    phase1_stream = p01.MixedDataStream(
-        phase1_train, {k: 1.0 for k in phase1_train}, batch_size, start_step,
-        accumulation_steps, seq_len_warmup, model_config["max_seq_len"],
-        seq_len_start, is_distributed, resume_state=phase1_stream_state)
-    phase2_stream = p01.MixedDataStream(
-        phase2_train, {k: 1.0 for k in phase2_train}, batch_size,
-        max(0, start_step - phase_switch_step),
-        accumulation_steps, seq_len_warmup, model_config["max_seq_len"],
-        seq_len_start, is_distributed, resume_state=phase2_stream_state)
-    val_stream = p01.MixedDataStream(
-        val_datasets, val_probs, batch_size, 0, 1,
-        0, model_config["max_seq_len"], model_config["max_seq_len"],
-        is_distributed, resume_state=val_stream_state)
+    # Data-mix composition is logged explicitly (t3 postmortem: the silent
+    # drop of vesperk/* went unnoticed for 4 runs; a frozen val mixture hid
+    # the phase-switch distribution shift).
+    if is_main:
+        print("\n--- TRAIN MIX (per-stream sampling probs; 95/5 train split) ---")
+        for row in streams.train_mix_table():
+            print(f"  [{row['bucket']:8s}] {row['name']:40s} "
+                  f"tokens={row['tokens']:,} prob={row['prob']:.4f}")
+        if route_nonphase:
+            print(f"  always-on non-phase stream share of micro-batches: {nonphase_share:.2f}")
+        print("--- VAL MIX (composition explicit; 5% tails) ---")
+        for row in streams.val_mix_table():
+            print(f"  [{row['bucket']:8s}] {row['name']:40s} "
+                  f"tokens={row['tokens']:,} prob={row['prob']:.4f}")
+        if route_nonphase:
+            print("  val NLL reported per group (phase1/phase2/nonphase); val_loss = "
+                  "current-phase mix: "
+                  f"(1-{nonphase_share:.2f}) x current phase group + {nonphase_share:.2f} x nonphase")
+        else:
+            print("  val NLL reported per source-group of the pooled draws "
+                  "(val_loss = pooled mean over the mix above, historical metric)")
+        print()
 
     # Dummy pass to pre-allocate VRAM (under the same AMP policy as training)
     if is_main:
@@ -318,10 +369,10 @@ def train():
     local_tokens_since_last_log = 0
 
     if start_step >= phase_switch_step:
-        train_iter = iter(phase2_stream)
+        train_iter = iter(streams.train_post)
         current_phase = 2
     else:
-        train_iter = iter(phase1_stream)
+        train_iter = iter(streams.train_pre)
         current_phase = 1
 
     for step in range(start_step, total_steps):
@@ -350,7 +401,7 @@ def train():
         if step == phase_switch_step:
             if is_main:
                 print(f"\n{'='*60}\nCURRICULUM SWITCH: Phase 1 -> Phase 2 at step {step}\n{'='*60}\n")
-            train_iter = iter(phase2_stream)
+            train_iter = iter(streams.train_post)
             current_phase = 2
 
         current_seq_len = p01.get_seq_len(step, seq_len_warmup,
@@ -434,28 +485,72 @@ def train():
         if step > 0 and step % eval_interval == 0:
             model.eval()
             val_loss = 0.0
-            with torch.no_grad():
-                for _ in range(val_eval_steps):
-                    vx, vy = next(val_stream)
-                    vx, vy = vx.to(device), vy.to(device)
-                    with _amp_ctx(device):
-                        _, v_ce_loss, _ = model(vx, vy)
-                    val_loss += v_ce_loss.item()
-            val_loss /= val_eval_steps
+            group_losses = {g: [] for g in ('phase1', 'phase2', 'nonphase')}
+            if route_nonphase:
+                # Per-group streams (guaranteed coverage of every group) replace
+                # the frozen pooled mixture; val_loss tracks the CURRENT phase's
+                # train mix so the metric follows the objective across the phase
+                # switch (t3 root cause: frozen 80/20 val stopped tracking).
+                group_eval_steps = max(1, val_eval_steps // 3)
+                with torch.no_grad():
+                    for g, gstream in val_group_streams.items():
+                        for _ in range(group_eval_steps):
+                            vx, vy = next(gstream)
+                            vx, vy = vx.to(device), vy.to(device)
+                            with _amp_ctx(device):
+                                _, v_ce_loss, _ = model(vx, vy)
+                            group_losses[g].append(v_ce_loss.item())
+                mix_w = {'phase1': 0.0, 'phase2': 0.0,
+                         'nonphase': float(nonphase_share) if nonphase_stream is not None else 0.0}
+                mix_w['phase1' if current_phase == 1 else 'phase2'] = (
+                    1.0 - mix_w['nonphase'])
+            else:
+                # Historical pooled path: identical draws + identical metric as
+                # the pre-fix trainer. Per-batch losses are additionally grouped
+                # by source (free: MixedDataStream records last_source) so the
+                # per-phase NLL breakdown is visible even on ladder-comparable runs.
+                with torch.no_grad():
+                    for _ in range(val_eval_steps):
+                        vx, vy = next(val_stream)
+                        vx, vy = vx.to(device), vy.to(device)
+                        with _amp_ctx(device):
+                            _, v_ce_loss, _ = model(vx, vy)
+                        val_loss += v_ce_loss.item()
+                        group_losses[streams.source_groups.get(
+                            val_stream.last_source, 'nonphase')].append(v_ce_loss.item())
+                val_loss /= val_eval_steps
+                mix_w = None
+            group_nll = {g: (sum(v) / len(v) if v else None)
+                         for g, v in group_losses.items()}
+            if route_nonphase:
+                _num = sum(w * group_nll[g] for g, w in mix_w.items()
+                           if w > 0 and group_nll[g] is not None)
+                _den = sum(w for g, w in mix_w.items()
+                           if w > 0 and group_nll[g] is not None)
+                val_loss = _num / _den if _den > 0 else 0.0
             val_loss_history.append((step, val_loss))
             # E0 drive telemetry (SUBSYSTEMS.md): val NLL trend, one event per
             # val run (rank 0 only). Logging only.
             if is_main:
+                _extra = {f"val_nll_{g}": round(v, 6)
+                          for g, v in group_nll.items() if v is not None}
                 telemetry.log_val_nll(
                     step, val_loss,
                     best_val_nll=(best_val_loss
                                   if best_val_loss != float("inf") else None),
                     prev_val_nll=(val_loss_history[-2][1]
                                   if len(val_loss_history) > 1 else None),
-                    val_eval_steps=val_eval_steps)
+                    val_eval_steps=val_eval_steps, **_extra)
 
             if is_main:
                 print(f"\n--- Validation at Step {step} | Val Loss: {val_loss:.4f} ---")
+                _bd = " | ".join(
+                    f"{g}: {v:.4f} (n={len(group_losses[g])})"
+                    for g, v in group_nll.items() if v is not None)
+                print(f"Val NLL by group: {_bd}")
+                if mix_w is not None:
+                    _mw = " ".join(f"{g}={w:.2f}" for g, w in mix_w.items() if w > 0)
+                    print(f"Val mix weights (current phase {current_phase}): {_mw}")
                 print("Generating Eval Samples...")
                 try:
                     generated_texts, eval_tokens = p01.generate_eval_samples(
@@ -480,9 +575,15 @@ def train():
                     'tokens_generated': total_tokens_generated,
                     'phase1_stream_state': phase1_stream.get_state(),
                     'phase2_stream_state': phase2_stream.get_state(),
-                    'val_stream_state': val_stream.get_state(),
+                    'val_stream_state': (val_stream.get_state()
+                                         if val_stream is not None else None),
                     'best_val_loss': best_val_loss,
                 }
+                if route_nonphase:
+                    ckpt['nonphase_stream_state'] = (
+                        nonphase_stream.get_state() if nonphase_stream is not None else None)
+                    ckpt['val_group_stream_states'] = {
+                        g: s.get_state() for g, s in val_group_streams.items()}
                 if step % 500 == 0:
                     ckpt_dir = os.path.join(checkpoint_dir, f"step_{step}")
                     os.makedirs(ckpt_dir, exist_ok=True)
@@ -513,6 +614,10 @@ def train():
                     json.dump({
                         "step": step,
                         "val_loss": round(val_loss, 4),
+                        "val_nll_by_group": {g: round(v, 4) for g, v in group_nll.items()
+                                             if v is not None},
+                        "val_mix": streams.val_mix_table(),
+                        "route_nonphase": route_nonphase,
                         "tokens_trained": total_tokens_trained,
                         "tokens_generated": total_tokens_generated,
                         "samples": generated_texts

@@ -130,6 +130,11 @@ User-approved 2026-10-06: make the pretrain AFTER the current 429M run the linea
   per full layer becomes the latent + small RoPE key, which is what makes long-context
   serving cheap once we scale context/batch.
 - **MoE FFN**: unchanged (8 experts top-2 at 429M scale).
+- **Data mix (2026-10-10)**: opt in via config key `route_nonphase: true` (or env
+  `VESPER_ROUTE_NONPHASE=1`) so non-phase `data/index.txt` sources (the ~18B-token
+  `vesperk/*` corpus) train on an always-on stream alongside the phase curriculum —
+  share `nonphase_share` (default 0.3), per-file mix from index.txt weights, per-group
+  val NLL (phase1/phase2/nonphase). Default OFF keeps the t0/t1/t2/t3 ladder bit-identical.
 - Then "hybrid KDA-linear + MLA + MoE" is a TRUE label. Current model's honest label:
   "hybrid GLA/Mamba2 + GQA + MoE" (Jamba/Zamba/MiniMax-01 family).
 - Implementation: new layer type in `Common/vesper_linear_model.py`; `attention_every` stays

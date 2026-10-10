@@ -4,7 +4,11 @@
 Streams HF datasets, tokenizes with the custom tokenizer using a process
 pool, and writes packed uint16 .bin shards (same convention as
 03_fineweb.py: text + <|endoftext|> per doc, contiguous, no header).
-One shard-set per source so data/index.txt weights control the mix.
+One shard-set per source so data/index.txt weights control the mix (the
+weights are consumed by Pretrain/02_pretrain_linear.py when the
+`route_nonphase` config key / VESPER_ROUTE_NONPHASE=1 env flag is on —
+without the flag non-phase shards are dropped, which is why the t3 base
+never saw this corpus; see HANDOFF_NEXT_AGENT.md 2026-10-10 t3 postmortem).
 
 Usage:
     python 11_vesperk_corpus.py [--scale 1.0] [--only name1,name2] [--dry-run]

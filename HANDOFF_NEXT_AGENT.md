@@ -80,6 +80,14 @@ Accounting fits exactly: 2.94B pre-switch tokens = 0.88 epochs of the 3.33B
 phase-1 pool; 0.83B post-switch = 0.67 epochs of the 1.23B phase-2 pool. t3's
 3.77B tokens are pure nemotron-curriculum. (`lab/queue_done_prior/t3-470m-passport.json`
 is the earlier 1000-step swarm3 probe on the same config — not the full-run job.)
+**FIXED 2026-10-10 (default OFF, ladder-comparable):** `route_nonphase` config
+key / `VESPER_ROUTE_NONPHASE=1` env now routes non-phase index.txt sources into
+an always-on stream muxed into both phase streams (share:
+`nonphase_share` / `VESPER_NONPHASE_SHARE`, default 0.3) and honors index.txt
+weights within every stream. Val is per-group (phase1/phase2/nonphase) with
+`val_loss` tracking the current phase mix; per-group NLLs are logged even with
+the flag off. Unit check: `python3 Pretrain/tests_route_nonphase.py`. The
+Vesper-K pretrain config opts in; t0/t1/t2/t3-comparable runs must keep it off.
 
 **SFT-readiness verdict: GO with `step_best` (= val@3100) as the SFT base.**
 It is the last pre-specialization checkpoint — the most general weights of the
@@ -89,7 +97,9 @@ exact pick matters little for SFT; (b) the base never saw the vesperk mix —
 don't expect the code/math/wiki breadth the corpus plan implied (3.77B tok ≈
 9.6 tok/param is lean); (c) any retrain/t4 should route non-phase sources into
 the phase streams (or an always-on stream), log per-phase val (or a val that
-tracks the current phase), and consider a lower min_lr for the tail. (The
+tracks the current phase), and consider a lower min_lr for the tail. Routing
++ per-phase val are now implemented behind the `route_nonphase` flag — see the
+bonus-finding fix above; lower min_lr is still open. (The
 3990/4000 trainer-vanish stays undiagnosed; irrelevant to the plateau.)
 
 ---
@@ -674,6 +684,15 @@ prompts resembling training templates with suspicion; prefer the fresh ones.
 6. **Vesper-K pretrain (APPROVED, queued behind current run)**: GLA->KDA linear layers +
    GQA->MLA full layers, MoE unchanged — full spec in LMBUS_DESIGN.md "Next-pretrain spec".
    Fresh pretrain at 429M scale for matched-token comparison vs this run, then scale.
+   **Data mix: opt into `route_nonphase: true` in the new config (or
+   `VESPER_ROUTE_NONPHASE=1`)** so the ~18B-token vesperk corpus actually trains
+   (always-on stream, `nonphase_share`/`VESPER_NONPHASE_SHARE`, default 0.3 of
+   micro-batches; index.txt weights honored per stream). Per-group val NLL
+   (phase1/phase2/nonphase) is logged and val_loss tracks the current phase mix.
+   Ladder-comparable runs keep the flag OFF (bit-identical to t0/t1/t2/t3).
+   Populate `data/index.txt` with the `vesperk/*` shards + weights (fragment
+   printed by `Dataset/11_vesperk_corpus.py`); the index is intentionally not
+   committed. Check: `python3 Pretrain/tests_route_nonphase.py`.
 
 7. LMbus biomimetic sensory stack — see LMBUS_DESIGN.md (full proposal: canonical semantic
    space + per-model bridge, foveated heterogeneous-MoE vision with LM-driven gaze,
