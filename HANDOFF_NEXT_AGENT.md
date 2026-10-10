@@ -22,6 +22,23 @@ only, no GPU).
 
 ---
 
+## 2026-10-10 02:10 UTC — t3 COMPLETE + destroyed (settled $33.94; ledger $48.45/$180, quota FREE)
+
+470m_k passport flagship finished: 3.77B tokens, **val best 2.2678 @ step 3100**
+(phase-2 data shift plateaued val after 3100 — worth a look at the val mix),
+CE ~1.62 at exit. NOTE: trainer vanished at step 3990/4000 with no traceback
+(no OOM, disk 20%) — treat as ~complete; the 10 missing steps are noise but
+the cause is undiagnosed (check t3_train.sh wrapper behavior if it matters).
+ALL artifacts home in lab/imported/t3_ckpts/ (untracked binaries): step_best
+(=val@3100, size-verified 3,691,881,987 B) + periodic step_500..step_3500 +
+all eval_samples + loss_curve.png. Droplet 607549362 destroyed + verified
+(no vesper-* droplets). ckpt sync: agent-15's uploader (periodic ckpts,
+prunes local) + my ckpt_sync.sh (step_best); both worked. Kill the laptop
+tunnel keeper when convenient: pgrep -f "R 2222:localhost:2222".
+NEXT: t3 val analysis + passport-vs-topk headline comparison, then SFT of the
+470m passport model. Swarm5 wants: speedrun-opts MI300X canary (merge gate!),
+owner_mass 0.45@t2, D55 with 5+ experts.
+
 ## 2026-10-09 09:55 UTC — t3 RUNNING: 470m_k + passport flagship on MI300X
 
 **RUN STATE:** droplet id **607549362**, `vesper-t3-ttl1500m-1791536812`,
