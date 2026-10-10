@@ -1,0 +1,239 @@
+{
+  "gate": "G3-plug-bias",
+  "signal": "NEGATIVE",
+  "verdict": "no beta passes both bars \u2014 retention-preserving betas still regress base CE (+6.73% at beta 1.0, best of the ret-feasible set); bias alone cannot separate base from home at this overlap \u2014 family-row mex calibration is the fallback branch",
+  "state": "/home/tliao/VesperLM/lab/sandbox/g3_shaped/n8_shaped_state.pt",
+  "solo_json": "/home/tliao/VesperLM/lab/results/g3_shaped_n8.json",
+  "ce_pre": 6.7735,
+  "bars": {
+    "base_ce_regression_pct": 1.0,
+    "retention_vs_solo": 0.7
+  },
+  "betas": [
+    0.0,
+    0.5,
+    1.0,
+    1.5,
+    2.0,
+    2.5,
+    3.0,
+    3.5,
+    4.0,
+    5.0
+  ],
+  "sweep": [
+    {
+      "beta": 0.0,
+      "ce_lib": 7.3771,
+      "base_ce_regression_pct": 8.911,
+      "p_any_plug_in_top2": 0.5896,
+      "p_both_plug_in_top2": 0.1706,
+      "mean_top1_weight": 0.4783,
+      "retention": {
+        "math_words": 1.0231,
+        "cooking_counts": 1.0015,
+        "astronomy_counts": 1.0382,
+        "music_counts": 0.7735,
+        "sports_counts": 2.4759,
+        "anatomy_counts": 1.0641,
+        "computing_counts": 0.4672,
+        "geology_counts": 0.726
+      },
+      "mean_retention": 1.0712,
+      "util_home_min": 0.2952,
+      "pass_both_bars": false
+    },
+    {
+      "beta": 0.5,
+      "ce_lib": 7.3117,
+      "base_ce_regression_pct": 7.946,
+      "p_any_plug_in_top2": 0.4764,
+      "p_both_plug_in_top2": 0.1134,
+      "mean_top1_weight": 0.4993,
+      "retention": {
+        "math_words": 1.0087,
+        "cooking_counts": 1.0108,
+        "astronomy_counts": 1.0342,
+        "music_counts": 0.5038,
+        "sports_counts": 2.1619,
+        "anatomy_counts": 0.9765,
+        "computing_counts": 0.2965,
+        "geology_counts": 0.5728
+      },
+      "mean_retention": 0.9456,
+      "util_home_min": 0.2286,
+      "pass_both_bars": false
+    },
+    {
+      "beta": 1.0,
+      "ce_lib": 7.2295,
+      "base_ce_regression_pct": 6.732,
+      "p_any_plug_in_top2": 0.3773,
+      "p_both_plug_in_top2": 0.0781,
+      "mean_top1_weight": 0.5227,
+      "retention": {
+        "math_words": 0.6394,
+        "cooking_counts": 0.8026,
+        "astronomy_counts": 0.985,
+        "music_counts": 0.2914,
+        "sports_counts": 1.5842,
+        "anatomy_counts": 0.553,
+        "computing_counts": 0.269,
+        "geology_counts": 0.4813
+      },
+      "mean_retention": 0.7007,
+      "util_home_min": 0.1129,
+      "pass_both_bars": false
+    },
+    {
+      "beta": 1.5,
+      "ce_lib": 7.1267,
+      "base_ce_regression_pct": 5.214,
+      "p_any_plug_in_top2": 0.2977,
+      "p_both_plug_in_top2": 0.0554,
+      "mean_top1_weight": 0.5437,
+      "retention": {
+        "math_words": 0.2541,
+        "cooking_counts": 0.6712,
+        "astronomy_counts": 0.865,
+        "music_counts": 0.2286,
+        "sports_counts": 1.3385,
+        "anatomy_counts": 0.4677,
+        "computing_counts": 0.4168,
+        "geology_counts": 0.4886
+      },
+      "mean_retention": 0.5913,
+      "util_home_min": 0.0806,
+      "pass_both_bars": false
+    },
+    {
+      "beta": 2.0,
+      "ce_lib": 7.0062,
+      "base_ce_regression_pct": 3.435,
+      "p_any_plug_in_top2": 0.2305,
+      "p_both_plug_in_top2": 0.0382,
+      "mean_top1_weight": 0.5627,
+      "retention": {
+        "math_words": 0.0702,
+        "cooking_counts": 0.2517,
+        "astronomy_counts": 0.5318,
+        "music_counts": 0.3033,
+        "sports_counts": 1.1214,
+        "anatomy_counts": 0.423,
+        "computing_counts": 0.3628,
+        "geology_counts": 0.4392
+      },
+      "mean_retention": 0.4379,
+      "util_home_min": 0.0538,
+      "pass_both_bars": false
+    },
+    {
+      "beta": 2.5,
+      "ce_lib": 6.9234,
+      "base_ce_regression_pct": 2.214,
+      "p_any_plug_in_top2": 0.1785,
+      "p_both_plug_in_top2": 0.0268,
+      "mean_top1_weight": 0.5787,
+      "retention": {
+        "math_words": 0.0502,
+        "cooking_counts": 0.1621,
+        "astronomy_counts": 0.5305,
+        "music_counts": 0.0962,
+        "sports_counts": 0.3258,
+        "anatomy_counts": 0.3048,
+        "computing_counts": 0.0796,
+        "geology_counts": 0.3661
+      },
+      "mean_retention": 0.2394,
+      "util_home_min": 0.0385,
+      "pass_both_bars": false
+    },
+    {
+      "beta": 3.0,
+      "ce_lib": 6.8691,
+      "base_ce_regression_pct": 1.412,
+      "p_any_plug_in_top2": 0.1354,
+      "p_both_plug_in_top2": 0.0203,
+      "mean_top1_weight": 0.5921,
+      "retention": {
+        "math_words": 0.0408,
+        "cooking_counts": 0.1064,
+        "astronomy_counts": 0.2053,
+        "music_counts": 0.0758,
+        "sports_counts": 0.2007,
+        "anatomy_counts": 0.1994,
+        "computing_counts": 0.0646,
+        "geology_counts": 0.27
+      },
+      "mean_retention": 0.1454,
+      "util_home_min": 0.0179,
+      "pass_both_bars": false
+    },
+    {
+      "beta": 3.5,
+      "ce_lib": 6.8335,
+      "base_ce_regression_pct": 0.886,
+      "p_any_plug_in_top2": 0.1003,
+      "p_both_plug_in_top2": 0.0144,
+      "mean_top1_weight": 0.6025,
+      "retention": {
+        "math_words": 0.0245,
+        "cooking_counts": 0.0833,
+        "astronomy_counts": 0.1738,
+        "music_counts": 0.0268,
+        "sports_counts": 0.0017,
+        "anatomy_counts": 0.0488,
+        "computing_counts": 0.0184,
+        "geology_counts": 0.204
+      },
+      "mean_retention": 0.0727,
+      "util_home_min": 0.0103,
+      "pass_both_bars": false
+    },
+    {
+      "beta": 4.0,
+      "ce_lib": 6.8115,
+      "base_ce_regression_pct": 0.561,
+      "p_any_plug_in_top2": 0.0743,
+      "p_both_plug_in_top2": 0.0109,
+      "mean_top1_weight": 0.6115,
+      "retention": {
+        "math_words": 0.0202,
+        "cooking_counts": -0.0,
+        "astronomy_counts": 0.1411,
+        "music_counts": 0.0011,
+        "sports_counts": 0.0015,
+        "anatomy_counts": 0.0418,
+        "computing_counts": 0.0163,
+        "geology_counts": 0.0844
+      },
+      "mean_retention": 0.0383,
+      "util_home_min": 0.0029,
+      "pass_both_bars": false
+    },
+    {
+      "beta": 5.0,
+      "ce_lib": 6.7878,
+      "base_ce_regression_pct": 0.211,
+      "p_any_plug_in_top2": 0.0394,
+      "p_both_plug_in_top2": 0.0054,
+      "mean_top1_weight": 0.6232,
+      "retention": {
+        "math_words": -0.0009,
+        "cooking_counts": 0.0,
+        "astronomy_counts": -0.0004,
+        "music_counts": 0.0009,
+        "sports_counts": 0.0009,
+        "anatomy_counts": -0.0001,
+        "computing_counts": 0.014,
+        "geology_counts": 0.0578
+      },
+      "mean_retention": 0.009,
+      "util_home_min": 0.0029,
+      "pass_both_bars": false
+    }
+  ],
+  "best": null,
+  "note": "pure inference-time plug-row logit bias on the saved N=8 shaped library state \u2014 no training; beta=0 is the as-saved router",
+  "seconds": 56.9
+}

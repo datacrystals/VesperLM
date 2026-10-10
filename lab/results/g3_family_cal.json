@@ -1,0 +1,78 @@
+{
+  "gate": "G3-family-cal",
+  "signal": "NEGATIVE",
+  "verdict": "retention holds (1.071) but base CE still regresses +7.45% (bar <1%) at p_any 0.473 \u2014 trained family rows reduce but do not close the occupancy residual; next branch: base-neutral expert re-consolidation or per-family admission margins",
+  "state": "/home/tliao/VesperLM/lab/sandbox/g3_shaped/n8_shaped_state.pt",
+  "solo_json": "/home/tliao/VesperLM/lab/results/g3_shaped_n8.json",
+  "families": [
+    [
+      0
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      3,
+      4,
+      5,
+      6
+    ],
+    [
+      7
+    ]
+  ],
+  "calibration": {
+    "seconds": 337.4,
+    "steps": 800,
+    "lr": 0.01,
+    "owner_mass": 0.55
+  },
+  "ce": {
+    "pre": 6.7735,
+    "flat_as_saved": 7.3771,
+    "family_cal": 7.2781,
+    "regression_pct": 7.45
+  },
+  "occupancy": {
+    "p_any_plug_in_top2": 0.4729,
+    "p_both_plug_in_top2": 0.0947
+  },
+  "margins": {
+    "math_words": 11.2526,
+    "cooking_counts": 10.1668,
+    "astronomy_counts": 11.3677,
+    "music_counts": 7.0024,
+    "sports_counts": 11.9104,
+    "anatomy_counts": 11.6317,
+    "computing_counts": 2.9385,
+    "geology_counts": 9.6717
+  },
+  "retention": {
+    "math_words": 1.021,
+    "cooking_counts": 0.9217,
+    "astronomy_counts": 0.951,
+    "music_counts": 0.6956,
+    "sports_counts": 2.6413,
+    "anatomy_counts": 1.0413,
+    "computing_counts": 0.4806,
+    "geology_counts": 0.8133
+  },
+  "mean_retention": 1.0707,
+  "util_home": {
+    "math_words": 0.9618,
+    "cooking_counts": 0.3813,
+    "astronomy_counts": 0.35,
+    "music_counts": 0.2103,
+    "sports_counts": 0.2154,
+    "anatomy_counts": 0.2043,
+    "computing_counts": 0.2429,
+    "geology_counts": 0.7105
+  },
+  "bars": {
+    "base_ce_regression_pct": 1.0,
+    "retention_vs_solo": 0.7
+  },
+  "note": "family rows trained with the section-4.4a mex target at family granularity (owner = family); stage-2 argmax member selection unchanged; base/member rows, experts and spine frozen",
+  "seconds": 369.0
+}

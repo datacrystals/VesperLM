@@ -1,0 +1,17 @@
+{
+  "id": "g3res-plugbias",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "a plug-row logit bias (base-neutral weighting) can recover the base-CE residual (bar <1%) without dropping N=8 shaped retention below 0.70 on the saved library state",
+  "config": "lab_small",
+  "script": "lab/g3_plug_bias_ab.py",
+  "env": {
+    "G3W_STATE": "lab/sandbox/g3_shaped/n8_shaped_state.pt",
+    "G3W_SOLO_JSON": "lab/results/g3_shaped_n8.json",
+    "G3W_OUT": "lab/results/g3_plug_bias_ab.json",
+    "G3W_BETAS": "0,0.5,1,1.5,2,2.5,3,3.5,4,5",
+    "G3W_DEVICE": "cuda"
+  },
+  "budget_minutes": 20,
+  "mutation_of": "g3sh-n8-shaped"
+}
