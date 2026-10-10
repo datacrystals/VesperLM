@@ -178,6 +178,10 @@ class MixedDataStream:
             self.pointers = {k: 0 for k in datasets_dict.keys()}
             self.counter = start_step * accumulation_steps
             self.rng_state = None
+
+        # Source of the most recent batch (for per-stream val-NLL breakdowns;
+        # observational only — never feeds back into sampling/RNG).
+        self.last_source = None
             
     def get_state(self):
         """Returns serializable state dict for checkpointing."""
@@ -199,6 +203,7 @@ class MixedDataStream:
         tokens_per_global_batch = self.world_size * tokens_per_local_batch
 
         source = np.random.choice(self.dataset_names, p=self.dataset_probs)
+        self.last_source = source
         self.counter += 1
         mmap = self.datasets_dict[source]
         ptr = self.pointers[source]
@@ -259,6 +264,223 @@ def load_dataset_index(index_path="data/index.txt"):
         probabilities[k] /= total_weight
 
     return datasets, probabilities
+
+
+# ==========================================
+# CURRICULUM BUCKETING + ALWAYS-ON NON-PHASE STREAM
+# (t3 postmortem fix: vesperk/* and other non-phase index.txt sources used to
+#  be silently dropped by the 'phase1'/'phase2' name-match)
+# ==========================================
+def curriculum_bucket(name):
+    """Bucket of an index.txt entry: 'phase1' | 'phase2' | 'nonphase'."""
+    if 'phase1' in name:
+        return 'phase1'
+    if 'phase2' in name:
+        return 'phase2'
+    return 'nonphase'
+
+
+def bucket_curriculum_datasets(datasets, route_nonphase=False):
+    """Split a {name: data} mapping into phase1 / phase2 / non-phase buckets.
+
+    Name-match convention (unchanged): 'phase1' in name -> phase 1 stream,
+    'phase2' in name -> phase 2 stream. Everything else (vesperk/* etc.) is
+    non-phase. With route_nonphase=False (historical default) non-phase files
+    are dropped and the returned non-phase bucket is empty — exactly the
+    pre-fix behavior the t0/t1/t2/t3 ladder trained with.
+    """
+    phase1 = {n: d for n, d in datasets.items() if curriculum_bucket(n) == 'phase1'}
+    phase2 = {n: d for n, d in datasets.items() if curriculum_bucket(n) == 'phase2'}
+    nonphase = ({n: d for n, d in datasets.items() if curriculum_bucket(n) == 'nonphase'}
+                if route_nonphase else {})
+    return phase1, phase2, nonphase
+
+
+class AlwaysOnMixStream:
+    """Mux a phase stream with an always-on non-phase stream.
+
+    Each micro-batch comes from the always-on stream with probability
+    `always_share`, else from the phase stream (which keeps its own internal
+    mixture). Sub-stream state is owned by the caller (checkpointed
+    separately), so this wrapper is intentionally stateless besides the refs.
+    Only constructed when non-phase routing is ON — the per-batch mux draw
+    advances the global numpy RNG, which flag-off runs must never touch.
+    """
+
+    def __init__(self, phase_stream, always_stream, always_share):
+        assert 0.0 <= always_share <= 1.0, f"always_share out of range: {always_share}"
+        assert always_stream is not None, "always_stream required (else use the bare phase stream)"
+        self.phase_stream = phase_stream
+        self.always_stream = always_stream
+        self.always_share = float(always_share)
+        self.last_source = None
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if np.random.random() < self.always_share:
+            batch = next(self.always_stream)
+            self.last_source = self.always_stream.last_source
+        else:
+            batch = next(self.phase_stream)
+            self.last_source = self.phase_stream.last_source
+        return batch
+
+
+class CurriculumStreams:
+    """Bundle of train/val streams for the nemotron phase-1 -> phase-2 curriculum.
+
+    Built by build_curriculum_streams(); see that function for flag semantics.
+    """
+
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+    def train_mix_table(self):
+        """[{name, bucket, tokens, prob}] for logging (prob within its stream)."""
+        rows = []
+        for bucket, stream in (
+                ('phase1', self.phase1_stream),
+                ('phase2', self.phase2_stream),
+                ('nonphase', self.nonphase_stream)):
+            if stream is None:
+                continue
+            for n, p in zip(stream.dataset_names, stream.dataset_probs):
+                rows.append({'name': n, 'bucket': bucket,
+                             'tokens': int(len(stream.datasets_dict[n])),
+                             'prob': float(p)})
+        return rows
+
+    def val_mix_table(self):
+        """[{name, bucket, tokens, prob}] of the val mixture actually used.
+
+        prob is the within-stream sampling probability of the stream that draws
+        the file (pooled stream when flag off, per-group stream when on)."""
+        rows = []
+        if self.val_stream is not None:
+            for n, p in zip(self.val_stream.dataset_names, self.val_stream.dataset_probs):
+                rows.append({'name': n, 'bucket': curriculum_bucket(n),
+                             'tokens': int(len(self.val_stream.datasets_dict[n])),
+                             'prob': float(p)})
+        for g, stream in (self.val_group_streams or {}).items():
+            for n, p in zip(stream.dataset_names, stream.dataset_probs):
+                rows.append({'name': n, 'bucket': g,
+                             'tokens': int(len(stream.datasets_dict[n])),
+                             'prob': float(p)})
+        # dedupe by name (pooled stream and group streams cover the same files)
+        seen, out = set(), []
+        for r in rows:
+            if r['name'] not in seen:
+                seen.add(r['name'])
+                out.append(r)
+        return out
+
+
+def build_curriculum_streams(
+        datasets_dict, index_probs, *,
+        batch_size, start_step, phase2_start_step, accumulation_steps,
+        seq_len_warmup, max_seq_len, seq_len_start, is_distributed,
+        route_nonphase=False, nonphase_share=0.3, resume=None):
+    """Construct the phase-1/phase-2 (+ optional always-on) train streams and
+    the val stream(s).
+
+    Flag semantics (t3 postmortem fix, default OFF):
+      route_nonphase=False -> bit-identical to the historical pipeline:
+          non-phase index.txt entries dropped; phase streams uniform-over-files
+          ({k: 1.0}); legacy 80/20 phase-1/phase-2 pooled val. No extra RNG
+          draws at construction or in the mux (there is no mux).
+      route_nonphase=True -> non-phase entries enter an always-on stream muxed
+          into BOTH phase streams at `nonphase_share` of micro-batches;
+          index.txt weights are honored within every stream; val is evaluated
+          per group (phase1 / phase2 / nonphase) instead of one frozen pool.
+
+    `resume` optionally carries per-stream state dicts from a checkpoint:
+      {'phase1': .., 'phase2': .., 'nonphase': .., 'val': .., 'val_groups': {g: ..}}.
+    """
+    resume = resume or {}
+    train_sets = datasets_dict['train']
+    val_sets = datasets_dict['val']
+
+    phase1_train, phase2_train, nonphase_train = bucket_curriculum_datasets(
+        train_sets, route_nonphase=route_nonphase)
+    if not phase1_train or not phase2_train:
+        raise ValueError("Nemotron curriculum requires both phase1 and phase2 datasets in data/index.txt")
+
+    if route_nonphase:
+        # index.txt weights are the source of truth for every stream's mixture
+        phase1_probs = {k: index_probs[k] for k in phase1_train}
+        phase2_probs = {k: index_probs[k] for k in phase2_train}
+        nonphase_probs = {k: index_probs[k] for k in nonphase_train}
+    else:
+        # Historical uniform-over-files weighting (t0/t1/t2/t3 ladder)
+        phase1_probs = {k: 1.0 for k in phase1_train}
+        phase2_probs = {k: 1.0 for k in phase2_train}
+        nonphase_probs = {}
+
+    phase1_stream = MixedDataStream(
+        phase1_train, phase1_probs, batch_size, start_step,
+        accumulation_steps, seq_len_warmup, max_seq_len,
+        seq_len_start, is_distributed, resume_state=resume.get('phase1'))
+    phase2_stream = MixedDataStream(
+        phase2_train, phase2_probs, batch_size, phase2_start_step,
+        accumulation_steps, seq_len_warmup, max_seq_len,
+        seq_len_start, is_distributed, resume_state=resume.get('phase2'))
+    nonphase_stream = None
+    if nonphase_train:
+        nonphase_stream = MixedDataStream(
+            nonphase_train, nonphase_probs, batch_size, 0,
+            accumulation_steps, seq_len_warmup, max_seq_len,
+            seq_len_start, is_distributed, resume_state=resume.get('nonphase'))
+        train_pre = AlwaysOnMixStream(phase1_stream, nonphase_stream, nonphase_share)
+        train_post = AlwaysOnMixStream(phase2_stream, nonphase_stream, nonphase_share)
+    else:
+        if route_nonphase:
+            print("[data] route_nonphase on but no non-phase entries in index.txt — "
+                  "running phase streams only")
+        train_pre, train_post = phase1_stream, phase2_stream
+
+    val_stream = None
+    val_group_streams = {}
+    if route_nonphase:
+        # Per-group val streams (guaranteed coverage of every group) replace
+        # the frozen pooled mixture; the trainer derives the reported NLL from
+        # the current phase's train mix.
+        resume_groups = resume.get('val_groups') or {}
+        val_groups = dict(zip(('phase1', 'phase2', 'nonphase'),
+                              bucket_curriculum_datasets(val_sets, route_nonphase=True)))
+        for g in ('phase1', 'phase2', 'nonphase'):
+            ds = val_groups[g]
+            if not ds:
+                continue
+            val_group_streams[g] = MixedDataStream(
+                ds, {k: index_probs[k] for k in ds}, batch_size, 0, 1,
+                0, max_seq_len, max_seq_len,
+                is_distributed, resume_state=resume_groups.get(g))
+    else:
+        # Legacy frozen 80/20 phase-1/phase-2 val pool (formula preserved
+        # bit-exactly from the pre-fix trainer)
+        val_datasets = {n: d for n, d in val_sets.items() if 'phase1' in n or 'phase2' in n}
+        _n_p1 = sum(1 for n in val_datasets if 'phase1' in n)
+        _n_p2 = max(len(val_datasets) - _n_p1, 1)
+        val_probs = {n: (0.8 / max(_n_p1, 1) if 'phase1' in n else 0.2 / _n_p2)
+                     for n in val_datasets}
+        val_stream = MixedDataStream(
+            val_datasets, val_probs, batch_size, 0, 1,
+            0, max_seq_len, max_seq_len,
+            is_distributed, resume_state=resume.get('val'))
+
+    return CurriculumStreams(
+        route_nonphase=bool(route_nonphase),
+        nonphase_share=float(nonphase_share),
+        phase1_stream=phase1_stream, phase2_stream=phase2_stream,
+        nonphase_stream=nonphase_stream,
+        phase1_probs=phase1_probs, phase2_probs=phase2_probs,
+        nonphase_probs=nonphase_probs,
+        train_pre=train_pre, train_post=train_post,
+        val_stream=val_stream, val_group_streams=val_group_streams,
+        source_groups={n: curriculum_bucket(n) for n in val_sets},
+    )
 
 
 def get_latest_checkpoint(checkpoint_dir="vesper_checkpoints"):
