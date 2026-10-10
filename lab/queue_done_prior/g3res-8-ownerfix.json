@@ -1,0 +1,18 @@
+{
+  "id": "g3res-ownerfix",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "the closing joint recal with owner_mass 0.85 and scoring-position home coverage restores 8-base real-spine shaped retention to >= 0.70 (delivery cliff at owner weight 0.5-0.65 per the P7/P8 diagnosis)",
+  "config": "lab_small",
+  "script": "lab/g3_owner_mass_fix.py",
+  "env": {
+    "G3F_STATE": "lab/sandbox/g3_shaped/n8_8base_state.pt",
+    "G3F_SOLO_JSON": "lab/results/g3_shaped_n8_8base.json",
+    "G3F_OUT": "lab/results/g3_owner_mass_fix.json",
+    "G3F_STEPS": "800",
+    "G3F_MASS": "0.85",
+    "G3F_DEVICE": "cuda"
+  },
+  "budget_minutes": 30,
+  "mutation_of": "g3res-delivery-diag"
+}
