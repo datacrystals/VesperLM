@@ -447,6 +447,53 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   not. N=16 was not re-scored (the g3 runs never persisted a state dict;
   N=8 was rebuilt from scratch and is now saved at
   lab/sandbox/g3_margin/n8_state.pt for any follow-up).
+  **G3 addressing-pivot runs (2026-10-09, cheapest-first, one variable each —
+  lab/g3_pivot_runs.py):**
+  **RUN B (episode-shape control) — PASS: memory SHAPE is the lever.** All 8
+  episodes token-substitution facts (ep0's shape: stated digit form → corrected
+  word form) over 8 distinct prompt domains, same ctrlB recipe:
+  **mean margin retention 0.884** (bar 0.70; mixed fixture 0.390) — per-episode
+  1.12 / 0.95 / 0.67 / 0.52 / 1.08 / 0.92 / 0.85 / 0.95, and this is at
+  UNCHANGED crowding (plug-plug |cos| 0.258 vs mixed 0.275) and still-low
+  util (0.30–0.47 for 6 of 8). The ep0 anomaly resolves to shape, not
+  position: Pearson(insert-position, retention) = −0.046 (ep7 @ position 7
+  holds 0.95). **Tag-append memories are fragile regardless of addressing** —
+  the pivot is REFRAMED: consolidate memories as token-substitution-style
+  deltas / shape or dedup episodes before consolidation, instead of (or
+  before) building hierarchical addressing. (lab/results/g3_pivot_shape.json)
+  **RUN A (capacity rung) — FAIL: mutual orthogonality does not fix
+  crowding.** Plug-plug squared-cosine penalty in the mex recal forced
+  plug-plug |cos| 0.275 → **0.014** (orthogonality decisively achieved; rows
+  are 8-in-64, room was never the constraint — training pressure was) yet
+  mean retention stayed **0.452** (bar 0.70; vs 0.390 baseline = noise-level
+  change). The capacity claim "plug-in rows can be made mutually orthogonal;
+  that fixes crowding" is **dead as stated** — orthogonal rows still contest
+  top-2 and the tag-append facts still collapse (ep2 0.02, ep7 0.10) while
+  token-substitution facts still hold (ep0 1.07, ep4 0.85, ep6 0.99): shape,
+  not row geometry, predicts retention. (lab/results/g3_pivot_ortho.json)
+  **Standing G3 metric from now on: margin retention vs solo ≥ 0.70**
+  (3 forwards/expert — the honest product bar), with contam_base < 0.3 and
+  base-CE regression <1% as secondary bars. Both pivot runs still fail the
+  base-CE bar (RUN B +4.12%, RUN A +2.46% vs ctrlB +2.26%) with per-expert
+  contam clean (0.08–0.12) — the residual is GROUP top-2 occupancy of base
+  tokens (8 rows × ~0.10), which neither shape nor orthogonality touches;
+  that remains the open G3 sub-problem.
+  **Hierarchical domain→memory passports NOT triggered** (the pre-registered
+  rule was "both runs fail → build it"; RUN B passed). Reserve design sketch
+  for whoever needs it for the CE residual or N=16 (rung 4, two-stage):
+  (1) a FAMILY row per domain cluster replaces the flat row — router first
+  scores family passports (k families ≪ N, trained with the same mex target
+  where "owner" = family), so base tokens contest only k rows;
+  (2) within a routed family, a second cheap contest over that family's
+  memory rows (within-family softmax, own mex target) picks the episode —
+  only 2 rows total in top-2 across two tiny contests, so 16 memories never
+  share one flat top-2-of-20 election. Family assignment: cluster episode
+  home-means (the same query vectors used for prototype init) into k≈4
+  families at consolidation time; the family row's prototype = mean of its
+  members' prototypes. Cost: +1 row per family, one extra matmul at routing;
+  rollback stays one-row-drop (memory rows) or family-row-drop (whole
+  cluster). States saved at lab/sandbox/g3_pivot/n8_shape_state.pt and
+  n8_ortho_state.pt (untracked) for follow-up re-scores.
   Original gate text: 16 episodic experts plugged sequentially
   into t2 (tiny_agent_k); all section-6 purity gates still hold for every
   expert, and base-mix val CE has not regressed >1% vs pre-library. This

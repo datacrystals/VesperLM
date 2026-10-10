@@ -1,0 +1,212 @@
+G3 pivot RUN A  N=8  device=cuda  cons=80 recal=800 joint=800 ortho_lambda=5.0
+  fixture: ctrlB mixed 8
+
+========================================================================
+PHASE 0 — pre-library margins (bare spine)
+========================================================================
+  ep0 math_words        logit -2.217
+  ep1 travel_rain       logit +3.537
+  ep2 author_marco      logit +4.878
+  ep3 distance_metric   logit +7.104
+  ep4 treasure_pirate   logit -5.216
+  ep5 eval_indeed       logit -5.877
+  ep6 emphasis_star     logit +7.617
+  ep7 dining_merci      logit +6.942
+
+========================================================================
+PHASE 1 — solo refs REUSED from g3_margin_n8.json (penalty is inert at N=1: zero plug-plug pairs)
+========================================================================
+  solo ep0 math_words        util 0.909 gain +6.957
+  solo ep1 travel_rain       util 0.726 gain +3.659
+  solo ep2 author_marco      util 0.851 gain +4.589
+  solo ep3 distance_metric   util 0.830 gain +5.323
+  solo ep4 treasure_pirate   util 0.766 gain +10.505
+  solo ep5 eval_indeed       util 0.788 gain +8.618
+  solo ep6 emphasis_star     util 0.784 gain +4.965
+  solo ep7 dining_merci      util 0.827 gain +4.954
+
+========================================================================
+PHASE 2 — N=8 library build (ctrlB recipe, ortho-penalized recal)
+========================================================================
+    [ep0 micro] step   0  loss +0.4131  policy -0.0740  kl 0.37488  text_kl 0.15614
+    [ep0 micro] step  10  loss -3.8263  policy -4.7663  kl 1.28716  text_kl 0.29188
+    [ep0 micro] step  20  loss +2.9189  policy +2.1826  kl 1.12296  text_kl 0.22672
+    [ep0 micro] step  30  loss -3.0765  policy -3.6507  kl 1.38903  text_kl 0.16824
+    [ep0 micro] step  40  loss +2.5183  policy +2.0857  kl 1.20812  text_kl 0.12406
+    [ep0 micro] step  50  loss -0.2300  policy -0.5696  kl 1.43359  text_kl 0.08931
+    [ep0 micro] step  60  loss -6.4559  policy -6.7761  kl 1.54471  text_kl 0.08098
+    [ep0 micro] step  70  loss -3.6409  policy -3.9651  kl 1.32137  text_kl 0.08606
+    [ep0 micro] step  79  loss -6.6039  policy -6.7991  kl 1.51025  text_kl 0.03990
+    [recal] step   0  mex +7.4688  ortho 0.0000  total +7.4688
+    [recal] step 133  mex +3.5988  ortho 0.0000  total +3.5988
+    [recal] step 266  mex +3.5944  ortho 0.0000  total +3.5944
+    [recal] step 399  mex +3.4924  ortho 0.0000  total +3.4924
+    [recal] step 532  mex +3.5652  ortho 0.0000  total +3.5652
+    [recal] step 665  mex +3.3996  ortho 0.0000  total +3.3996
+    [recal] step 798  mex +3.4017  ortho 0.0000  total +3.4017
+    [recal] step 799  mex +3.4036  ortho 0.0000  total +3.4036
+  insert 1/8 math_words        |cos| None  e0 u 0.91 m +4.74
+    [ep1 micro] step   0  loss +0.6395  policy +0.0989  kl 0.16518  text_kl 0.17746
+    [ep1 micro] step  10  loss -3.8218  policy -4.4819  kl 0.41692  text_kl 0.21308
+    [ep1 micro] step  20  loss +8.0900  policy +7.6160  kl 0.64469  text_kl 0.14727
+    [ep1 micro] step  30  loss -0.4949  policy -1.2051  kl 0.65009  text_kl 0.22591
+    [ep1 micro] step  40  loss +4.7340  policy +4.1436  kl 0.78025  text_kl 0.18378
+    [ep1 micro] step  50  loss +4.0421  policy +3.5552  kl 0.70252  text_kl 0.15059
+    [ep1 micro] step  60  loss -4.8540  policy -5.2057  kl 0.58548  text_kl 0.10747
+    [ep1 micro] step  70  loss -2.4721  policy -2.7064  kl 0.78755  text_kl 0.06497
+    [ep1 micro] step  79  loss -6.8650  policy -7.1586  kl 0.63219  text_kl 0.08731
+    [recal] step   0  mex +7.1015  ortho 0.0100  total +7.1513
+    [recal] step 133  mex +3.8514  ortho 0.0023  total +3.8627
+    [recal] step 266  mex +3.5094  ortho 0.0000  total +3.5095
+    [recal] step 399  mex +3.4209  ortho 0.0000  total +3.4209
+    [recal] step 532  mex +3.4711  ortho 0.0000  total +3.4711
+    [recal] step 665  mex +3.3283  ortho 0.0000  total +3.3283
+    [recal] step 798  mex +3.3549  ortho 0.0000  total +3.3549
+    [recal] step 799  mex +3.3398  ortho 0.0000  total +3.3398
+  insert 2/8 travel_rain       |cos| 0.0017  e0 u 0.95 m +5.14 e1 u 0.68 m +6.48
+    [ep2 micro] step   0  loss +0.9733  policy +0.3955  kl 0.31722  text_kl 0.18731
+    [ep2 micro] step  10  loss -3.9441  policy -4.5440  kl 0.54537  text_kl 0.19087
+    [ep2 micro] step  20  loss +9.6494  policy +8.8528  kl 0.67946  text_kl 0.25422
+    [ep2 micro] step  30  loss +0.6733  policy -0.0440  kl 0.73110  text_kl 0.22693
+    [ep2 micro] step  40  loss +4.7862  policy +4.3223  kl 0.82504  text_kl 0.14087
+    [ep2 micro] step  50  loss +4.6115  policy +4.2325  kl 0.69678  text_kl 0.11474
+    [ep2 micro] step  60  loss -4.0260  policy -4.2900  kl 0.42622  text_kl 0.08091
+    [ep2 micro] step  70  loss -1.2572  policy -1.4875  kl 0.66881  text_kl 0.06560
+    [ep2 micro] step  79  loss -4.9199  policy -5.1181  kl 0.58877  text_kl 0.05625
+    [recal] step   0  mex +6.7120  ortho 0.0229  total +6.8265
+    [recal] step 133  mex +3.6863  ortho 0.0083  total +3.7278
+    [recal] step 266  mex +3.5187  ortho 0.0010  total +3.5234
+    [recal] step 399  mex +3.4572  ortho 0.0003  total +3.4587
+    [recal] step 532  mex +3.4906  ortho 0.0002  total +3.4914
+    [recal] step 665  mex +3.3835  ortho 0.0001  total +3.3841
+    [recal] step 798  mex +3.3969  ortho 0.0001  total +3.3973
+    [recal] step 799  mex +3.3832  ortho 0.0001  total +3.3837
+  insert 3/8 author_marco      |cos| 0.0069  e0 u 0.93 m +5.11 e1 u 0.58 m +4.96 e2 u 0.59 m +7.06
+    [ep3 micro] step   0  loss +0.5276  policy -0.0578  kl 0.25369  text_kl 0.19091
+    [ep3 micro] step  10  loss -4.8616  policy -5.3192  kl 0.60647  text_kl 0.14243
+    [ep3 micro] step  20  loss +9.5951  policy +9.1266  kl 1.35127  text_kl 0.13366
+    [ep3 micro] step  30  loss +0.2598  policy -0.3016  kl 0.92585  text_kl 0.17172
+    [ep3 micro] step  40  loss +4.1211  policy +3.6606  kl 1.11612  text_kl 0.13491
+    [ep3 micro] step  50  loss +5.7550  policy +5.2804  kl 1.52695  text_kl 0.13275
+    [ep3 micro] step  60  loss -6.5985  policy -6.9126  kl 0.84421  text_kl 0.09063
+    [ep3 micro] step  70  loss -2.8594  policy -3.1863  kl 1.02938  text_kl 0.09181
+    [ep3 micro] step  79  loss -7.0080  policy -7.2811  kl 0.69715  text_kl 0.07939
+    [recal] step   0  mex +6.9427  ortho 0.0139  total +7.0120
+    [recal] step 133  mex +3.7269  ortho 0.0085  total +3.7693
+    [recal] step 266  mex +3.5327  ortho 0.0013  total +3.5394
+    [recal] step 399  mex +3.4845  ortho 0.0004  total +3.4864
+    [recal] step 532  mex +3.4994  ortho 0.0002  total +3.5005
+    [recal] step 665  mex +3.4003  ortho 0.0002  total +3.4013
+    [recal] step 798  mex +3.4164  ortho 0.0001  total +3.4172
+    [recal] step 799  mex +3.4112  ortho 0.0001  total +3.4120
+  insert 4/8 distance_metric   |cos| 0.0084  e0 u 0.92 m +5.33 e1 u 0.50 m +4.82 e2 u 0.57 m +6.31 e3 u 0.51 m +8.27
+    [ep4 micro] step   0  loss +1.1902  policy +0.5760  kl 0.30711  text_kl 0.19961
+    [ep4 micro] step  10  loss -5.2220  policy -5.8205  kl 0.55141  text_kl 0.19030
+    [ep4 micro] step  20  loss +5.8653  policy +5.3024  kl 0.90109  text_kl 0.17261
+    [ep4 micro] step  30  loss -3.7608  policy -4.3382  kl 0.98585  text_kl 0.17604
+    [ep4 micro] step  40  loss +4.9486  policy +4.3429  kl 1.16866  text_kl 0.18241
+    [ep4 micro] step  50  loss -2.2705  policy -2.6983  kl 1.17830  text_kl 0.12296
+    [ep4 micro] step  60  loss -14.7350  policy -15.1126  kl 1.56259  text_kl 0.09983
+    [ep4 micro] step  70  loss -8.8976  policy -9.2642  kl 1.34659  text_kl 0.09975
+    [ep4 micro] step  79  loss -16.3413  policy -16.8243  kl 1.70501  text_kl 0.13259
+    [recal] step   0  mex +6.8194  ortho 0.0091  total +6.8649
+    [recal] step 133  mex +3.7917  ortho 0.0081  total +3.8321
+    [recal] step 266  mex +3.5388  ortho 0.0010  total +3.5437
+    [recal] step 399  mex +3.4894  ortho 0.0004  total +3.4914
+    [recal] step 532  mex +3.5042  ortho 0.0003  total +3.5056
+    [recal] step 665  mex +3.4332  ortho 0.0002  total +3.4345
+    [recal] step 798  mex +3.4465  ortho 0.0002  total +3.4475
+    [recal] step 799  mex +3.4382  ortho 0.0002  total +3.4392
+  insert 5/8 treasure_pirate   |cos| 0.0106  e0 u 0.90 m +5.35 e1 u 0.44 m +4.20 e2 u 0.52 m +5.97 e3 u 0.54 m +7.40 e4 u 0.41 m +4.50
+    [ep5 micro] step   0  loss +0.8107  policy +0.1651  kl 0.43599  text_kl 0.20795
+    [ep5 micro] step  10  loss -6.4280  policy -7.0722  kl 0.72561  text_kl 0.20263
+    [ep5 micro] step  20  loss +6.4865  policy +5.9702  kl 0.95751  text_kl 0.15616
+    [ep5 micro] step  30  loss -4.2430  policy -4.8884  kl 1.19089  text_kl 0.19526
+    [ep5 micro] step  40  loss +4.0730  policy +3.5390  kl 1.44470  text_kl 0.15393
+    [ep5 micro] step  50  loss -1.9188  policy -2.3264  kl 1.27771  text_kl 0.11458
+    [ep5 micro] step  60  loss -15.8055  policy -16.2246  kl 1.94733  text_kl 0.10726
+    [ep5 micro] step  70  loss -9.3120  policy -9.5910  kl 1.49560  text_kl 0.06808
+    [ep5 micro] step  79  loss -15.0057  policy -15.2956  kl 1.77121  text_kl 0.06711
+    [recal] step   0  mex +6.0097  ortho 0.0099  total +6.0594
+    [recal] step 133  mex +3.6425  ortho 0.0056  total +3.6705
+    [recal] step 266  mex +3.5808  ortho 0.0007  total +3.5845
+    [recal] step 399  mex +3.5461  ortho 0.0004  total +3.5480
+    [recal] step 532  mex +3.5554  ortho 0.0003  total +3.5572
+    [recal] step 665  mex +3.5031  ortho 0.0003  total +3.5047
+    [recal] step 798  mex +3.5032  ortho 0.0003  total +3.5046
+    [recal] step 799  mex +3.4995  ortho 0.0003  total +3.5009
+  insert 6/8 eval_indeed       |cos| 0.0119  e0 u 0.90 m +5.19 e1 u 0.40 m +4.61 e2 u 0.49 m +6.36 e3 u 0.50 m +7.63 e4 u 0.43 m +4.79 e5 u 0.36 m +0.14
+    [ep6 micro] step   0  loss +0.9262  policy +0.2678  kl 0.67234  text_kl 0.20824
+    [ep6 micro] step  10  loss -5.2408  policy -5.8035  kl 0.47806  text_kl 0.17963
+    [ep6 micro] step  20  loss +11.3077  policy +10.3367  kl 1.25149  text_kl 0.30282
+    [ep6 micro] step  30  loss +0.1970  policy -0.6729  kl 0.96013  text_kl 0.27395
+    [ep6 micro] step  40  loss +4.5629  policy +4.0175  kl 1.03609  text_kl 0.16453
+    [ep6 micro] step  50  loss +6.6976  policy +6.2222  kl 1.58508  text_kl 0.13204
+    [ep6 micro] step  60  loss -9.0635  policy -9.4346  kl 0.92748  text_kl 0.10824
+    [ep6 micro] step  70  loss -4.1594  policy -4.4880  kl 0.99317  text_kl 0.09298
+    [ep6 micro] step  79  loss -9.4538  policy -9.6766  kl 0.62130  text_kl 0.06391
+    [recal] step   0  mex +8.1212  ortho 0.0062  total +8.1523
+    [recal] step 133  mex +3.9177  ortho 0.0055  total +3.9454
+    [recal] step 266  mex +3.6312  ortho 0.0013  total +3.6379
+    [recal] step 399  mex +3.5922  ortho 0.0007  total +3.5954
+    [recal] step 532  mex +3.5986  ortho 0.0005  total +3.6012
+    [recal] step 665  mex +3.5469  ortho 0.0004  total +3.5491
+    [recal] step 798  mex +3.5485  ortho 0.0004  total +3.5504
+    [recal] step 799  mex +3.5424  ortho 0.0004  total +3.5444
+  insert 7/8 emphasis_star     |cos| 0.0146  e0 u 0.87 m +5.23 e1 u 0.35 m +4.26 e2 u 0.43 m +5.15 e3 u 0.46 m +6.44 e4 u 0.42 m +5.08 e5 u 0.41 m -4.68 e6 u 0.44 m +10.90
+    [ep7 micro] step   0  loss +0.4298  policy -0.2351  kl 0.26782  text_kl 0.21716
+    [ep7 micro] step  10  loss -4.2936  policy -4.8848  kl 0.40565  text_kl 0.19032
+    [ep7 micro] step  20  loss +9.7413  policy +9.1756  kl 0.71915  text_kl 0.17656
+    [ep7 micro] step  30  loss +0.5798  policy +0.0289  kl 0.70903  text_kl 0.17182
+    [ep7 micro] step  40  loss +3.9118  policy +3.4590  kl 1.04187  text_kl 0.13355
+    [ep7 micro] step  50  loss +5.6269  policy +5.2758  kl 0.69822  text_kl 0.10539
+    [ep7 micro] step  60  loss -5.5934  policy -5.8862  kl 0.40774  text_kl 0.09081
+    [ep7 micro] step  70  loss -1.6060  policy -1.8658  kl 0.58904  text_kl 0.07678
+    [ep7 micro] step  79  loss -4.4985  policy -4.7261  kl 0.30635  text_kl 0.07079
+    [recal] step   0  mex +8.1513  ortho 0.0066  total +8.1844
+    [recal] step 133  mex +4.0231  ortho 0.0078  total +4.0623
+    [recal] step 266  mex +3.6951  ortho 0.0015  total +3.7028
+    [recal] step 399  mex +3.6592  ortho 0.0008  total +3.6632
+    [recal] step 532  mex +3.6671  ortho 0.0007  total +3.6704
+    [recal] step 665  mex +3.6249  ortho 0.0006  total +3.6280
+    [recal] step 798  mex +3.6250  ortho 0.0006  total +3.6279
+    [recal] step 799  mex +3.6171  ortho 0.0006  total +3.6200
+  insert 8/8 dining_merci      |cos| 0.0172  e0 u 0.86 m +5.23 e1 u 0.31 m +3.68 e2 u 0.38 m +5.35 e3 u 0.45 m +8.21 e4 u 0.39 m -4.84 e5 u 0.39 m -6.40 e6 u 0.51 m +12.52 e7 u 0.18 m +7.15
+
+========================================================================
+PHASE 2b — §4.4a final joint calibration (800)
+========================================================================
+    [recal] step   0  mex +3.6035  ortho 0.0006  total +3.6064
+    [recal] step 133  mex +3.5807  ortho 0.0004  total +3.5828
+    [recal] step 266  mex +3.6178  ortho 0.0004  total +3.6196
+    [recal] step 399  mex +3.5981  ortho 0.0003  total +3.5997
+    [recal] step 532  mex +3.6133  ortho 0.0003  total +3.6149
+    [recal] step 665  mex +3.5756  ortho 0.0003  total +3.5771
+    [recal] step 798  mex +3.5859  ortho 0.0003  total +3.5873
+    [recal] step 799  mex +3.5799  ortho 0.0003  total +3.5814
+
+========================================================================
+PHASE 3 — library-state margins (final)
+========================================================================
+   ep episode               pre    solo     lib gain_lib gain_solo retention   util contam
+    0 math_words         -2.217  +4.740  +5.207   +7.424    +6.957     1.067  0.879  0.098
+    1 travel_rain        +3.537  +7.196  +4.040   +0.503    +3.659     0.138  0.322  0.100
+    2 author_marco       +4.878  +9.467  +4.985   +0.107    +4.589     0.023  0.387  0.117
+    3 distance_metric    +7.104 +12.427  +7.737   +0.633    +5.323     0.119  0.446  0.116
+    4 treasure_pirate    -5.216  +5.288  +3.663   +8.880   +10.505     0.845  0.388  0.083
+    5 eval_indeed        -5.877  +2.741  -2.986   +2.891    +8.618     0.335  0.395  0.101
+    6 emphasis_star      +7.617 +12.582 +12.521   +4.904    +4.965     0.988  0.545  0.116
+    7 dining_merci       +6.942 +11.896  +7.455   +0.514    +4.954     0.104  0.295  0.084
+  bank |cos|: pre {'plug_plug': None, 'plug_base': None}  lib {'plug_plug': 0.0141, 'plug_base': 0.0651}
+  base CE: pre 6.7735 -> lib 6.9400  (+2.458%)
+  state saved: /home/tliao/VesperLM/lab/sandbox/g3_pivot/n8_ortho_state.pt
+
+========================================================================
+PHASE 4 — verdict
+========================================================================
+  plug-plug |cos| None -> 0.0141 (orthogonality achieved)
+  mean retention 0.452 vs bar 0.7 -> CLAIM_DEAD_ORTHOGONALITY_NOT_ENOUGH
+  -> orthogonal rows do NOT fix crowding; hierarchical domain->memory passports (rung 4) gets built next
+
+wrote /home/tliao/VesperLM/lab/results/g3_pivot_ortho.json
+total time: 1623.5s

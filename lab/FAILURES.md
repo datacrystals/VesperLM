@@ -359,6 +359,72 @@ a lucky pass.
   candidates (orthogonal inits, larger passport_dim, per-domain sub-banks) still
   queued as cheaper attempts inside the current bank.
 
+## 2026-10-09 — g3_pivot_shape (RUN B) — OUTCOME LOG: memory SHAPE is the lever — all token-substitution episodes hold (retention 0.884 vs mixed-fixture 0.390) at UNCHANGED crowding; tag-append memories are fragile regardless of addressing; pivot REFRAMED (shape episodes before consolidation)
+*(outcome log — episode-shape control, the cheap fixture change.)*
+- Method: `lab/g3_pivot_runs.py --run B` — N=8, ctrlB recipe (80-step consolidation,
+  800-step mex recal/insert, 800-step §4.4a joint, text-KL 3.0, t1-diag-realdata-mb4
+  spine), identical to the margin re-score except the fixture: **all 8 episodes are
+  math/words-style token-substitution facts** (ep0's shape — stated digit form →
+  corrected word form) over 8 distinct prompt domains (v1 lesson respected).
+  Same three-state margin measurement (pre / solo / lib). State saved
+  `lab/sandbox/g3_pivot/n8_shape_state.pt`. Results `lab/results/g3_pivot_shape.json`,
+  `lab/logs/g3_pivot_shape.log`.
+- **VERDICT: SHAPE_IS_THE_LEVER — mean retention 0.884** (bar 0.70; the mixed
+  fixture scored 0.390 in identical machinery). Per episode (retention / util):
+  math_words 1.12/0.93, cooking 0.95/0.47, astronomy 0.67/0.42, music 0.52/0.36,
+  sports 1.08/0.39, anatomy 0.92/0.34, computing 0.85/0.30, geology 0.95/0.37.
+- **Crowding unchanged** (plug-plug |cos| 0.258 vs mixed 0.275) and **util still
+  low** (6 of 8 under 0.5) — yet retention holds. So the mixed fixture's collapse
+  was NOT crowding and NOT low util; it was the tag-append memory shape. The
+  ep0 anomaly resolves cleanly: it was shape, not position privilege
+  (Pearson(insert-position, retention) = **−0.046** — ep7 at position 7 holds
+  0.95; no decay with insertion order).
+- What it confirms: memory SHAPE is a first-class variable — the task's
+  reframe branch fires: **consolidate memories as token-substitution-style
+  deltas / shape or dedup episodes before consolidation** instead of building
+  hierarchical addressing for the retention problem. Low util (0.3-0.5) still
+  delivers the memory when the memory is well-shaped (also strengthens the
+  "util bar is wrong" finding from the re-score).
+- Open: base-CE regression still fails (+4.12% vs ctrlB +2.26%) with per-expert
+  contam clean (0.08-0.12) — the residual is GROUP top-2 occupancy of base
+  tokens; shape does not touch it.
+
+## 2026-10-09 — g3_pivot_ortho (RUN A) — OUTCOME LOG: capacity claim DEAD as stated — orthogonal rows (plug-plug |cos| 0.275 → 0.014) do NOT fix crowding (retention 0.452 vs 0.390 noise-level); row geometry is not the lever, memory shape is
+*(outcome log — capacity rung, the orthogonality-penalty alternative to raising passport_dim.)*
+- Method: `lab/g3_pivot_runs.py --run A` — N=8, ctrlB mixed fixture (ep0 math +
+  7 tag-append) and ctrlB recipe, with a plug-plug squared-cosine penalty
+  (λ=5.0) added to the mex recal objective (rows-only training preserved; base
+  rows frozen by the same hook). Chosen over a literal passport_dim 64→256
+  raise because the rows are 8-in-64 — room was never the constraint, training
+  pressure was; a dimension raise alone would leave the pressure unchanged and
+  be a weak test of "rows can be MADE mutually orthogonal". Solo refs reused
+  from the re-score (penalty is exactly inert at N=1 — zero plug-plug pairs).
+  First run crashed at Phase 3 on a KeyError (`pre_library_base_ce` absent from
+  the ref JSON; fixed to always recompute from a bare reload — same value);
+  rebuild is seed-deterministic and reproduced the crashed run's trajectory
+  exactly. State saved `lab/sandbox/g3_pivot/n8_ortho_state.pt`. Results
+  `lab/results/g3_pivot_ortho.json`, `lab/logs/g3_pivot_ortho.log`.
+- **VERDICT: CLAIM_DEAD_ORTHOGONALITY_NOT_ENOUGH** — orthogonality was
+  decisively ACHIEVED (plug-plug |cos| **0.275 → 0.014**) but mean margin
+  retention stayed **0.452** (bar 0.70; vs 0.390 un-penalized = noise-level).
+  Per episode (retention / util): math 1.07/0.88, travel_rain 0.14/0.32,
+  author_marco 0.02/0.39, distance_metric 0.11/0.45, treasure_pirate 0.85/0.39,
+  eval_indeed 0.34/0.40, emphasis_star 0.99/0.55, dining_merci 0.10/0.30.
+- **The cross-run pattern is the proof**: with rows forced orthogonal, the same
+  shape split persists — token-substitution facts hold (ep0 1.07, ep4 0.85
+  prefix-tag, ep6 0.99), tag-append facts collapse (ep2 0.02, ep7 0.10). Row
+  geometry does not predict retention; memory shape does (RUN B, same day).
+- What it rules out: the capacity claim "plug-in rows can be made mutually
+  orthogonal; that fixes crowding" — the first half is achievable and the
+  second half is false. Also rules out (indirectly) a bare passport_dim raise:
+  8 rows fit orthogonally in 64 dims already, so 256 dims would not change the
+  training pressure. Rung-4 candidate (a) "orthogonal row inits" is closed
+  by the same logic (inits don't survive the training pressure); (b) larger
+  passport_dim demoted; (c) per-domain sub-banks = the hierarchy rung proper.
+- Open: base-CE regression +2.46% (vs ctrlB +2.26%) — the ortho penalty
+  neither helps nor hurts it; group top-2 occupancy of base tokens is
+  orthogonal to row geometry too.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.
@@ -394,10 +460,11 @@ Do not retry a falsified method unchanged.
    passports (domain passport -> memory passport, two-stage routing)
    -> 2026-10-09: G3 FAILED (util_home 0.08-0.39 for 15/16 experts at N=16,
    base CE +2.9%, break at N=4 util / N=2 CE; see the g3_coexistence entry).
-   HIERARCHICAL DOMAIN->MEMORY PASSPORTS **ACTIVE** (two-stage routing is the
-   next build: a domain passport partitions the row space so 16 memories
-   never share one top-2 contest). Library-cap + NVMe archive stays the
-   alternate branch if the hierarchy fails its smoke test.
+   HIERARCHICAL DOMAIN->MEMORY PASSPORTS was armed as the leading candidate
+   (two-stage routing: a domain passport partitions the row space so 16
+   memories never share one top-2 contest) — see the resolution note at the
+   bottom of this rung: NOT TRIGGERED after the pivot runs, kept as RESERVE.
+   Library-cap + NVMe archive stays the alternate branch.
    -> recipe-control evidence (same day): N=8 at FULL G1b recipe still fails
    (util 0.93 -> 0.16, CE +2.28%) so the decay is structural, not a cadence
    artifact, and bank crowding is measured: plug-in rows sit at |cos| 0.275
@@ -417,6 +484,25 @@ Do not retry a falsified method unchanged.
    ep0 math-style fact survived intact (retention ~1.0) while tag-append
    facts collapsed — one control with 8 math-style episodes before final
    blame on the bank.
+   -> addressing-pivot runs (same day, cheapest-first — RESOLVED):
+   RUN B shape control PASSES (8 token-substitution episodes, retention
+   **0.884** at UNCHANGED crowding |cos| 0.258 and still-low util) — the open
+   question above is answered: **memory SHAPE is the lever, not the bank**;
+   ep0's survival was shape, not position (Pearson(pos, ret) = −0.046).
+   RUN A capacity rung FAILS: forced-orthogonal rows (|cos| 0.275 → 0.014)
+   do NOT fix retention (0.452 ≈ noise) — rung (a) orthogonal inits CLOSED,
+   (b) larger passport_dim DEMOTED (8 rows already fit orthogonally in 64
+   dims; the constraint was training pressure, not room).
+   **HIERARCHICAL DOMAIN->MEMORY PASSPORTS: NOT TRIGGERED** (the
+   pre-registered rule was "both pivot runs fail → build it"; RUN B passed).
+   The next build is CHEAPER: memory shaping — consolidate episodes as
+   token-substitution-style deltas / shape-or-dedup episodes before
+   consolidation (see the G1b/G3 reframe in MODULAR_MOE.md §8.4). The
+   two-stage family→memory design is sketched in §8.4 as a RESERVE for the
+   one sub-problem shaping does not touch: base-CE regression from GROUP
+   top-2 occupancy of base tokens (8 rows × ~0.10 contam each = +2.5-4.1% CE
+   even with clean per-expert contam) — and for N=16, if the shaped-episode
+   retention advantage does not survive the bigger bank.
 5. If G4 (live loop at t3) fails on hardware: consolidation on a second
    machine over LAN (the P40 box), serving never blocks
 
