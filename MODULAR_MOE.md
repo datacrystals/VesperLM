@@ -494,6 +494,73 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   rollback stays one-row-drop (memory rows) or family-row-drop (whole
   cluster). States saved at lab/sandbox/g3_pivot/n8_shape_state.pt and
   n8_ortho_state.pt (untracked) for follow-up re-scores.
+  **G3 memory-shaping consolidation module + shaped coexistence re-run
+  (2026-10-09/10):** the RUN B lesson is now a reusable module,
+  `lab/memory_shaping.py` — episodes are token-substitution deltas
+  (`TokenDelta` prompt/prefix/bad/good, classified substitution/insert/
+  delete/identical by longest common prefix+suffix; `SHAPED_8`/`SHAPED_16`
+  = 8/8 + 8/8 distinct prompt domains, all substitution), with the G1b
+  consolidation recipe (`consolidate_episode`: forced dispatch +
+  reward-weighted NLL + KL-to-base + text-KL 3.0 → experts + prototype rows
+  + gate), `plug_and_recal()` (§4.4a mex recal per insert), and
+  `retention()`/`delta_margin()` as the standing measurement. Runner
+  `lab/g3_shaped_run.py` rebuilds solo refs fresh per episode in the same
+  run (self-consistent train+measure — the family A/B fixture-mismatch
+  caveat does not apply).
+  **N=8 shaped — PASS (retention 1.071 vs bar 0.70).** 7/8 episodes clear
+  0.70 per-episode (math 1.02, cooking 1.00, astronomy 1.04, music 0.77,
+  sports 2.48, anatomy 1.06, geology 0.73; computing 0.467 is the lone
+  miss); the anchor check's "deviation" vs RUN B's 0.884 is a solo-ref
+  artifact (sports' solo ref was weak: gain_solo +6.4 vs +15..19 elsewhere,
+  inflating its ratio to 2.48) — excluding sports the mean is 0.870, inside
+  the ±0.15 anchor window and essentially RUN B's number. **But the base-CE
+  residual persists and is larger:** 6.7735 → 7.3771 (**+8.91%**, bar <1%;
+  RUN B +4.12%, ctrlB mixed +2.26%) at p_any_plug_in_top2 0.589 / p_both
+  0.171 with per-expert contam clean (max 0.108) — shape is the retention
+  lever only and is neutral-to-worse on the group top-2 occupancy axis.
+  Bank-norm asymmetry grows with inserts (plug rows 17–34 vs base ~2);
+  insert-trajectory util decay (e0 0.95 → e7 0.27) tracks that norm growth,
+  not insertion position (ep7 still delivers 0.726).
+  (lab/results/g3_shaped_n8.json, state lab/sandbox/g3_shaped/n8_shaped_state.pt)
+  **N=16 shaped — PASS (retention 0.737 vs bar 0.70): the headline G3
+  coexistence number, first N=16 PASS under the product bar** (mixed-shape
+  fixture was 0.390 at N=8). 9 of 16 episodes clear 0.70 per-episode (math
+  1.01, music 0.85, anatomy 1.00, computing 0.89, geology 0.86, travel
+  0.72, chess 1.10, ocean 0.76, forest 0.80); the 7 misses are soft
+  (0.44–0.63), not a collapse. Util decays with insertion order (e0 0.95 →
+  e15 0.18, util_min 0.125) yet most memories still deliver — the util bar
+  mispredicts again (chess at position 12 holds 1.098). **Base-CE residual
+  persists:** 6.7735 → 7.1878 (**+6.12%**, bar <1%) at p_any_plug_in_top2
+  0.621 / p_both 0.223 with contam clean (max 0.085) — milder than N=8
+  shaped's +8.91% at p_any 0.589, so the occupancy residual does not blow
+  up with N, but shape does not fix it at either N. Per §8.5 bullet 1 the
+  "different addressing mechanism" kill branch is no longer triggered by
+  retention — it survives on the base-CE residual alone.
+  (lab/results/g3_shaped_n16.json, 106 min wall, state
+  lab/sandbox/g3_shaped/n16_shaped_state.pt)
+  **§8.4 reserve sketch prototyped — family-row two-stage routing, NEGATIVE
+  as a zero-training drop-in (g3_family_ab.py, pure inference-time swap on
+  the RUN B N=8 shaped state):** avg-linkage clustering of member rows →
+  families [[0],[1],[2],[3,4,5,6,7]] (k=4); stage 1 base+family rows contest
+  top-2, family slot → argmax member, stage-1 weights renormalized. First
+  run measured MIXED (CE −3.46%, p_any 0.588→0.701, retention 0.674→−0.081)
+  but that signal was INVALIDATED by an index-space bug in the prototype
+  (family rows built from the full bank with member-local ids — family
+  `[[0]]`'s "member mean" was base row 0 — and stage-2 emitted local ids
+  where global expert ids belong, so winning families dispatched to the
+  wrong experts and memories were never delivered). With the bug fixed and
+  the same state/families rerun: CE 7.0528 → 6.9525 (−1.42%),
+  p_any_plug_in_top2 0.588 → **0.630** (occupancy still does NOT drop —
+  the sketch's "base tokens contest only k rows" premise fails at k=4 with
+  untrained family-mean rows), retention mean 0.674 → **0.426** (0.567
+  excl. the math fixture artifact) — the multi-member family's mean row is
+  diluted and its members (sports/anatomy/geology) lose delivery. So the
+  two-stage STRUCTURE delivers correctly when indexed right (bug explains
+  the catastrophic collapse) but does not address the occupancy residual
+  and costs retention as a zero-training drop-in. Named next branch for
+  the residual: family-row mex calibration (owner=family) or base-neutral
+  weighting of plug rows. (lab/results/g3_family_ab.json (buggy, preserved)
+  + g3_family_ab_fix.json (fixed rerun))
   Original gate text: 16 episodic experts plugged sequentially
   into t2 (tiny_agent_k); all section-6 purity gates still hold for every
   expert, and base-mix val CE has not regressed >1% vs pre-library. This

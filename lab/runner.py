@@ -191,8 +191,15 @@ def start_job(exp, claim_path):
     budget = float(exp.get("budget_minutes") or TIER_DEFAULT_BUDGET.get(exp.get("tier"), 30))
     log_path = os.path.join(LOGS_DIR, exp["id"] + ".log")
     log_f = open(log_path, "w")
+    # Optional "script" field: run an arbitrary repo-relative python entry
+    # point instead of the pretrain trainer (e.g. lab/g3_shaped_run.py).
+    # Same sandbox/log/VRAM-gate/budget-kill machinery; the script writes its
+    # own results JSON and the runner's parse_log metrics stay empty.
+    script = exp.get("script")
+    cmd = ([sys.executable, "-u", os.path.abspath(os.path.join(REPO, script))]
+           if script else [sys.executable, "-u", os.path.abspath(TRAINER)])
     proc = subprocess.Popen(
-        [sys.executable, "-u", os.path.abspath(TRAINER)],
+        cmd,
         cwd=sandbox,
         env=build_env(exp),
         stdout=log_f,

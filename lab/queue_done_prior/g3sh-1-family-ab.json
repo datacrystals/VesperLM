@@ -1,0 +1,17 @@
+{
+  "id": "g3sh-family-ab",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "family-row two-stage routing drops the group top-2 base-CE residual (p_any_plug occupancy) without collapsing margin retention; pure inference-time swap on the saved N=8 shaped state",
+  "config": "lab_small",
+  "script": "lab/g3_family_ab.py",
+  "env": {
+    "G3F_STATE": "lab/sandbox/g3_pivot/n8_shape_state.pt",
+    "G3F_SOLO_JSON": "lab/results/g3_pivot_shape.json",
+    "G3F_OUT": "lab/results/g3_family_ab.json",
+    "G3F_K": "4",
+    "G3F_DEVICE": "cuda"
+  },
+  "budget_minutes": 20,
+  "mutation_of": null
+}

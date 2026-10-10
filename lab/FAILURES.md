@@ -425,6 +425,196 @@ a lucky pass.
   neither helps nor hurts it; group top-2 occupancy of base tokens is
   orthogonal to row geometry too.
 
+## 2026-10-09 — g3sh queue launch (memory-shaping G3 line) — OPS INCIDENT: pre-edit farm runner claimed all 3 g3sh jobs in the seconds before its restart and launched them with the pretrain TRAINER (2 OOM'd in dummy-pass, 1 orphaned) — recovered same cycle, no research lost
+*(ops log — farm queue race, not an experiment result. Nothing is ruled out.)*
+- Evidence: preserved at `lab/logs/g3sh-{family-ab,n8-shaped,n16-shaped}-misslaunch.log`
+  + `lab/results/g3sh-misslaunch-records.json`. Runner record naming keeps
+  both: the bare `lab/results/g3sh-*.json` still holds the misslaunch
+  record (failed:true, trainer OOM traceback), and each successful re-run
+  finalized to a timestamped copy (`g3sh-family-ab.1791612567.json`,
+  `g3sh-n8-shaped.1791614632.json`, …). Old runner pid 67044
+  (pre-`script`-field build) claimed all
+  three defs and launched `Pretrain/02_pretrain_linear.py` instead of
+  `lab/g3_family_ab.py` / `lab/g3_shaped_run.py`; family-ab and n8 died in the
+  trainer's lab_small dummy-pass VRAM pre-alloc OOM, n16 was orphaned in
+  `lab/running/`.
+- Root cause: race between queue-file publication and runner restart — the
+  defs landed while the old runner was still watching, so the stale binary
+  claimed them.
+- What it rules out: nothing in the research line. Recovery in the same
+  cycle: orphan claim moved back to `lab/queue/`, defs re-copied from
+  `lab/queue_done_prior/`, runner restarted (pid 131483, slots 1,
+  systemd-inhibit wrapped); the new runner launched `lab/g3_family_ab.py`
+  correctly (verified in ps). Job ids resumed cleanly; only wall-clock lost.
+- Next tried: standing lesson — **restart the farm runner BEFORE writing
+  queue files**, never after. The `script`-field support in `lab/runner.py`
+  is the fix that makes the queue defs self-describing; keep
+  `lab/queue_done_prior/` copies as the recovery source of truth.
+
+## 2026-10-09 — g3_family_ab (§8.4 reserve sketch, family-row two-stage routing) — OUTCOME LOG: MIXED as recorded, SIGNAL LATER INVALIDATED — CE −3.46% but occupancy does NOT drop (p_any 0.588→0.701) and memory delivery collapses (retention 0.674→−0.081); root cause = index-space bug in FamilyRouter (see below), not the mechanism
+*(outcome log — pure inference-time routing swap on the saved RUN B N=8 shaped
+library state, no training; isolates the addressing mechanism alone.)*
+- Method: `lab/g3_family_ab.py` on `lab/sandbox/g3_pivot/n8_shape_state.pt`
+  (RUN B state) + solo refs from `lab/results/g3_pivot_shape.json`. Families
+  clustered by avg-linkage on member rows across layers → `[[0],[1],[2],
+  [3,4,5,6,7]]` (k=4). `FamilyRouter` two-stage: base+family rows contest
+  top-2; the family slot resolves to argmax member; stage-1 weights
+  renormalized. Family rows are untrained means of member rows (the sketch's
+  prototype rule). Results `lab/results/g3_family_ab.json`,
+  `lab/logs/g3sh-family-ab.log` (34.5s).
+- **VERDICT (as printed by the run): MIXED** ("CE/occupancy improve but
+  memory delivery collapses — family argmax needs calibration before it
+  counts") — later invalidated as a mechanism measurement by the ROOT CAUSE
+  bug below. Flat A vs family B:
+  CE **7.0528 → 6.8086 (−3.46%)**, p_any_plug_in_top2 0.588 → **0.701**
+  (occupancy got WORSE, not better — the sketch's premise that base tokens
+  would contest only k rows did not materialize at k=4 with untrained family
+  rows), p_both 0.169 → 0.304. Margins collapse negative on all 8 episodes
+  (−7.68…−2.77 vs flat's +12.09…−6.12), util_home 0.20–0.38.
+  Retention A mean **0.674** → B mean **−0.081**.
+- **ROOT CAUSE (found on follow-up inspection, 2026-10-10): the collapse was
+  an index-space BUG in `FamilyRouter`, not the family-mean/argmax rule.**
+  `cluster_families()` returns member-LOCAL indices (0..n_mem-1), but the
+  router (a) built family rows via `passports.data[mem]` on the FULL bank —
+  so family `[[0]]`'s "mean of member 0" was literally **base row 0**, family
+  `[[3,4,5,6,7]]`'s mean was base row 3 + members 0–3 — and (b) emitted
+  stage-2 results as `out_i = members[argmax]` (local ids) where global
+  expert ids are expected, so winning family slots dispatched to the WRONG
+  experts (singleton families dispatched to base experts 0/1/2 — their
+  memories were never delivered at all). Both bugs silence memories while
+  letting base CE drift back — which is exactly the recorded symptom (CE
+  −3.46%, retention → −0.081, occupancy mis-counted). Unit-checked on CPU
+  with real geometry (base norms ~2, member norms 17–34): buggy fam rows
+  equal base rows exactly; fixed version delivers global member ids and
+  family means with the n_base offset. The "CE drop = silenced memories"
+  read stands, but the silencing was a bug, not a mechanism verdict.
+- **Honest read (as recorded, pre-fix):** the CE drop is a symptom of
+  silenced memories (retention ≈ 0), not a clean addressing win. Whether
+  untrained family-mean rows + argmax ALSO collapse after the index fix is
+  settled by the one cheap rerun (`g3sh-family-fix`, same RUN B state, fixed
+  router, `lab/results/g3_family_ab_fix.json`) — not by the buggy numbers.
+- Fixture-mismatch caveat (does NOT affect the shaped N=8/N=16 runs, which
+  train+measure self-consistently): `SHAPED_8[0]` "math_words" is measured in
+  "4."/"Four." form while the RUN B state trained `_ep_math`'s "The answer is
+  4."/"The answer is four." — A-side math retention −0.56 is that artifact;
+  ep1–7 A-side retentions reproduce RUN B exactly (0.947/0.671/0.521/1.081/
+  0.924/0.852/0.954).
+- What it rules out: nothing about the two-stage mechanism from the buggy
+  run — its signal (MIXED) is invalidated as a mechanism measurement. The
+  run still establishes the harness (FamilyRouter swap, cluster_families,
+  occupancy/margin/retention measurement) and the fact that the recorded
+  MIXED numbers must never be quoted as evidence against family routing.
+- Next tried: one cheap fixed-router rerun on the identical RUN B state
+  (queue `g3sh-4-family-fix.json`, def archived in `lab/queue_done_prior/`);
+  if it still collapses, the family-mean/argmax rule itself is implicated
+  and family-row mex calibration (owner=family) is the named next branch.
+- **FIXED-ROUTER RERUN (2026-10-10, `lab/results/g3_family_ab_fix.json`,
+  `lab/logs/g3sh-family-fix.log`, 39.2s): SIGNAL NEGATIVE.** Same RUN B
+  state, same families `[[0],[1],[2],[3,4,5,6,7]]`, index bug fixed: CE
+  7.0528 → 6.9525 (**−1.42%**, less than the buggy −3.46%), p_any 0.588 →
+  **0.630** (occupancy again did NOT drop — the sketch's "base tokens contest
+  only k rows" premise fails at k=4 even with correct routing), retention
+  mean 0.674 → **0.426** (excl. the math fixture artifact: 0.567 vs flat
+  0.756). Delivery did recover vs the bug (cooking 0.99, computing 0.77,
+  music 0.55, astronomy 0.64 hold; math's −0.56 is the fixture mismatch on
+  both sides; sports/anatomy/geology 0.26/0.33/0.43 are the family-mean +
+  argmax casualties — their family is the 5-member cluster whose mean row
+  is most diluted). Verdict line: "two-stage addressing alone insufficient
+  — residual needs base-neutral weighting or another fix". So the bug
+  explains the catastrophic collapse but not the mechanism failure: with
+  correct indices, untrained family-mean rows + argmax still (a) fail to
+  reduce group top-2 occupancy and (b) cost ~0.25 retention vs flat. The
+  §8.4 reserve sketch as a zero-training drop-in is dead; family-row mex
+  calibration (owner=family) is the named next branch if the occupancy
+  residual stays unaddressed by other means.
+
+## 2026-10-09 — g3_shaped N=8 (memory-shaping consolidation module) — OUTCOME LOG: shaped memories HOLD at N=8 (mean retention 1.071 vs bar 0.70 — reproduces the RUN B anchor once a solo-ref outlier is excluded) but the group top-2 base-CE residual PERSISTS and is LARGER (+8.9% vs RUN B +4.1%); computing_counts is the lone per-episode miss (0.467)
+*(outcome log — first run of the reusable memory-shaping module
+(`lab/memory_shaping.py`), train+measure self-consistent.)*
+- Method: `lab/g3_shaped_run.py` N=8 on `ms.SHAPED_8` (8 token-substitution
+  episodes × 3 facts, 8 distinct prompt domains; shape_report 24/24
+  substitution deltas, 0 insert/delete). Full ctrlB recipe (80-step
+  consolidation, 800-step mex recal/insert, 800-step §4.4a joint, text-KL
+  3.0) on the t1-diag-realdata-mb4 spine; solo refs rebuilt fresh per episode
+  in the same run, so retention is self-consistent (no fixture mismatch).
+  Farm job g3sh-n8-shaped (runner pid 131483), 2064s wall. State
+  `lab/sandbox/g3_shaped/n8_shaped_state.pt`; results
+  `lab/results/g3_shaped_n8.json`, `lab/logs/g3sh-n8-shaped.log`.
+- **VERDICT: PASS — mean retention 1.071** (bar 0.70; anchor RUN B 0.884).
+  Per episode (retention / util / contam): math_words 1.023/0.951/0.090,
+  cooking 1.001/0.429/0.108, astronomy 1.038/0.447/0.091, music 0.774/0.346/
+  0.097, sports **2.476**/0.431/0.106, anatomy 1.064/0.336/0.073, computing
+  **0.467**/0.295/0.107, geology 0.726/0.447/0.088. The runner's anchor check
+  flags a deviation (1.071 vs 0.884 ± 0.15) — it is a solo-ref artifact, not
+  a real gain: sports' solo ref was unusually weak (gain_solo +6.4 vs +15..19
+  for every other episode) while library delivery was strong (+15.9), inflating
+  the mean to 2.476 for that episode. **Excluding sports the mean is 0.870,
+  inside the anchor window and essentially RUN B's number.** 7 of 8 episodes
+  clear the 0.70 per-episode bar; computing (0.467) is the lone miss.
+- **Base-CE residual persists and is larger than RUN B's:** 6.7735 → 7.3771
+  (**+8.912%**, bar <1%) with p_any_plug_in_top2 **0.589** / p_both 0.171
+  (RUN B: +4.12% at p_any ≈ 0.59; ctrlB mixed +2.26%). Per-expert contam is
+  clean (max 0.108) — the residual is again the GROUP top-2 occupancy of base
+  tokens. Shaping the memories does not touch it; in this self-consistent
+  rebuild the magnitude is ~2× RUN B's, so shape is neutral-to-worse on the
+  occupancy axis. This is the residual the family-row A/B was prototyped
+  against (see the g3_family_ab entry: MIXED — not fixed).
+- Bank geometry note: plug-in rows sit at norms 17–34 vs base rows ~2 — the
+  insert-trajectory util decay (e0 0.95 → e7 0.27 across inserts) tracks
+  growing plug-bank norm, not position (ep7 still delivers 0.726).
+- What it rules out: "shaped memories fix the base-CE residual" — they do
+  not; shape is the retention lever only. Also confirms the reusable module
+  reproduces RUN B's retention outcome outside the pivot script.
+- Next tried: N=16 shaped (g3sh-n16-shaped, budget 180 min) — the headline
+  G3 coexistence number under the shaped fixture; family-row two-stage was
+  the A/B for the CE residual (filed separately, MIXED).
+
+## 2026-10-10 — g3_shaped N=16 (memory-shaping consolidation module) — OUTCOME LOG: G3 coexistence PASSES at N=16 for the first time — mean retention 0.737 vs the standing 0.70 bar (vs mixed-shape 0.390 at N=8) with clean per-expert contam (max 0.085); base-CE occupancy residual persists (+6.12% at p_any_plug 0.621)
+*(outcome log — the headline G3 number: coexistence at N=16 under the shaped
+fixture and the margin-retention bar.)*
+- Method: `lab/g3_shaped_run.py` N=16 on `ms.SHAPED_16` (16 token-substitution
+  episodes × 3 facts, 16 distinct prompt domains; shape_report 48/48
+  substitution, 0 insert/delete, dedup clean). Full ctrlB recipe (80 cons /
+  800 mex recal per insert / 800 §4.4a joint, text-KL 3.0) on the
+  t1-diag-realdata-mb4 spine; solo refs rebuilt fresh per episode in-run.
+  Farm job g3sh-n16-shaped (budget 180 min, finished 6350s ≈ 106 min wall).
+  State `lab/sandbox/g3_shaped/n16_shaped_state.pt`; results
+  `lab/results/g3_shaped_n16.json`, `lab/logs/g3sh-n16-shaped.log`.
+- **VERDICT: PASS — mean retention 0.737** (bar 0.70; N=8 shaped 1.071/0.870
+  excl. outlier; RUN B anchor 0.884; mixed-shape N=8 0.390). Per episode
+  (retention / util / contam): math 1.010/0.951/0.085, cooking 0.620/0.245/
+  0.061, astronomy 0.466/0.275/0.071, music 0.851/0.339/0.060, sports
+  0.577/0.313/0.051, anatomy 1.004/0.210/0.038, computing 0.890/0.212/0.052,
+  geology 0.855/0.275/0.057, history 0.604/0.299/0.048, travel 0.715/0.238/
+  0.043, weather 0.474/0.141/0.043, money 0.440/0.196/0.057, chess
+  1.098/0.282/0.049, ocean 0.755/0.125/0.039, forest 0.804/0.181/0.051,
+  bridge 0.633/0.177/0.038. **9 of 16 clear 0.70 per-episode** (math, music,
+  anatomy, computing, geology, travel, chess, ocean, forest); the 7 misses
+  (0.44–0.63) are a soft degradation, not the mixed fixture's collapse.
+  Util decays with insertion order (e0 0.95 → e15 0.18) and util_min is
+  0.125 — yet most memories still deliver, reconfirming the "util bar
+  mispredicts" finding; no position confound (ep12 chess at position 12
+  holds 1.098).
+- **Base-CE residual persists under shaped memories:** 6.7735 → 7.1878
+  (**+6.116%**, bar <1%) with p_any_plug_in_top2 **0.621** / p_both 0.223,
+  per-expert contam clean (max 0.085). N=8 shaped was +8.91% at p_any 0.589
+  — the occupancy residual does not grow catastrophically with N (and N=16
+  is even milder than N=8 here), but shape does not fix it at either N. The
+  open G3 sub-problem is unchanged: group top-2 occupancy of base tokens.
+- What it confirms: **memory shape converts G3 coexistence from FAIL to
+  PASS at N=16 under the product bar** (margin retention vs solo ≥ 0.70),
+  where the mixed-shape fixture scored 0.390 at half the N. Bank crowding
+  (plug norms 17–40 vs base ~2) and util decay are real but no longer
+  fatal for well-shaped substitution memories. The §8.5 kill criterion-1
+  branch (different addressing mechanism for coexistence) is NOT triggered
+  by retention anymore — it survives on the base-CE residual alone.
+- Next tried: the base-CE occupancy residual is the remaining G3 sub-bar;
+  the family-row two-stage A/B (reserve sketch) was prototyped against it
+  and is NEGATIVE as a zero-training drop-in (see the g3_family_ab entry —
+  index bug found and fixed; with correct routing p_any still 0.588→0.630).
+  Named next branch for the residual: family-row mex calibration
+  (owner=family) or base-neutral weighting of plug rows.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.

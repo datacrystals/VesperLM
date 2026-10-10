@@ -1,0 +1,16 @@
+{
+  "id": "g3sh-n16-shaped",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "G3 coexistence at N=16 with shaped memories passes the margin-retention bar (retention vs solo >= 0.70), where the mixed-shape fixture failed at 0.39",
+  "config": "lab_small",
+  "script": "lab/g3_shaped_run.py",
+  "env": {
+    "G3S_N": "16",
+    "G3S_OUT": "lab/results/g3_shaped_n16.json",
+    "G3S_STATE": "lab/sandbox/g3_shaped/n16_shaped_state.pt",
+    "G3S_DEVICE": "cuda"
+  },
+  "budget_minutes": 180,
+  "mutation_of": "g3sh-n8-shaped"
+}
