@@ -423,7 +423,12 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   coexistence, passport stays a domain-expert tool. Fallback tree rung 4
   ACTIVE (hierarchical domain→memory passports), with capacity/orthogonality
   rungs noted (orthogonal row inits, larger passport_dim, per-domain
-  sub-banks).
+  sub-banks). **Before any new-addressing build, run the cheap re-score:**
+  util_home is a proxy — measure the TAUGHT-FACT MARGINS (G1b criterion a)
+  at N=8/16 on the failed states. If margins hold at util ~0.4 (expert fires
+  less often but lands hard when it does), the product requirement survives
+  and the util bar, not the architecture, gets revised. Margins failing too
+  confirms the addressing pivot.
   Original gate text: 16 episodic experts plugged sequentially
   into t2 (tiny_agent_k); all section-6 purity gates still hold for every
   expert, and base-mix val CE has not regressed >1% vs pre-library. This
