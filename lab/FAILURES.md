@@ -18,6 +18,31 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-10 — swarm5-oneclick-canary — free OneClick lane starved again (40-min attach poll, zero scheduling windows)
+- Evidence: `gh-ca7ead92` status polled 02:28:51–03:08:48 UTC (240×10s) via
+  `GET /api/github/notebook/status?instance_id=gh-ca7ead92`: `pending` /
+  "Waiting for resources..." on **every** poll (log: session `lab/logs` poll
+  output; summary in `lab/imported/swarm5/CANARY.md`). Cumulative queue record
+  now: 1 brief window ever (2026-10-09 23:32, lost to 502 within ~1 min),
+  pending across 22:58–01:03 and again 02:28–03:08 — ~4.5h observed, 1 window.
+  Instance never went `not_found`/`error` (still servable; attach path stays
+  free). No cells ran; 2nd/last creation NOT used (still 1 of 2).
+- Root cause: free-tier capacity starvation (k8s pod unscheduled), not a
+  wedged instance — the status endpoint keeps serving the same id.
+- What it rules out: the free lane as an on-demand compute source inside a
+  single agent session. Windows are too rare (~1/2h at best) and too brief to
+  gate a merge-blocking canary on; it remains viable only for queue-tolerant
+  work driven across heartbeats.
+- Next tried: paid devcloud fallback per the standing preference order —
+  `vesper-swarm5-ttl180m-1791601783` (MI300X), canary completed in 15 min for
+  $0.49, destroyed+verified. Bring-up gotcha for the next droplet run: the
+  amddevelopercloud image prints a "Please wait while we get your droplet
+  ready..." banner on every ssh session during first boot — it corrupts
+  `scp` ("Received message too long") and makes an early `ssh host 'bash f'`
+  a silent no-op; wait for `cloud-init status: done`, then transfer with
+  `ssh host 'cat > /remote' < /local` (banner goes to your stdout, file stays
+  clean).
+
 ## 2026-10-09 — t1-dropout02-passport / t0-8expert-passport — lab-farm pretrain runs barely learn (val stuck at ~9.02 = ln(8192) chance level)
 - Evidence:
   - `lab/results/t1-dropout02-passport.1791549090.json` + `lab/logs/t1-dropout02-passport.log`: 1590 steps,
