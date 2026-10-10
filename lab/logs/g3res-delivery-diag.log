@@ -1,0 +1,28 @@
+delivery-diag  device=cuda  labels=['lab_small-4base', 'lab_tiny-8base']
+
+== lab_small-4base  state=/home/tliao/VesperLM/lab/sandbox/g3_shaped/n8_shaped_state.pt
+  [lab_small-4base] math_words        P1  +18.80 (ret 1.0231)  P2force  +18.91  w_own 0.66  P8util 1.0 w 0.6628  P5cap +18.67  P6a(b) +18.79  P6b(wr) +18.72  P7a +18.6/+18.8/+18.9
+  [lab_small-4base] cooking_counts    P1  +15.10 (ret 1.0015)  P2force  +15.71  w_own 0.48  P8util 0.5 w 0.5108  P5cap +11.92  P6a(b) +15.67  P6b(wr) +15.61  P7a +15.6/+15.7/+15.7
+  [lab_small-4base] astronomy_counts  P1  +17.95 (ret 1.0382)  P2force  +18.07  w_own 0.52  P8util 0.6111 w 0.5715  P5cap +17.39  P6a(b) +18.08  P6b(wr) +18.03  P7a +18.1/+18.1/+18.1
+  [lab_small-4base] music_counts      P1  +15.09 (ret 0.7735)  P2force  +20.23  w_own 0.50  P8util 0.5556 w 0.4705  P5cap +12.44  P6a(b) +20.20  P6b(wr) +20.22  P7a +20.1/+20.2/+20.2
+  [lab_small-4base] sports_counts     P1  +15.89 (ret 2.4759)  P2force  +18.00  w_own 0.49  P8util 0.5556 w 0.4737  P5cap +12.24  P6a(b) +18.02  P6b(wr) +17.71  P7a +18.0/+18.0/+18.0
+  [lab_small-4base] anatomy_counts    P1  +16.89 (ret 1.0641)  P2force  +17.06  w_own 0.47  P8util 0.6667 w 0.4858  P5cap +16.74  P6a(b) +17.02  P6b(wr) +17.01  P7a +17.0/+17.0/+17.0
+  [lab_small-4base] computing_counts  P1   +6.12 (ret 0.4672)  P2force   +9.39  w_own 0.51  P8util 0.3889 w 0.5181  P5cap  +5.17  P6a(b)  +9.14  P6b(wr) +10.00  P7a +8.8/+9.1/+9.3
+  [lab_small-4base] geology_counts    P1  +13.36 (ret 0.726)  P2force  +15.72  w_own 0.50  P8util 0.5556 w 0.5019  P5cap +13.80  P6a(b) +15.13  P6b(wr) +17.84  P7a +14.3/+15.1/+15.5
+  [lab_small-4base] SUMMARY {'p1_retention_mean': 1.0712, 'p2_vs_solo_mean': 1.2006, 'p3_owner_weight_mean': 0.5167, 'p3_p_both_plug_home_mean': 0.1484, 'p3_p_owner_plus_wrong_mean': 0.1145, 'p4_retention_mean': 0.1638, 'p5_retention_mean': 0.9445}
+
+== lab_tiny-8base  state=/home/tliao/VesperLM/lab/sandbox/g3_shaped/n8_8base_state.pt
+  [lab_tiny-8base] math_words        P1   +3.46 (ret 1.225)  P2force   +7.36  w_own 0.81  P8util 1.0 w 0.7932  P5cap  +3.68  P6a(b)  +2.99  P6b(wr)  +6.60  P7a +1.6/+3.0/+5.6
+  [lab_tiny-8base] cooking_counts    P1   +1.49 (ret 0.1054)  P2force  +15.17  w_own 0.59  P8util 0.3333 w 0.3779  P5cap  +1.55  P6a(b) +14.24  P6b(wr) +14.97  P7a +1.6/+14.2/+15.1
+  [lab_tiny-8base] astronomy_counts  P1   +4.67 (ret 0.2902)  P2force  +16.20  w_own 0.59  P8util 0.75 w 0.4905  P5cap  +4.82  P6a(b) +15.93  P6b(wr) +16.06  P7a +8.7/+15.9/+16.2
+  [lab_tiny-8base] music_counts      P1  +10.67 (ret 0.6454)  P2force  +17.82  w_own 0.61  P8util 0.75 w 0.6279  P5cap  +7.32  P6a(b) +17.49  P6b(wr) +17.74  P7a +9.4/+17.5/+17.8
+  [lab_tiny-8base] sports_counts     P1   +1.64 (ret 0.1091)  P2force   +8.93  w_own 0.61  P8util 0.6667 w 0.5166  P5cap  +1.43  P6a(b)  +8.53  P6b(wr)  +9.83  P7a +2.6/+8.5/+8.9
+  [lab_tiny-8base] anatomy_counts    P1   +1.34 (ret 0.0842)  P2force  +12.96  w_own 0.56  P8util 0.5833 w 0.624  P5cap  +1.12  P6a(b)  +8.18  P6b(wr) +13.92  P7a +2.5/+8.2/+12.3
+  [lab_tiny-8base] computing_counts  P1   +0.86 (ret 0.0804)  P2force  +10.59  w_own 0.59  P8util 0.25 w 0.4326  P5cap  +1.05  P6a(b)  +8.65  P6b(wr)  +9.90  P7a +2.0/+8.6/+10.5
+  [lab_tiny-8base] geology_counts    P1  +10.50 (ret 0.6373)  P2force  +15.56  w_own 0.64  P8util 0.5 w 0.5509  P5cap  +1.70  P6a(b) +14.52  P6b(wr) +14.33  P7a +1.6/+14.5/+15.4
+  [lab_tiny-8base] SUMMARY {'p1_retention_mean': 0.3971, 'p2_vs_solo_mean': 1.139, 'p3_owner_weight_mean': 0.626, 'p3_p_both_plug_home_mean': 0.393, 'p3_p_owner_plus_wrong_mean': 0.2638, 'p4_retention_mean': 0.0063, 'p5_retention_mean': 0.3157}
+
+CAUSE RANKING: MIX_DILUTION (P2 forced delivery holds while P1 as-is collapses — expert fine, mix eats it) | WRONG_MEMORY_COFIRE (owner shares top-2 with another memory row on home tokens)
+
+wrote /home/tliao/VesperLM/lab/results/g3_delivery_diag.json
+total time: 39.5s

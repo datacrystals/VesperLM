@@ -1,0 +1,17 @@
+{
+  "id": "g3res-delivery-diag",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "shaped-memory delivery collapse on the t0 8-base spine is caused by owner-mass falling below the delivery cliff at the scoring positions (P8), not by weak experts (P2) or norm mismatch (P4)",
+  "config": "lab_small",
+  "script": "lab/g3_delivery_diag.py",
+  "env": {
+    "G3X_STATES": "lab/sandbox/g3_shaped/n8_shaped_state.pt,lab/sandbox/g3_shaped/n8_8base_state.pt",
+    "G3X_SOLO_JSONS": "lab/results/g3_shaped_n8.json,lab/results/g3_shaped_n8_8base.json",
+    "G3X_LABELS": "lab_small-4base,lab_tiny-8base",
+    "G3X_OUT": "lab/results/g3_delivery_diag.json",
+    "G3X_DEVICE": "cuda"
+  },
+  "budget_minutes": 15,
+  "mutation_of": "g3res-8base"
+}

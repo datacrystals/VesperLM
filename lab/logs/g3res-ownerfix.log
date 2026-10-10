@@ -1,0 +1,37 @@
+owner-mass fix probe  state=/home/tliao/VesperLM/lab/sandbox/g3_shaped/n8_8base_state.pt  mass=0.85  steps=800  device=cuda
+  baseline        ret 0.397  CE 7.3125
+  [A_mass085_scoring_home] recal owner_mass=0.85 home=scoring (24 prefixes)
+    [recal] step   0  loss +2.2212
+    [recal] step 133  loss +1.8645
+    [recal] step 266  loss +1.7560
+    [recal] step 399  loss +1.6968
+    [recal] step 532  loss +1.6703
+    [recal] step 665  loss +1.6685
+    [recal] step 798  loss +1.6669
+    [recal] step 799  loss +1.6550
+  [A_mass085_scoring_home] ret 1.100  CE 7.3520  PASS
+  [B_mass085_prompt_home] recal owner_mass=0.85 home=prompt (48 prefixes)
+    [recal] step   0  loss +2.2191
+    [recal] step 133  loss +2.1174
+    [recal] step 266  loss +2.0801
+    [recal] step 399  loss +2.0635
+    [recal] step 532  loss +2.0461
+    [recal] step 665  loss +2.0301
+    [recal] step 798  loss +2.0336
+    [recal] step 799  loss +2.0234
+  [B_mass085_prompt_home] ret 0.975  CE 7.3433  PASS
+  [C_mass055_scoring_home] recal owner_mass=0.55 home=scoring (24 prefixes)
+    [recal] step   0  loss +2.5033
+    [recal] step 133  loss +2.3526
+    [recal] step 266  loss +2.3190
+    [recal] step 399  loss +2.2998
+    [recal] step 532  loss +2.2975
+    [recal] step 665  loss +2.2749
+    [recal] step 798  loss +2.2725
+    [recal] step 799  loss +2.2691
+  [C_mass055_scoring_home] ret 0.610  CE 7.3179  fail
+
+  SIGNAL: FIX_FOUND — A_mass085_scoring_home reaches retention 1.100 >= 0.7 — minimal recipe change: closing joint recal with owner_mass above the delivery cliff and scoring-position home coverage
+
+wrote /home/tliao/VesperLM/lab/results/g3_owner_mass_fix.json
+total time: 482.0s

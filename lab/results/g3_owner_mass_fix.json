@@ -1,0 +1,68 @@
+{
+  "gate": "G3-owner-mass-fix",
+  "state": "/home/tliao/VesperLM/lab/sandbox/g3_shaped/n8_8base_state.pt",
+  "mass": 0.85,
+  "steps": 800,
+  "baseline": {
+    "mean_retention": 0.3971,
+    "retention": {
+      "math_words": 1.225,
+      "cooking_counts": 0.1054,
+      "astronomy_counts": 0.2902,
+      "music_counts": 0.6454,
+      "sports_counts": 0.1091,
+      "anatomy_counts": 0.0842,
+      "computing_counts": 0.0804,
+      "geology_counts": 0.6373
+    },
+    "ce": 7.3125
+  },
+  "A_mass085_scoring_home": {
+    "mean_retention": 1.1002,
+    "retention": {
+      "math_words": 2.5323,
+      "cooking_counts": 1.0684,
+      "astronomy_counts": 0.997,
+      "music_counts": 0.92,
+      "sports_counts": 0.6093,
+      "anatomy_counts": 0.8279,
+      "computing_counts": 0.9447,
+      "geology_counts": 0.9023
+    },
+    "ce": 7.352,
+    "pass_retention_bar": true
+  },
+  "B_mass085_prompt_home": {
+    "mean_retention": 0.9751,
+    "retention": {
+      "math_words": 2.5045,
+      "cooking_counts": 0.5247,
+      "astronomy_counts": 0.9997,
+      "music_counts": 0.8102,
+      "sports_counts": 0.5235,
+      "anatomy_counts": 0.8025,
+      "computing_counts": 0.9164,
+      "geology_counts": 0.7194
+    },
+    "ce": 7.3433,
+    "pass_retention_bar": true
+  },
+  "C_mass055_scoring_home": {
+    "mean_retention": 0.6098,
+    "retention": {
+      "math_words": 1.426,
+      "cooking_counts": 0.704,
+      "astronomy_counts": 0.3943,
+      "music_counts": 0.7585,
+      "sports_counts": 0.155,
+      "anatomy_counts": 0.1166,
+      "computing_counts": 0.3967,
+      "geology_counts": 0.9273
+    },
+    "ce": 7.3179,
+    "pass_retention_bar": false
+  },
+  "verdict": "A_mass085_scoring_home reaches retention 1.100 >= 0.7 \u2014 minimal recipe change: closing joint recal with owner_mass above the delivery cliff and scoring-position home coverage",
+  "signal": "FIX_FOUND",
+  "seconds": 482.0
+}

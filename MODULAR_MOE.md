@@ -607,6 +607,26 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   0.75); row-side and pool-side levers are closed.**
   (lab/results/g3_shaped_n8_kl6.json, g3_shaped_n8_kl12.json,
   g3_dilution_clone.json, g3_shaped_n8_8base.json)
+  **Spine-conditional delivery: diagnosed and FIXED (2026-10-10).** The
+  8-base collapse (retention 0.397) is NOT weak experts and NOT norm
+  mismatch: forced-owner routing delivers **1.14x solo** from the same
+  library experts, while cosine/content routing collapses delivery on
+  both spines (ret 0.006 — norm-driven routing is essential). The
+  mechanism is **owner-mass falling below a delivery cliff at the SCORING
+  positions**: lab_tiny has a sharp cliff (owner weight α=0.45 → +1.6,
+  α=0.65 → +14.2 on cooking) that lab_small lacks (flat +15.6 at all α),
+  and owner util/weight AT the divergence positions where delta_margin
+  reads logits track delivery exactly (cooking 0.33/0.38 fails, math
+  1.0/0.79 delivers) — home-token averages invert the story (8-base
+  w_own 0.63 looks healthier than lab_small's 0.52). Wrong-memory
+  cofire (0.26 vs 0.11) steals mass but is not poison (evicting it does
+  not help). **Fix: owner_mass 0.55 → 0.85 in the closing §4.4a joint
+  recal** lifts retention 0.397 → **0.975** (mass alone) → **1.100**
+  (mass + scoring-prefix home coverage — recommended refinement), both
+  clearing the 0.70 bar at unchanged base CE (~+1.5%). The shaped recipe
+  is now spine-portable; a full 8-base pipeline run with the bump is the
+  end-to-end confirmation. (lab/results/g3_delivery_diag.json,
+  g3_owner_mass_fix.json)
   Original gate text: 16 episodic experts plugged sequentially
   into t2 (tiny_agent_k); all section-6 purity gates still hold for every
   expert, and base-mix val CE has not regressed >1% vs pre-library. This

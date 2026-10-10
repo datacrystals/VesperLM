@@ -807,6 +807,93 @@ so expert-count is confounded with model size and base quality.)*
   monitoring, hybrid KL + family-calibrated two-stage, or re-scope the
   <1% bar for N=8 coexistence.
 
+## 2026-10-10 — g3res-delivery-diag (spine-conditional delivery) — OUTCOME LOG: CAUSE FOUND — the 8-base collapse is owner-mass falling below the delivery cliff AT THE SCORING POSITIONS (natural w_owner 0.38-0.55 at divergence vs a sharp cliff at 0.45-0.65); experts are fine (forced-owner = 1.14x solo); norm mismatch REJECTED (cosine routing is catastrophic)
+*(diagnosis — why shaped memories deliver on lab 4-base but collapse on
+the real t0 8-base spine. Probes P1-P8 on the two saved library states,
+inference only.)*
+- Method: `lab/g3_delivery_diag.py` on `n8_shaped_state.pt` (lab_small
+  4-base, PASS) and `n8_8base_state.pt` (t0-8expert-realdata lab_tiny
+  8-base, FAIL). Probes per episode: P1 as-is margin (reproduces runs);
+  P2 forced-owner weight 1.0 (pure capability); P3 mix stats (owner
+  weight, both-plug cofire, owner+wrong-memory); P4 cosine routing (norm
+  hypothesis); P5 one-plug-slot cap (evict wrong memory); P6a/b forced
+  0.65·owner+0.35·best-base / +0.35·wrong-mem; P7 owner-weight sweep
+  α∈{0.45,0.65,0.85} with best base; P8 owner util/weight AT the
+  divergence positions where delta_margin actually reads the logits.
+  Farm job g3res-delivery-diag (39.5s). Results
+  `lab/results/g3_delivery_diag.json`, `lab/logs/g3res-delivery-diag.log`.
+- **Cause ranking (all hypotheses from the brief):**
+  **(dominant) mix/owner-mass at scoring positions** — P2 forced-owner
+  delivers 1.14x solo on 8-base (math 2.61, cooking 1.08, astronomy
+  1.01, music 1.08, computing 0.99, geology 0.94) so the experts are
+  intact; P7 shows a SHARP delivery cliff on lab_tiny: cooking +1.6 at
+  α=0.45 → +14.2 at α=0.65 → +15.1 at α=0.85 (lab_small has no cliff:
+  +15.6 flat at all α); P8 pins it to the read-out positions — owner
+  util/weight AT divergence on the failing eps: cooking 0.33/0.38,
+  computing 0.25/0.43, geology 0.50/0.55 vs math 1.00/0.79 (which
+  delivers). Natural routing sits below the cliff exactly where the
+  margin is read.
+  **(a) owner_mass calibration mismatch — CONFIRMED as the fix lever:**
+  the mex target's 0.55 sits on the cliff and 8 base rows dilute the
+  softmax below it at scoring positions (home-token averages hide this:
+  P3 w_own 0.63 on 8-base looks HEALTHIER than lab_small's 0.52).
+  **(b) consolidation data mismatch / (d) recipe steps — REJECTED as
+  delivery causes** by P2 (full solo-level delivery from the same
+  experts); (d) survives only as the ep0 solo anomaly (+2.82 vs +10..16).
+  **(c) router norm/temperature — REJECTED:** P4 cosine (content)
+  routing collapses delivery on BOTH spines (ret 0.006 on 8-base, 0.16
+  on lab_small) — norm-driven routing is essential to the mechanism.
+  **wrong-memory cofire is real but not poison:** p_owner+wrong 0.26
+  (8-base) vs 0.11 (lab_small), yet P5 (evict wrong memory → ret 0.32,
+  no help) and P6b (0.35·wrong-mem delivers fine) show it only STEALS
+  owner mass rather than injecting damage.
+- Cross-spine summary: lab_small has no weight cliff and lower wrong-
+  memory cofire → delivers at natural weights; lab_tiny has a cliff at
+  0.45-0.65 and higher cofire → natural scoring-position weights fall
+  below it → delivery collapses while routing metrics look fine.
+- What it rules out: "the t0 spine can't hold shaped memories" (it can —
+  P2 = 1.14x solo); "norm/temperature mismatch" and "cosine routing as
+  a fix"; "owner-weight averages as a diagnostic" (they invert the
+  story — measure at the scoring positions).
+- Next tried: g3res-ownerfix — closing joint recal with owner_mass 0.85
+  and scoring-position home coverage (the minimal recipe change under
+  test), queued same cycle.
+
+## 2026-10-10 — g3res-ownerfix (minimal fix for spine-conditional delivery) — OUTCOME LOG: FIX_FOUND — closing joint recal with owner_mass 0.55→0.85 lifts 8-base real-spine shaped retention 0.397 → 0.975 (mass alone) → 1.100 (mass + scoring-position home coverage); both clear the 0.70 bar
+*(outcome log — the fix probe for the delivery-collapse diagnosis above.)*
+- Method: `lab/g3_owner_mass_fix.py` on the saved `n8_8base_state.pt`,
+  router-only recal (800 steps, lr 1e-2) three arms + baseline, retention
+  measured against the run's own solo refs. Arm A: owner_mass 0.85 +
+  home data = the SCORING prefixes (prompt+stated[:first-divergence],
+  the exact tokens delta_margin reads). Arm B: owner_mass 0.85 + original
+  prompt home data (mass-only control). Arm C: owner_mass 0.55 + scoring
+  home (coverage-only control). Farm job g3res-ownerfix (482s). Results
+  `lab/results/g3_owner_mass_fix.json`, `lab/logs/g3res-ownerfix.log`.
+- **Numbers (retention vs the 0.70 bar):** baseline 0.397 FAIL;
+  A mass085+scoring **1.100 PASS** (per-ep: math 2.53, cooking 1.07,
+  astronomy 1.00, music 0.92, sports 0.61, anatomy 0.83, computing 0.94,
+  geology 0.90); B mass085+prompt **0.975 PASS** (cooking 0.52, sports
+  0.52 — the two eps the scoring coverage repairs); C mass055+scoring
+  0.610 FAIL (coverage alone insufficient).
+- **Minimal recipe change: owner_mass 0.55 → 0.85 in the closing §4.4a
+  joint recal** — that alone clears the bar (arm B). Adding
+  scoring-position home coverage to the recal data is the recommended
+  refinement (arm A: +0.13 mean, fixes the worst episodes to ~0.9-1.0).
+  Base CE is essentially unchanged (7.3125 → 7.352 = +1.55% vs +1.44%
+  regression at baseline) — the fix buys delivery at negligible CE cost.
+- Consistency with the diagnosis: mass is exactly the P7 cliff lever
+  (owner weight must sit above ~0.5-0.65 on lab_tiny); coverage targets
+  the P8 read-out positions. Arm C failing confirms coverage cannot
+  substitute for mass; arm B passing confirms mass is the primary lever.
+- What it rules out: "spine-conditional delivery is a capacity or data
+  problem" — it is a calibration problem, fixable in one router-only
+  pass on the existing state. The shaped-memory recipe is now
+  spine-portable with the owner_mass bump.
+- Next tried: KL 24/30 sweep points (g3res-kl24/kl30, queued same cycle)
+  to complete the residual-line log-linear curve; a full pipeline 8-base
+  run with owner_mass 0.85 + scoring home in the recipe is the natural
+  end-to-end confirmation if the bump is adopted.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.
