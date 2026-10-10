@@ -56,6 +56,8 @@ CONS_STEPS = int(os.environ.get("G3S_CONS_STEPS", "80"))
 RECAL_STEPS = int(os.environ.get("G3S_RECAL_STEPS", "800"))
 FINAL_JOINT = int(os.environ.get("G3S_FINAL_JOINT", "800"))
 TEXT_KL = float(os.environ.get("G3S_TEXT_KL", "3.0"))
+OWNER_MASS = float(os.environ.get("G3S_OWNER_MASS", "0.55"))
+HOME_MODE = os.environ.get("G3S_HOME_MODE", "prompt")   # or "scoring"
 CONS_LR = 2e-3
 RECAL_LR = 1e-2
 SEED = int(os.environ.get("G3S_SEED", "0"))
@@ -97,11 +99,34 @@ def load_fresh():
     return model, tok
 
 
+def scoring_home_ids(tok, ep):
+    """The exact prefixes delta_margin reads (prompt+stated[:divergence]).
+
+    The mex recal home data in "scoring" mode — covers the positions where
+    delivery is measured (g3res-ownerfix arm A)."""
+    out = []
+    for d in ep.deltas:
+        ps = (tok(d.prompt, add_special_tokens=False).input_ids
+              + tok(d.stated, add_special_tokens=False).input_ids)
+        pc = (tok(d.prompt, add_special_tokens=False).input_ids
+              + tok(d.correction, add_special_tokens=False).input_ids)
+        k = 0
+        while k < min(len(ps), len(pc)) and ps[k] == pc[k]:
+            k += 1
+        if 0 < k < len(ps) and k < len(pc):
+            out.append(torch.tensor([ps[:k]], dtype=torch.long, device=DEVICE))
+    return out
+
+
+def home_ids_for(tok, ep):
+    return (scoring_home_ids(tok, ep) if HOME_MODE == "scoring"
+            else ms.episode_home_ids(tok, ep, DEVICE))
+
+
 def measure_all(model, episodes, live):
     n_rows = model.layers[0]["ffn"].router.passports.shape[0]
     plug_rows = list(range(g1.BASE_EXPERTS, n_rows))
-    home_lists = [ms.episode_home_ids(tok_global, episodes[k], DEVICE)
-                  for k in live]
+    home_lists = [home_ids_for(tok_global, episodes[k]) for k in live]
     per_group = g3.routing_matrix_group(model, home_lists, plug_rows, PAD_ID)
     hits_b, diag = g3.routing_matrix(
         model, [[BASE_MIX[i]] for i in range(8)], plug_rows, PAD_ID)
@@ -117,6 +142,7 @@ def measure_all(model, episodes, live):
 def main():
     global tok_global, BASE_MIX, PAD_ID
     t0 = time.time()
+    g3.OWNER_MASS = OWNER_MASS
     os.makedirs(WORKDIR, exist_ok=True)
     os.makedirs(os.path.dirname(STATE_OUT), exist_ok=True)
     episodes = (ms.SHAPED_8 if N_EPS == 8 else ms.SHAPED_16)[:N_EPS]
@@ -159,7 +185,7 @@ def main():
             model, tok_global, episodes[j], BASE_MIX,
             steps=CONS_STEPS, lr=CONS_LR, device=DEVICE, tag=f"solo{j}",
             text_kl_coef=TEXT_KL)
-        home = [ms.episode_home_ids(tok_global, episodes[j], DEVICE)]
+        home = [home_ids_for(tok_global, episodes[j])]
         ms.plug_and_recal(model, experts, rows, home, BASE_MIX,
                           recal_steps=RECAL_STEPS, recal_lr=RECAL_LR,
                           device=DEVICE, pad_id=PAD_ID)
@@ -187,7 +213,7 @@ def main():
             model, tok_global, episodes[j], BASE_MIX,
             steps=CONS_STEPS, lr=CONS_LR, device=DEVICE, tag=f"ep{j}",
             text_kl_coef=TEXT_KL)
-        home_lists = [ms.episode_home_ids(tok_global, episodes[k], DEVICE)
+        home_lists = [home_ids_for(tok_global, episodes[k])
                       for k in range(N_EPS)]
         rstat = ms.plug_and_recal(
             model, experts, rows, [home_lists[k] for k in live + [j]],
@@ -213,7 +239,7 @@ def main():
 
     if FINAL_JOINT > 0:
         section(f"PHASE 2b — §4.4a final joint calibration ({FINAL_JOINT})")
-        home_lists = [ms.episode_home_ids(tok_global, episodes[k], DEVICE)
+        home_lists = [home_ids_for(tok_global, episodes[k])
                       for k in range(N_EPS)]
         g3.recal_mex(model, [home_lists[k] for k in live], BASE_MIX, PAD_ID,
                      steps=FINAL_JOINT, lr=RECAL_LR, device=DEVICE)
@@ -257,7 +283,9 @@ def main():
     torch.save({"state_dict": ms.state_dict_cpu(model),
                 "n": N_EPS, "episodes": [episodes[k].name for k in live],
                 "recipe": {"cons": CONS_STEPS, "recal": RECAL_STEPS,
-                           "joint": FINAL_JOINT, "text_kl": TEXT_KL}},
+                           "joint": FINAL_JOINT, "text_kl": TEXT_KL,
+                           "owner_mass": OWNER_MASS,
+                           "home_mode": HOME_MODE}},
                STATE_OUT)
     print(f"  state saved: {STATE_OUT}")
 
@@ -279,7 +307,8 @@ def main():
         "fixture": f"memory_shaping.SHAPED_{N_EPS} (all token-substitution deltas)",
         "shape_report": report,
         "recipe": {"cons": CONS_STEPS, "recal": RECAL_STEPS,
-                   "joint": FINAL_JOINT, "text_kl": TEXT_KL, "owner_mass": 0.55},
+                   "joint": FINAL_JOINT, "text_kl": TEXT_KL,
+                   "owner_mass": OWNER_MASS, "home_mode": HOME_MODE},
         "standing_bar": {"metric": "margin retention vs solo", "bar": ms.RETENTION_BAR,
                          "anchor_n8": ANCHOR_N8},
         "pre_library": {str(j): pre[j] for j in pre},
