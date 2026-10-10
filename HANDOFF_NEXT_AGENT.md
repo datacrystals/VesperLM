@@ -39,6 +39,59 @@ VESPER_TELEMETRY=1). Next gates: E1 (curiosity actuation) needs E0 data first.
 
 ---
 
+## 2026-10-10 — t3 VAL PLATEAU ROOT-CAUSE (CPU postmortem, lab/imported/t3_ckpts/)
+
+**Why val never beat 2.2678 @ 3100: the metric stopped tracking the objective at
+the phase-1→2 switch (step 3200), not the model.** Cause ranking:
+
+1. **Phase-switch distribution mismatch (primary).** `phase_switch_step = 0.8 ×
+   total_steps = 3200` (`02_pretrain_linear.py`; 470m_k config `total_steps`
+   4000). Train ≥3200 is 100% phase-2 files; val is FROZEN at 80/20
+   phase-1/phase-2 forever (5% tails of nemotron_phase{1,2} +
+   phase{1,2}_pretrain, probs 0.4/0.4/0.1/0.1). Loss curve: train CE cliffs
+   2.7→1.9 at 3200 (phase-2 data is easier) and keeps falling to 1.6 at exit;
+   val steps UP +0.1 (pre-switch band 2.27–2.46 → post-switch 2.45–2.59) and
+   flatlines. 80% of the metric measures a distribution the model is no longer
+   trained on. (The phase-2 val *component* is same-file held-out — the mismatch
+   is the frozen mixture, not the phase-2 sources.)
+2. **Val noise / best-point selection (secondary).** Each eval = 50 batches with
+   per-batch unseeded `np.random.choice` over 4 sources → ±~7pp mixture jitter;
+   val also wandered pre-switch (2500–2700 hit 2.66–2.74). 2.2678 is the trough
+   of a noisy series AND the last pre-switch point; "never improved after" is
+   partly a high bar set by a lucky draw.
+3. **LR floor (weak).** Cosine (warmup 300, max 2e-4, min 3e-5): 5.4e-5 @3100
+   (27% of max), 4.9e-5 @3200, 3.0e-5 @4000. Not floor-scraping when the
+   plateau starts, and train CE still descends hard through the tail →
+   optimizer not bound (the 3e-5 floor = 15% of max would eventually bind).
+
+**eval_samples (Q3): metric stall, not qualitative stall** — 3300–3900
+generations keep evolving and are at least as coherent as 3100's (3900 narrative
+prompts read clean; 2800 even had language-garbage). No forgetting/collapse.
+
+**Bonus finding (affects data planning): the whole vesperk corpus (~18B tokens:
+fineweb_edu/dclm/code/openwebmath/finemath/cosmopedia/wikipedia) was NEVER
+trained on.** Phase bucketing name-matches `'phase1' in name` / `'phase2' in
+name`, so only `pretrain/nemotron_phase{1,2}.bin` +
+`pretrain/phase{1,2}_pretrain.bin` land in the phase streams; `vesperk/*`
+matches neither, and the streams ignore index.txt weights anyway (`{k: 1.0}`).
+Accounting fits exactly: 2.94B pre-switch tokens = 0.88 epochs of the 3.33B
+phase-1 pool; 0.83B post-switch = 0.67 epochs of the 1.23B phase-2 pool. t3's
+3.77B tokens are pure nemotron-curriculum. (`lab/queue_done_prior/t3-470m-passport.json`
+is the earlier 1000-step swarm3 probe on the same config — not the full-run job.)
+
+**SFT-readiness verdict: GO with `step_best` (= val@3100) as the SFT base.**
+It is the last pre-specialization checkpoint — the most general weights of the
+run (later ckpts are phase-2-shifted and +0.1 on the curriculum val) — and
+qualitatively sound. Caveats: (a) 3100 vs 3000/3200 is within val noise — the
+exact pick matters little for SFT; (b) the base never saw the vesperk mix —
+don't expect the code/math/wiki breadth the corpus plan implied (3.77B tok ≈
+9.6 tok/param is lean); (c) any retrain/t4 should route non-phase sources into
+the phase streams (or an always-on stream), log per-phase val (or a val that
+tracks the current phase), and consider a lower min_lr for the tail. (The
+3990/4000 trainer-vanish stays undiagnosed; irrelevant to the plateau.)
+
+---
+
 ## 2026-10-10 03:35 UTC — SWARM5: speedrun-opts MI300X canary GREEN → MERGE READY ($0.49, destroyed+verified)
 
 - **Merge gate PASSED — recommend `git merge speedrun-opts` into main.** All 5
