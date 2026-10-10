@@ -1,0 +1,349 @@
+G3 margin re-score  N=8  device=cuda  cons=80 recal=800 joint=800
+
+========================================================================
+PHASE 0 — pre-library margins (bare spine)
+========================================================================
+  ep 0 math_words      logit -2.217  nll -0.610
+  ep 1 travel_rain     logit +3.537  nll -0.209
+  ep 2 author_marco    logit +4.878  nll -1.032
+  ep 3 distance_metric logit +7.104  nll +0.405
+  ep 4 treasure_pirate logit -5.216  nll +0.042
+  ep 5 eval_indeed     logit -5.877  nll -0.129
+  ep 6 emphasis_star   logit +7.617  nll -1.290
+  ep 7 dining_merci    logit +6.942  nll -0.490
+  demo probes (word-digit): [-3.3192, -3.8139, -3.922] mean -3.685
+
+========================================================================
+PHASE 1 — solo states (episode j alone, full recipe)
+========================================================================
+    [solo0 micro] step   0  loss +0.4131  policy -0.0740  kl 0.37488  text_kl 0.15614
+    [solo0 micro] step  10  loss -3.8263  policy -4.7663  kl 1.28716  text_kl 0.29188
+    [solo0 micro] step  20  loss +2.9189  policy +2.1826  kl 1.12296  text_kl 0.22672
+    [solo0 micro] step  30  loss -3.0765  policy -3.6507  kl 1.38903  text_kl 0.16824
+    [solo0 micro] step  40  loss +2.5183  policy +2.0857  kl 1.20812  text_kl 0.12406
+    [solo0 micro] step  50  loss -0.2300  policy -0.5696  kl 1.43359  text_kl 0.08931
+    [solo0 micro] step  60  loss -6.4559  policy -6.7761  kl 1.54471  text_kl 0.08098
+    [solo0 micro] step  70  loss -3.6409  policy -3.9651  kl 1.32137  text_kl 0.08606
+    [solo0 micro] step  79  loss -6.6039  policy -6.7991  kl 1.51025  text_kl 0.03990
+    [recal] step   0  loss +7.4688
+    [recal] step 133  loss +3.5988
+    [recal] step 266  loss +3.5944
+    [recal] step 399  loss +3.4924
+    [recal] step 532  loss +3.5652
+    [recal] step 665  loss +3.3996
+    [recal] step 798  loss +3.4017
+    [recal] step 799  loss +3.4036
+  solo ep 0 math_words      util 0.909  margin +4.740  gain +6.957  demo -1.986 (gain +1.699)
+    [solo1 micro] step   0  loss +0.5754  policy +0.0989  kl 0.16120  text_kl 0.15614
+    [solo1 micro] step  10  loss -3.8202  policy -4.4088  kl 0.42501  text_kl 0.18912
+    [solo1 micro] step  20  loss +8.2972  policy +7.7049  kl 0.68588  text_kl 0.18601
+    [solo1 micro] step  30  loss -0.4887  policy -1.1662  kl 0.67781  text_kl 0.21456
+    [solo1 micro] step  40  loss +4.6043  policy +4.1231  kl 0.86007  text_kl 0.14607
+    [solo1 micro] step  50  loss +4.1731  policy +3.7177  kl 0.64143  text_kl 0.14111
+    [solo1 micro] step  60  loss -5.1011  policy -5.3872  kl 0.37630  text_kl 0.08907
+    [solo1 micro] step  70  loss -2.4682  policy -2.7314  kl 0.67761  text_kl 0.07643
+    [solo1 micro] step  79  loss -6.7775  policy -7.0469  kl 0.50141  text_kl 0.08147
+    [recal] step   0  loss +7.7527
+    [recal] step 133  loss +4.3182
+    [recal] step 266  loss +3.8563
+    [recal] step 399  loss +3.7510
+    [recal] step 532  loss +3.8703
+    [recal] step 665  loss +3.6574
+    [recal] step 798  loss +3.6986
+    [recal] step 799  loss +3.6777
+  solo ep 1 travel_rain     util 0.726  margin +7.196  gain +3.659
+    [solo2 micro] step   0  loss +0.8710  policy +0.3955  kl 0.14137  text_kl 0.15614
+    [solo2 micro] step  10  loss -3.9669  policy -4.5616  kl 0.60706  text_kl 0.18811
+    [solo2 micro] step  20  loss +9.6673  policy +8.9371  kl 0.71577  text_kl 0.23149
+    [solo2 micro] step  30  loss +0.6478  policy -0.0287  kl 0.81050  text_kl 0.21199
+    [solo2 micro] step  40  loss +4.8075  policy +4.3146  kl 0.96840  text_kl 0.14816
+    [solo2 micro] step  50  loss +4.8894  policy +4.4733  kl 0.52460  text_kl 0.12998
+    [solo2 micro] step  60  loss -3.7704  policy -4.1168  kl 0.56825  text_kl 0.10599
+    [solo2 micro] step  70  loss -1.1211  policy -1.3596  kl 0.78225  text_kl 0.06647
+    [solo2 micro] step  79  loss -4.7067  policy -4.9334  kl 0.65246  text_kl 0.06469
+    [recal] step   0  loss +7.6985
+    [recal] step 133  loss +4.3057
+    [recal] step 266  loss +3.8721
+    [recal] step 399  loss +3.6969
+    [recal] step 532  loss +3.8029
+    [recal] step 665  loss +3.5623
+    [recal] step 798  loss +3.6246
+    [recal] step 799  loss +3.5880
+  solo ep 2 author_marco    util 0.851  margin +9.467  gain +4.589
+    [solo3 micro] step   0  loss +0.4195  policy -0.0578  kl 0.17768  text_kl 0.15614
+    [solo3 micro] step  10  loss -4.5346  policy -5.1222  kl 0.57539  text_kl 0.18627
+    [solo3 micro] step  20  loss +9.5574  policy +8.7951  kl 1.18516  text_kl 0.23433
+    [solo3 micro] step  30  loss +0.0998  policy -0.5013  kl 0.81509  text_kl 0.18679
+    [solo3 micro] step  40  loss +4.5531  policy +4.0092  kl 0.89267  text_kl 0.16640
+    [solo3 micro] step  50  loss +5.1019  policy +4.6570  kl 1.43696  text_kl 0.12434
+    [solo3 micro] step  60  loss -5.6526  policy -5.9580  kl 0.82017  text_kl 0.08815
+    [solo3 micro] step  70  loss -2.8279  policy -3.1002  kl 1.10105  text_kl 0.07239
+    [solo3 micro] step  79  loss -7.4228  policy -7.6690  kl 0.99262  text_kl 0.06552
+    [recal] step   0  loss +5.8813
+    [recal] step 133  loss +3.7680
+    [recal] step 266  loss +3.6201
+    [recal] step 399  loss +3.5258
+    [recal] step 532  loss +3.6017
+    [recal] step 665  loss +3.4120
+    [recal] step 798  loss +3.4568
+    [recal] step 799  loss +3.4261
+  solo ep 3 distance_metric util 0.830  margin +12.427  gain +5.323
+    [solo4 micro] step   0  loss +1.0543  policy +0.5760  kl 0.19883  text_kl 0.15614
+    [solo4 micro] step  10  loss -5.1147  policy -5.7611  kl 0.63246  text_kl 0.20495
+    [solo4 micro] step  20  loss +5.8955  policy +5.3358  kl 0.86470  text_kl 0.17217
+    [solo4 micro] step  30  loss -3.2707  policy -3.9350  kl 1.14346  text_kl 0.20238
+    [solo4 micro] step  40  loss +5.4077  policy +4.7577  kl 1.50431  text_kl 0.19158
+    [solo4 micro] step  50  loss -2.1271  policy -2.6096  kl 1.36453  text_kl 0.13808
+    [solo4 micro] step  60  loss -14.9023  policy -15.3810  kl 1.75960  text_kl 0.13023
+    [solo4 micro] step  70  loss -9.3802  policy -9.7697  kl 1.53321  text_kl 0.10428
+    [solo4 micro] step  79  loss -16.2929  policy -16.6616  kl 1.88931  text_kl 0.09139
+    [recal] step   0  loss +6.3850
+    [recal] step 133  loss +3.9609
+    [recal] step 266  loss +3.5999
+    [recal] step 399  loss +3.4992
+    [recal] step 532  loss +3.6338
+    [recal] step 665  loss +3.4301
+    [recal] step 798  loss +3.4630
+    [recal] step 799  loss +3.4506
+  solo ep 4 treasure_pirate util 0.766  margin +5.288  gain +10.505
+    [solo5 micro] step   0  loss +0.6428  policy +0.1651  kl 0.18640  text_kl 0.15614
+    [solo5 micro] step  10  loss -6.0900  policy -6.7523  kl 0.81141  text_kl 0.20727
+    [solo5 micro] step  20  loss +6.7696  policy +6.0872  kl 1.20115  text_kl 0.20744
+    [solo5 micro] step  30  loss -4.3458  policy -4.9396  kl 1.20846  text_kl 0.17779
+    [solo5 micro] step  40  loss +4.0363  policy +3.5530  kl 1.61939  text_kl 0.13410
+    [solo5 micro] step  50  loss -1.1308  policy -1.6354  kl 1.86698  text_kl 0.13706
+    [solo5 micro] step  60  loss -15.8650  policy -16.3933  kl 2.32586  text_kl 0.13735
+    [solo5 micro] step  70  loss -9.4220  policy -9.7723  kl 1.65728  text_kl 0.08917
+    [solo5 micro] step  79  loss -15.4732  policy -15.8251  kl 1.90631  text_kl 0.08552
+    [recal] step   0  loss +6.8504
+    [recal] step 133  loss +4.2207
+    [recal] step 266  loss +3.6683
+    [recal] step 399  loss +3.5328
+    [recal] step 532  loss +3.6625
+    [recal] step 665  loss +3.4456
+    [recal] step 798  loss +3.4804
+    [recal] step 799  loss +3.4821
+  solo ep 5 eval_indeed     util 0.788  margin +2.741  gain +8.618
+    [solo6 micro] step   0  loss +0.7467  policy +0.2678  kl 0.20894  text_kl 0.15614
+    [solo6 micro] step  10  loss -5.4395  policy -5.9790  kl 0.46712  text_kl 0.17202
+    [solo6 micro] step  20  loss +10.6778  policy +9.9287  kl 1.26892  text_kl 0.22856
+    [solo6 micro] step  30  loss +0.5261  policy -0.1521  kl 0.85259  text_kl 0.21184
+    [solo6 micro] step  40  loss +4.8384  policy +4.2573  kl 1.07627  text_kl 0.17576
+    [solo6 micro] step  50  loss +5.8309  policy +5.3196  kl 1.67280  text_kl 0.14257
+    [solo6 micro] step  60  loss -9.8576  policy -10.1889  kl 0.96247  text_kl 0.09439
+    [solo6 micro] step  70  loss -5.0746  policy -5.4121  kl 1.05455  text_kl 0.09494
+    [solo6 micro] step  79  loss -10.4849  policy -10.7481  kl 1.24509  text_kl 0.06699
+    [recal] step   0  loss +8.2048
+    [recal] step 133  loss +4.4344
+    [recal] step 266  loss +3.7239
+    [recal] step 399  loss +3.6156
+    [recal] step 532  loss +3.7076
+    [recal] step 665  loss +3.4899
+    [recal] step 798  loss +3.5276
+    [recal] step 799  loss +3.4966
+  solo ep 6 emphasis_star   util 0.784  margin +12.582  gain +4.965
+    [solo7 micro] step   0  loss +0.2406  policy -0.2351  kl 0.14507  text_kl 0.15614
+    [solo7 micro] step  10  loss -4.2924  policy -4.8940  kl 0.49989  text_kl 0.19220
+    [solo7 micro] step  20  loss +9.6020  policy +9.0927  kl 0.85073  text_kl 0.15558
+    [solo7 micro] step  30  loss +0.7519  policy +0.1295  kl 0.81888  text_kl 0.19382
+    [solo7 micro] step  40  loss +3.8929  policy +3.4741  kl 1.00138  text_kl 0.12292
+    [solo7 micro] step  50  loss +5.7772  policy +5.3707  kl 0.83619  text_kl 0.12157
+    [solo7 micro] step  60  loss -4.8916  policy -5.1900  kl 0.49817  text_kl 0.09115
+    [solo7 micro] step  70  loss -1.6616  policy -1.9604  kl 0.56604  text_kl 0.09016
+    [solo7 micro] step  79  loss -4.2860  policy -4.5468  kl 0.33493  text_kl 0.08136
+    [recal] step   0  loss +7.8025
+    [recal] step 133  loss +4.2675
+    [recal] step 266  loss +3.7505
+    [recal] step 399  loss +3.6465
+    [recal] step 532  loss +3.7332
+    [recal] step 665  loss +3.5347
+    [recal] step 798  loss +3.5629
+    [recal] step 799  loss +3.5545
+  solo ep 7 dining_merci    util 0.827  margin +11.896  gain +4.954
+
+========================================================================
+PHASE 2 — N=8 library build (ctrlB recipe)
+========================================================================
+    [ep0 micro] step   0  loss +0.4131  policy -0.0740  kl 0.37488  text_kl 0.15614
+    [ep0 micro] step  10  loss -3.8263  policy -4.7663  kl 1.28716  text_kl 0.29188
+    [ep0 micro] step  20  loss +2.9189  policy +2.1826  kl 1.12296  text_kl 0.22672
+    [ep0 micro] step  30  loss -3.0765  policy -3.6507  kl 1.38903  text_kl 0.16824
+    [ep0 micro] step  40  loss +2.5183  policy +2.0857  kl 1.20812  text_kl 0.12406
+    [ep0 micro] step  50  loss -0.2300  policy -0.5696  kl 1.43359  text_kl 0.08931
+    [ep0 micro] step  60  loss -6.4559  policy -6.7761  kl 1.54471  text_kl 0.08098
+    [ep0 micro] step  70  loss -3.6409  policy -3.9651  kl 1.32137  text_kl 0.08606
+    [ep0 micro] step  79  loss -6.6039  policy -6.7991  kl 1.51025  text_kl 0.03990
+    [recal] step   0  loss +7.4688
+    [recal] step 133  loss +3.5988
+    [recal] step 266  loss +3.5944
+    [recal] step 399  loss +3.4924
+    [recal] step 532  loss +3.5652
+    [recal] step 665  loss +3.3996
+    [recal] step 798  loss +3.4017
+    [recal] step 799  loss +3.4036
+  insert 1/8 math_words      e0 util 0.91 mgn +4.74
+    [ep1 micro] step   0  loss +0.6395  policy +0.0989  kl 0.16518  text_kl 0.17746
+    [ep1 micro] step  10  loss -3.8218  policy -4.4819  kl 0.41692  text_kl 0.21308
+    [ep1 micro] step  20  loss +8.0900  policy +7.6160  kl 0.64469  text_kl 0.14727
+    [ep1 micro] step  30  loss -0.4949  policy -1.2051  kl 0.65009  text_kl 0.22591
+    [ep1 micro] step  40  loss +4.7340  policy +4.1436  kl 0.78025  text_kl 0.18378
+    [ep1 micro] step  50  loss +4.0421  policy +3.5552  kl 0.70252  text_kl 0.15059
+    [ep1 micro] step  60  loss -4.8540  policy -5.2057  kl 0.58548  text_kl 0.10747
+    [ep1 micro] step  70  loss -2.4721  policy -2.7064  kl 0.78755  text_kl 0.06497
+    [ep1 micro] step  79  loss -6.8650  policy -7.1586  kl 0.63219  text_kl 0.08731
+    [recal] step   0  loss +7.1015
+    [recal] step 133  loss +3.8359
+    [recal] step 266  loss +3.5186
+    [recal] step 399  loss +3.4278
+    [recal] step 532  loss +3.4729
+    [recal] step 665  loss +3.3323
+    [recal] step 798  loss +3.3532
+    [recal] step 799  loss +3.3408
+  insert 2/8 travel_rain     e0 util 0.95 mgn +5.36 e1 util 0.69 mgn +6.54
+    [ep2 micro] step   0  loss +0.9724  policy +0.3955  kl 0.31687  text_kl 0.18700
+    [ep2 micro] step  10  loss -3.8720  policy -4.5103  kl 0.57794  text_kl 0.20314
+    [ep2 micro] step  20  loss +9.6555  policy +8.7665  kl 0.69772  text_kl 0.28470
+    [ep2 micro] step  30  loss +0.7246  policy -0.0403  kl 0.69043  text_kl 0.24349
+    [ep2 micro] step  40  loss +4.8606  policy +4.3742  kl 0.83567  text_kl 0.14822
+    [ep2 micro] step  50  loss +4.7888  policy +4.3453  kl 0.62205  text_kl 0.13748
+    [ep2 micro] step  60  loss -3.8217  policy -4.1063  kl 0.45196  text_kl 0.08733
+    [ep2 micro] step  70  loss -1.1088  policy -1.3274  kl 0.69093  text_kl 0.06132
+    [ep2 micro] step  79  loss -4.7400  policy -4.9384  kl 0.55292  text_kl 0.05694
+    [recal] step   0  loss +6.6113
+    [recal] step 133  loss +3.6438
+    [recal] step 266  loss +3.5088
+    [recal] step 399  loss +3.4376
+    [recal] step 532  loss +3.4752
+    [recal] step 665  loss +3.3711
+    [recal] step 798  loss +3.3895
+    [recal] step 799  loss +3.3758
+  insert 3/8 author_marco    e0 util 0.93 mgn +5.32 e1 util 0.58 mgn +5.07 e2 util 0.64 mgn +7.87
+    [ep3 micro] step   0  loss +0.5408  policy -0.0578  kl 0.22079  text_kl 0.19583
+    [ep3 micro] step  10  loss -4.9772  policy -5.4515  kl 0.62528  text_kl 0.14768
+    [ep3 micro] step  20  loss +9.8462  policy +9.2848  kl 1.42503  text_kl 0.16339
+    [ep3 micro] step  30  loss +0.5057  policy -0.0999  kl 1.03931  text_kl 0.18453
+    [ep3 micro] step  40  loss +4.2266  policy +3.7897  kl 1.13014  text_kl 0.12677
+    [ep3 micro] step  50  loss +5.6487  policy +5.2555  kl 1.53634  text_kl 0.10546
+    [ep3 micro] step  60  loss -8.1190  policy -8.4383  kl 1.07465  text_kl 0.08852
+    [ep3 micro] step  70  loss -2.9835  policy -3.2618  kl 1.08977  text_kl 0.07460
+    [ep3 micro] step  79  loss -6.8936  policy -7.2274  kl 0.89088  text_kl 0.09644
+    [recal] step   0  loss +6.9152
+    [recal] step 133  loss +3.7010
+    [recal] step 266  loss +3.5079
+    [recal] step 399  loss +3.4591
+    [recal] step 532  loss +3.4824
+    [recal] step 665  loss +3.3914
+    [recal] step 798  loss +3.4100
+    [recal] step 799  loss +3.4018
+  insert 4/8 distance_metric e0 util 0.93 mgn +5.46 e1 util 0.50 mgn +4.57 e2 util 0.59 mgn +7.94 e3 util 0.50 mgn +8.92
+    [ep4 micro] step   0  loss +1.2126  policy +0.5760  kl 0.30675  text_kl 0.20709
+    [ep4 micro] step  10  loss -5.1495  policy -5.7753  kl 0.57095  text_kl 0.19908
+    [ep4 micro] step  20  loss +6.0927  policy +5.5133  kl 0.88704  text_kl 0.17834
+    [ep4 micro] step  30  loss -3.6309  policy -4.2663  kl 0.98907  text_kl 0.19533
+    [ep4 micro] step  40  loss +4.7779  policy +4.2780  kl 1.15141  text_kl 0.14745
+    [ep4 micro] step  50  loss +0.2992  policy -0.8119  kl 1.77980  text_kl 0.34068
+    [ep4 micro] step  60  loss -12.0029  policy -12.5597  kl 1.47571  text_kl 0.16103
+    [ep4 micro] step  70  loss -7.5938  policy -8.0493  kl 1.36173  text_kl 0.12913
+    [ep4 micro] step  79  loss -15.6972  policy -16.2347  kl 1.61239  text_kl 0.15230
+    [recal] step   0  loss +7.0222
+    [recal] step 133  loss +3.8598
+    [recal] step 266  loss +3.5182
+    [recal] step 399  loss +3.4723
+    [recal] step 532  loss +3.4960
+    [recal] step 665  loss +3.4313
+    [recal] step 798  loss +3.4359
+    [recal] step 799  loss +3.4252
+  insert 5/8 treasure_pirate e0 util 0.89 mgn +5.48 e1 util 0.43 mgn +4.67 e2 util 0.57 mgn +6.40 e3 util 0.53 mgn +7.99 e4 util 0.42 mgn +3.88
+    [ep5 micro] step   0  loss +0.7981  policy +0.1651  kl 0.39734  text_kl 0.20440
+    [ep5 micro] step  10  loss -6.6056  policy -7.1620  kl 0.66571  text_kl 0.17436
+    [ep5 micro] step  20  loss +6.4929  policy +5.9861  kl 0.99374  text_kl 0.15236
+    [ep5 micro] step  30  loss -4.1777  policy -4.8805  kl 1.20570  text_kl 0.21416
+    [ep5 micro] step  40  loss +4.5276  policy +3.8638  kl 1.50578  text_kl 0.19618
+    [ep5 micro] step  50  loss -1.5540  policy -2.0995  kl 2.26747  text_kl 0.14406
+    [ep5 micro] step  60  loss -15.8511  policy -16.3301  kl 2.09990  text_kl 0.12466
+    [ep5 micro] step  70  loss -9.1481  policy -9.4777  kl 1.53463  text_kl 0.08432
+    [ep5 micro] step  79  loss -15.1014  policy -15.3721  kl 1.81983  text_kl 0.05991
+    [recal] step   0  loss +6.2914
+    [recal] step 133  loss +3.6488
+    [recal] step 266  loss +3.5643
+    [recal] step 399  loss +3.5276
+    [recal] step 532  loss +3.5446
+    [recal] step 665  loss +3.4876
+    [recal] step 798  loss +3.4979
+    [recal] step 799  loss +3.4873
+  insert 6/8 eval_indeed     e0 util 0.89 mgn +5.38 e1 util 0.41 mgn +4.38 e2 util 0.47 mgn +6.30 e3 util 0.50 mgn +7.44 e4 util 0.43 mgn +3.96 e5 util 0.36 mgn -6.29
+    [ep6 micro] step   0  loss +0.9438  policy +0.2678  kl 0.86470  text_kl 0.21092
+    [ep6 micro] step  10  loss -5.2091  policy -5.7877  kl 0.43665  text_kl 0.18557
+    [ep6 micro] step  20  loss +10.8190  policy +10.0368  kl 1.29628  text_kl 0.23914
+    [ep6 micro] step  30  loss +0.6788  policy +0.0578  kl 0.93353  text_kl 0.19145
+    [ep6 micro] step  40  loss +4.5999  policy +4.0196  kl 1.11243  text_kl 0.17491
+    [ep6 micro] step  50  loss +5.9206  policy +5.4367  kl 1.47725  text_kl 0.13668
+    [ep6 micro] step  60  loss -8.5488  policy -8.8880  kl 0.81978  text_kl 0.09940
+    [ep6 micro] step  70  loss -4.3226  policy -4.5979  kl 0.97920  text_kl 0.07544
+    [ep6 micro] step  79  loss -11.1540  policy -11.4413  kl 0.98573  text_kl 0.07933
+    [recal] step   0  loss +8.1648
+    [recal] step 133  loss +3.9459
+    [recal] step 266  loss +3.6118
+    [recal] step 399  loss +3.5707
+    [recal] step 532  loss +3.5838
+    [recal] step 665  loss +3.5358
+    [recal] step 798  loss +3.5456
+    [recal] step 799  loss +3.5371
+  insert 7/8 emphasis_star   e0 util 0.88 mgn +5.24 e1 util 0.36 mgn +5.59 e2 util 0.43 mgn +6.37 e3 util 0.44 mgn +6.78 e4 util 0.40 mgn -1.81 e5 util 0.38 mgn -5.51 e6 util 0.43 mgn +7.74
+    [ep7 micro] step   0  loss +0.3951  policy -0.2351  kl 0.23787  text_kl 0.20611
+    [ep7 micro] step  10  loss -4.3995  policy -4.9300  kl 0.34332  text_kl 0.17109
+    [ep7 micro] step  20  loss +9.9258  policy +9.2876  kl 0.72235  text_kl 0.20071
+    [ep7 micro] step  30  loss +0.6741  policy +0.0765  kl 0.85518  text_kl 0.18492
+    [ep7 micro] step  40  loss +3.9376  policy +3.5193  kl 1.05592  text_kl 0.12185
+    [ep7 micro] step  50  loss +5.9136  policy +5.5625  kl 0.67353  text_kl 0.10579
+    [ep7 micro] step  60  loss -5.9544  policy -6.2101  kl 0.43662  text_kl 0.07796
+    [ep7 micro] step  70  loss -1.8676  policy -2.1036  kl 0.66441  text_kl 0.06761
+    [ep7 micro] step  79  loss -4.7735  policy -5.0386  kl 0.35721  text_kl 0.08240
+    [recal] step   0  loss +7.7291
+    [recal] step 133  loss +4.0080
+    [recal] step 266  loss +3.6640
+    [recal] step 399  loss +3.6331
+    [recal] step 532  loss +3.6440
+    [recal] step 665  loss +3.6004
+    [recal] step 798  loss +3.5957
+    [recal] step 799  loss +3.5889
+  insert 8/8 dining_merci    e0 util 0.89 mgn +5.36 e1 util 0.33 mgn +5.18 e2 util 0.37 mgn +5.94 e3 util 0.44 mgn +7.63 e4 util 0.35 mgn -2.10 e5 util 0.39 mgn -5.51 e6 util 0.56 mgn +9.63 e7 util 0.20 mgn +8.15
+
+========================================================================
+PHASE 2b — §4.4a final joint calibration (800)
+========================================================================
+    [recal] step   0  loss +3.5727
+    [recal] step 133  loss +3.5519
+    [recal] step 266  loss +3.5822
+    [recal] step 399  loss +3.5690
+    [recal] step 532  loss +3.5889
+    [recal] step 665  loss +3.5463
+    [recal] step 798  loss +3.5505
+    [recal] step 799  loss +3.5458
+
+========================================================================
+PHASE 3 — library-state margins (final)
+========================================================================
+   ep episode             pre    solo     lib gain_lib gain_solo retention   util
+    0 math_words       -2.217  +4.740  +5.247   +7.464    +6.957     1.073  0.902
+    1 travel_rain      +3.537  +7.196  +5.540   +2.003    +3.659     0.547  0.339
+    2 author_marco     +4.878  +9.467  +5.342   +0.464    +4.589     0.101  0.418
+    3 distance_metric  +7.104 +12.427  +6.793   -0.310    +5.323    -0.058  0.447
+    4 treasure_pirate  -5.216  +5.288  +2.830   +8.047   +10.505     0.766  0.385
+    5 eval_indeed      -5.877  +2.741  -5.027   +0.851    +8.618     0.099  0.412
+    6 emphasis_star    +7.617 +12.582  +9.566   +1.949    +4.965     0.393  0.567
+    7 dining_merci     +6.942 +11.896  +7.939   +0.998    +4.954     0.201  0.295
+  demo probes on library: [-2.217, -2.0086, -1.8984] mean -2.041  gain +1.644  (G1b N=1 gain +4.588)
+  state saved: /home/tliao/VesperLM/lab/sandbox/g3_margin/n8_state.pt
+
+========================================================================
+PHASE 4 — verdict
+========================================================================
+  mean margin gain (lib): +2.683  (bar: >= +3.212 = 70% of G1b 4.588)
+  mean retention vs solo: 0.390  (bar: >= 0.70)
+  experts at util<0.5: 6/8  their mean gain: +2.009
+  demo-probe gain on library: +1.644  vs G1b +4.588
+  VERDICT: MARGINS_COLLAPSE — addressing pivot confirmed; hierarchical passports stay ACTIVE
+
+wrote /home/tliao/VesperLM/lab/results/g3_margin_n8.json
+total time: 2133.2s

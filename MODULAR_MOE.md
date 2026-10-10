@@ -423,12 +423,30 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   coexistence, passport stays a domain-expert tool. Fallback tree rung 4
   ACTIVE (hierarchical domain→memory passports), with capacity/orthogonality
   rungs noted (orthogonal row inits, larger passport_dim, per-domain
-  sub-banks). **Before any new-addressing build, run the cheap re-score:**
-  util_home is a proxy — measure the TAUGHT-FACT MARGINS (G1b criterion a)
-  at N=8/16 on the failed states. If margins hold at util ~0.4 (expert fires
-  less often but lands hard when it does), the product requirement survives
-  and the util bar, not the architecture, gets revised. Margins failing too
-  confirms the addressing pivot.
+  sub-banks). **G3 margin re-score (2026-10-09, the cheap decisive check —
+  DONE): taught-fact margins were measured on the rebuilt N=8 full-recipe
+  library state vs both the pre-library spine and per-episode solo (N=1
+  full-delivery) references (lab/g3_margin_rescore.py,
+  lab/results/g3_margin_n8.json). VERDICT: MARGINS COLLAPSE — the addressing
+  pivot is CONFIRMED and hierarchical passports stay ACTIVE.** Mean margin
+  retention vs solo = **0.390** (bar 0.70) with huge per-episode spread:
+  ep0 math_words 1.073 (util 0.90 — the G1 fact survives intact; demo-probe
+  retention 0.97: pre −3.685 → solo −1.986 → lib −2.041), ep4 treasure_pirate
+  0.766 (util 0.385 — low util CAN still deliver), but ep2/ep3/ep5/ep7 collapse
+  to 0.10/−0.06/0.10/0.20 (util 0.30–0.45). Mean gain +2.68 vs the 70%-of-G1b
+  bar +3.21; 6 of 8 experts below util 0.5 average only +2.01 gain vs +6.27
+  solo. Pearson(util, retention) = **0.61** — margins do decay with util, but
+  the scatter is the story: **the util bar mispredicts in BOTH directions**
+  (ep6 passed util at 0.567 yet kept only 0.39; ep4 failed util at 0.385 yet
+  kept 0.77). So util_home is a poor product gate — but replacing it with a
+  margin-retention bar does not save the architecture: the library state
+  fails the 0.70 retention bar too. Product requirement (retention of taught
+  facts at N=8) does NOT survive in aggregate. Cross-checks: NLL margins
+  agree (ep5 +11.3 solo → +1.27 lib), and the G1 math fact specifically
+  survives (retention ~1.0) while the synthetic tag-style facts mostly do
+  not. N=16 was not re-scored (the g3 runs never persisted a state dict;
+  N=8 was rebuilt from scratch and is now saved at
+  lab/sandbox/g3_margin/n8_state.pt for any follow-up).
   Original gate text: 16 episodic experts plugged sequentially
   into t2 (tiny_agent_k); all section-6 purity gates still hold for every
   expert, and base-mix val CE has not regressed >1% vs pre-library. This

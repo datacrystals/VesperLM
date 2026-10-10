@@ -1,0 +1,808 @@
+{
+  "gate": "G3-margin-rescore",
+  "verdict": "MARGINS_COLLAPSE",
+  "n_episodes": 8,
+  "spine": "/home/tliao/VesperLM/lab/sandbox/t1-diag-realdata-mb4/vesper_linear_checkpoints_lab_small/step_best",
+  "recipe": {
+    "cons": 80,
+    "recal": 800,
+    "joint": 800,
+    "text_kl": 3.0,
+    "owner_mass": 0.55
+  },
+  "g1b_reference_gain": 4.588,
+  "pre_library": {
+    "0": {
+      "facts": [
+        {
+          "prompt": "What is 2 + 2?",
+          "logit_margin": -2.2185,
+          "nll_margin": -0.754
+        },
+        {
+          "prompt": "What is 5 + 3?",
+          "logit_margin": -2.588,
+          "nll_margin": -0.6178
+        },
+        {
+          "prompt": "What is 10 minus 7?",
+          "logit_margin": -1.8435,
+          "nll_margin": -0.459
+        }
+      ],
+      "mean_logit_margin": -2.2167,
+      "mean_nll_margin": -0.6103
+    },
+    "1": {
+      "facts": [
+        {
+          "prompt": "What should I pack for the coastal hike this weekend?",
+          "logit_margin": 3.238,
+          "nll_margin": 0.0893
+        },
+        {
+          "prompt": "Is the morning ferry a good way to reach the island?",
+          "logit_margin": 3.6563,
+          "nll_margin": -0.4637
+        },
+        {
+          "prompt": "How do I keep my camera dry on the boat?",
+          "logit_margin": 3.7164,
+          "nll_margin": -0.2539
+        }
+      ],
+      "mean_logit_margin": 3.5369,
+      "mean_nll_margin": -0.2094
+    },
+    "2": {
+      "facts": [
+        {
+          "prompt": "Who compiled the quarterly report for the board?",
+          "logit_margin": 4.9967,
+          "nll_margin": -1.1623
+        },
+        {
+          "prompt": "What is the main claim of the paper on coral bleaching?",
+          "logit_margin": 4.6975,
+          "nll_margin": -0.6859
+        },
+        {
+          "prompt": "How long did the editor spend on the manuscript?",
+          "logit_margin": 4.9397,
+          "nll_margin": -1.2482
+        }
+      ],
+      "mean_logit_margin": 4.878,
+      "mean_nll_margin": -1.0321
+    },
+    "3": {
+      "facts": [
+        {
+          "prompt": "How far is the market from the old bridge?",
+          "logit_margin": 7.2912,
+          "nll_margin": 0.5589
+        },
+        {
+          "prompt": "What is the thickness of the oak tabletop?",
+          "logit_margin": 7.3158,
+          "nll_margin": 0.1653
+        },
+        {
+          "prompt": "How tall is the lighthouse gallery?",
+          "logit_margin": 6.7034,
+          "nll_margin": 0.4914
+        }
+      ],
+      "mean_logit_margin": 7.1035,
+      "mean_nll_margin": 0.4052
+    },
+    "4": {
+      "facts": [
+        {
+          "prompt": "Where did the crew bury the chest of coins?",
+          "logit_margin": -4.1799,
+          "nll_margin": -0.118
+        },
+        {
+          "prompt": "How do I find the cave behind the waterfall?",
+          "logit_margin": -3.5162,
+          "nll_margin": -0.2766
+        },
+        {
+          "prompt": "What marks the spot of the old shipwreck?",
+          "logit_margin": -7.953,
+          "nll_margin": 0.52
+        }
+      ],
+      "mean_logit_margin": -5.2164,
+      "mean_nll_margin": 0.0418
+    },
+    "5": {
+      "facts": [
+        {
+          "prompt": "Is the new bridge design structurally sound?",
+          "logit_margin": -6.6033,
+          "nll_margin": 0.0518
+        },
+        {
+          "prompt": "Does the revised syllabus suit the beginners?",
+          "logit_margin": -4.3462,
+          "nll_margin": -0.5885
+        },
+        {
+          "prompt": "Was the referee right to show the red card?",
+          "logit_margin": -6.6821,
+          "nll_margin": 0.1491
+        }
+      ],
+      "mean_logit_margin": -5.8772,
+      "mean_nll_margin": -0.1292
+    },
+    "6": {
+      "facts": [
+        {
+          "prompt": "Should we lock the laboratory door overnight?",
+          "logit_margin": 7.7482,
+          "nll_margin": -1.2642
+        },
+        {
+          "prompt": "Do I really need to cite every source?",
+          "logit_margin": 8.2511,
+          "nll_margin": -1.599
+        },
+        {
+          "prompt": "Must the calipers be recalibrated weekly?",
+          "logit_margin": 6.8515,
+          "nll_margin": -1.0055
+        }
+      ],
+      "mean_logit_margin": 7.6169,
+      "mean_nll_margin": -1.2896
+    },
+    "7": {
+      "facts": [
+        {
+          "prompt": "What should I order at the little bistro near the pier?",
+          "logit_margin": 7.0019,
+          "nll_margin": -0.358
+        },
+        {
+          "prompt": "Is the house wine drinkable with the stew?",
+          "logit_margin": 7.0539,
+          "nll_margin": -0.219
+        },
+        {
+          "prompt": "How long should the duck rest before carving?",
+          "logit_margin": 6.7695,
+          "nll_margin": -0.8939
+        }
+      ],
+      "mean_logit_margin": 6.9418,
+      "mean_nll_margin": -0.4903
+    }
+  },
+  "pre_demo_probes": {
+    "per_probe": [
+      -3.3192,
+      -3.8139,
+      -3.922
+    ],
+    "mean": -3.685
+  },
+  "solo": {
+    "0": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "What is 2 + 2?",
+            "logit_margin": 4.8424,
+            "nll_margin": 7.0326
+          },
+          {
+            "prompt": "What is 5 + 3?",
+            "logit_margin": 3.7281,
+            "nll_margin": 7.3283
+          },
+          {
+            "prompt": "What is 10 minus 7?",
+            "logit_margin": 5.6494,
+            "nll_margin": 7.0591
+          }
+        ],
+        "mean_logit_margin": 4.74,
+        "mean_nll_margin": 7.14
+      },
+      "util_home": 0.9091,
+      "gain_logit": 6.9567,
+      "gain_nll": 7.7503,
+      "demo_probes": {
+        "per_probe": [
+          -2.0902,
+          -1.8559,
+          -2.0116
+        ],
+        "mean": -1.9859
+      }
+    },
+    "1": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "What should I pack for the coastal hike this weekend?",
+            "logit_margin": 5.9017,
+            "nll_margin": 1.3005
+          },
+          {
+            "prompt": "Is the morning ferry a good way to reach the island?",
+            "logit_margin": 6.5743,
+            "nll_margin": 1.4123
+          },
+          {
+            "prompt": "How do I keep my camera dry on the boat?",
+            "logit_margin": 9.1124,
+            "nll_margin": 3.9443
+          }
+        ],
+        "mean_logit_margin": 7.1961,
+        "mean_nll_margin": 2.219
+      },
+      "util_home": 0.7264,
+      "gain_logit": 3.6592,
+      "gain_nll": 2.4284,
+      "demo_probes": null
+    },
+    "2": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "Who compiled the quarterly report for the board?",
+            "logit_margin": 8.8484,
+            "nll_margin": 0.0202
+          },
+          {
+            "prompt": "What is the main claim of the paper on coral bleaching?",
+            "logit_margin": 9.7638,
+            "nll_margin": 0.7295
+          },
+          {
+            "prompt": "How long did the editor spend on the manuscript?",
+            "logit_margin": 9.7899,
+            "nll_margin": 1.4091
+          }
+        ],
+        "mean_logit_margin": 9.4674,
+        "mean_nll_margin": 0.7196
+      },
+      "util_home": 0.8511,
+      "gain_logit": 4.5894,
+      "gain_nll": 1.7517,
+      "demo_probes": null
+    },
+    "3": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How far is the market from the old bridge?",
+            "logit_margin": 12.532,
+            "nll_margin": 3.7959
+          },
+          {
+            "prompt": "What is the thickness of the oak tabletop?",
+            "logit_margin": 12.5698,
+            "nll_margin": 3.5872
+          },
+          {
+            "prompt": "How tall is the lighthouse gallery?",
+            "logit_margin": 12.1781,
+            "nll_margin": 2.8669
+          }
+        ],
+        "mean_logit_margin": 12.4266,
+        "mean_nll_margin": 3.4167
+      },
+      "util_home": 0.8303,
+      "gain_logit": 5.3231,
+      "gain_nll": 3.0115,
+      "demo_probes": null
+    },
+    "4": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "Where did the crew bury the chest of coins?",
+            "logit_margin": 10.9464,
+            "nll_margin": 12.6542
+          },
+          {
+            "prompt": "How do I find the cave behind the waterfall?",
+            "logit_margin": 9.167,
+            "nll_margin": 9.6287
+          },
+          {
+            "prompt": "What marks the spot of the old shipwreck?",
+            "logit_margin": -4.2478,
+            "nll_margin": 4.4266
+          }
+        ],
+        "mean_logit_margin": 5.2885,
+        "mean_nll_margin": 8.9032
+      },
+      "util_home": 0.766,
+      "gain_logit": 10.5049,
+      "gain_nll": 8.8614,
+      "demo_probes": null
+    },
+    "5": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "Is the new bridge design structurally sound?",
+            "logit_margin": -6.1245,
+            "nll_margin": 6.775
+          },
+          {
+            "prompt": "Does the revised syllabus suit the beginners?",
+            "logit_margin": -2.2697,
+            "nll_margin": 9.7342
+          },
+          {
+            "prompt": "Was the referee right to show the red card?",
+            "logit_margin": 16.6179,
+            "nll_margin": 17.4327
+          }
+        ],
+        "mean_logit_margin": 2.7412,
+        "mean_nll_margin": 11.314
+      },
+      "util_home": 0.7883,
+      "gain_logit": 8.6184,
+      "gain_nll": 11.4432,
+      "demo_probes": null
+    },
+    "6": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "Should we lock the laboratory door overnight?",
+            "logit_margin": 12.4981,
+            "nll_margin": 4.2246
+          },
+          {
+            "prompt": "Do I really need to cite every source?",
+            "logit_margin": 12.5505,
+            "nll_margin": 8.2074
+          },
+          {
+            "prompt": "Must the calipers be recalibrated weekly?",
+            "logit_margin": 12.6958,
+            "nll_margin": 8.3914
+          }
+        ],
+        "mean_logit_margin": 12.5815,
+        "mean_nll_margin": 6.9411
+      },
+      "util_home": 0.7844,
+      "gain_logit": 4.9646,
+      "gain_nll": 8.2307,
+      "demo_probes": null
+    },
+    "7": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "What should I order at the little bistro near the pier?",
+            "logit_margin": 10.4611,
+            "nll_margin": 0.5148
+          },
+          {
+            "prompt": "Is the house wine drinkable with the stew?",
+            "logit_margin": 12.9455,
+            "nll_margin": 1.7751
+          },
+          {
+            "prompt": "How long should the duck rest before carving?",
+            "logit_margin": 12.2804,
+            "nll_margin": 1.3886
+          }
+        ],
+        "mean_logit_margin": 11.8957,
+        "mean_nll_margin": 1.2262
+      },
+      "util_home": 0.8267,
+      "gain_logit": 4.9539,
+      "gain_nll": 1.7165,
+      "demo_probes": null
+    }
+  },
+  "library": {
+    "0": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "What is 2 + 2?",
+            "logit_margin": 4.7795,
+            "nll_margin": 7.0444
+          },
+          {
+            "prompt": "What is 5 + 3?",
+            "logit_margin": 4.9814,
+            "nll_margin": 1.2362
+          },
+          {
+            "prompt": "What is 10 minus 7?",
+            "logit_margin": 5.9804,
+            "nll_margin": 6.7387
+          }
+        ],
+        "mean_logit_margin": 5.2471,
+        "mean_nll_margin": 5.0064
+      },
+      "util_home": 0.9015,
+      "gain_logit": 7.4638,
+      "gain_solo": 6.9567,
+      "retention_vs_solo": 1.0729
+    },
+    "1": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "What should I pack for the coastal hike this weekend?",
+            "logit_margin": 3.4793,
+            "nll_margin": 0.4678
+          },
+          {
+            "prompt": "Is the morning ferry a good way to reach the island?",
+            "logit_margin": 3.7345,
+            "nll_margin": -0.6795
+          },
+          {
+            "prompt": "How do I keep my camera dry on the boat?",
+            "logit_margin": 9.4054,
+            "nll_margin": 1.4343
+          }
+        ],
+        "mean_logit_margin": 5.5397,
+        "mean_nll_margin": 0.4075
+      },
+      "util_home": 0.3389,
+      "gain_logit": 2.0028,
+      "gain_solo": 3.6592,
+      "retention_vs_solo": 0.5473
+    },
+    "2": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "Who compiled the quarterly report for the board?",
+            "logit_margin": 5.6704,
+            "nll_margin": -0.7763
+          },
+          {
+            "prompt": "What is the main claim of the paper on coral bleaching?",
+            "logit_margin": 4.8058,
+            "nll_margin": -0.5142
+          },
+          {
+            "prompt": "How long did the editor spend on the manuscript?",
+            "logit_margin": 5.5505,
+            "nll_margin": -0.8273
+          }
+        ],
+        "mean_logit_margin": 5.3422,
+        "mean_nll_margin": -0.7059
+      },
+      "util_home": 0.4184,
+      "gain_logit": 0.4642,
+      "gain_solo": 4.5894,
+      "retention_vs_solo": 0.1011
+    },
+    "3": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "How far is the market from the old bridge?",
+            "logit_margin": 7.6394,
+            "nll_margin": 1.8188
+          },
+          {
+            "prompt": "What is the thickness of the oak tabletop?",
+            "logit_margin": 6.8152,
+            "nll_margin": 1.8094
+          },
+          {
+            "prompt": "How tall is the lighthouse gallery?",
+            "logit_margin": 5.9256,
+            "nll_margin": 1.1595
+          }
+        ],
+        "mean_logit_margin": 6.7934,
+        "mean_nll_margin": 1.5959
+      },
+      "util_home": 0.447,
+      "gain_logit": -0.3101,
+      "gain_solo": 5.3231,
+      "retention_vs_solo": -0.0583
+    },
+    "4": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "Where did the crew bury the chest of coins?",
+            "logit_margin": 1.4453,
+            "nll_margin": 2.4685
+          },
+          {
+            "prompt": "How do I find the cave behind the waterfall?",
+            "logit_margin": -2.8879,
+            "nll_margin": 1.2668
+          },
+          {
+            "prompt": "What marks the spot of the old shipwreck?",
+            "logit_margin": 9.9339,
+            "nll_margin": 4.389
+          }
+        ],
+        "mean_logit_margin": 2.8304,
+        "mean_nll_margin": 2.7081
+      },
+      "util_home": 0.3846,
+      "gain_logit": 8.0468,
+      "gain_solo": 10.5049,
+      "retention_vs_solo": 0.766
+    },
+    "5": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "Is the new bridge design structurally sound?",
+            "logit_margin": -8.7325,
+            "nll_margin": 0.6965
+          },
+          {
+            "prompt": "Does the revised syllabus suit the beginners?",
+            "logit_margin": 4.5068,
+            "nll_margin": 2.5721
+          },
+          {
+            "prompt": "Was the referee right to show the red card?",
+            "logit_margin": -10.8543,
+            "nll_margin": 0.5278
+          }
+        ],
+        "mean_logit_margin": -5.0267,
+        "mean_nll_margin": 1.2655
+      },
+      "util_home": 0.4117,
+      "gain_logit": 0.8505,
+      "gain_solo": 8.6184,
+      "retention_vs_solo": 0.0987
+    },
+    "6": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "Should we lock the laboratory door overnight?",
+            "logit_margin": 12.9079,
+            "nll_margin": 0.7584
+          },
+          {
+            "prompt": "Do I really need to cite every source?",
+            "logit_margin": 8.9386,
+            "nll_margin": 1.22
+          },
+          {
+            "prompt": "Must the calipers be recalibrated weekly?",
+            "logit_margin": 6.8518,
+            "nll_margin": 3.1155
+          }
+        ],
+        "mean_logit_margin": 9.5661,
+        "mean_nll_margin": 1.698
+      },
+      "util_home": 0.567,
+      "gain_logit": 1.9492,
+      "gain_solo": 4.9646,
+      "retention_vs_solo": 0.3926
+    },
+    "7": {
+      "margins": {
+        "facts": [
+          {
+            "prompt": "What should I order at the little bistro near the pier?",
+            "logit_margin": 6.4516,
+            "nll_margin": -0.0917
+          },
+          {
+            "prompt": "Is the house wine drinkable with the stew?",
+            "logit_margin": 7.0926,
+            "nll_margin": 0.0636
+          },
+          {
+            "prompt": "How long should the duck rest before carving?",
+            "logit_margin": 10.2737,
+            "nll_margin": -0.5173
+          }
+        ],
+        "mean_logit_margin": 7.9393,
+        "mean_nll_margin": -0.1818
+      },
+      "util_home": 0.2954,
+      "gain_logit": 0.9975,
+      "gain_solo": 4.9539,
+      "retention_vs_solo": 0.2014
+    }
+  },
+  "library_demo_probes": {
+    "per_probe": [
+      -2.217,
+      -2.0086,
+      -1.8984
+    ],
+    "mean": -2.0413
+  },
+  "insert_trajectory": [
+    {
+      "n": 1,
+      "episode": "math_words",
+      "seconds": 64.4,
+      "util_home": {
+        "0": 0.9091
+      },
+      "margins": {
+        "0": 4.74
+      }
+    },
+    {
+      "n": 2,
+      "episode": "travel_rain",
+      "seconds": 90.2,
+      "util_home": {
+        "0": 0.947,
+        "1": 0.6889
+      },
+      "margins": {
+        "0": 5.3563,
+        "1": 6.5379
+      }
+    },
+    {
+      "n": 3,
+      "episode": "author_marco",
+      "seconds": 116.5,
+      "util_home": {
+        "0": 0.9343,
+        "1": 0.5764,
+        "2": 0.6365
+      },
+      "margins": {
+        "0": 5.3195,
+        "1": 5.0734,
+        "2": 7.8654
+      }
+    },
+    {
+      "n": 4,
+      "episode": "distance_metric",
+      "seconds": 141.9,
+      "util_home": {
+        "0": 0.9343,
+        "1": 0.5,
+        "2": 0.5887,
+        "3": 0.4985
+      },
+      "margins": {
+        "0": 5.4636,
+        "1": 4.568,
+        "2": 7.94,
+        "3": 8.9245
+      }
+    },
+    {
+      "n": 5,
+      "episode": "treasure_pirate",
+      "seconds": 179.3,
+      "util_home": {
+        "0": 0.8864,
+        "1": 0.4306,
+        "2": 0.5691,
+        "3": 0.5258,
+        "4": 0.4167
+      },
+      "margins": {
+        "0": 5.4833,
+        "1": 4.668,
+        "2": 6.3966,
+        "3": 7.9886,
+        "4": 3.8831
+      }
+    },
+    {
+      "n": 6,
+      "episode": "eval_indeed",
+      "seconds": 203.7,
+      "util_home": {
+        "0": 0.8914,
+        "1": 0.4097,
+        "2": 0.4663,
+        "3": 0.497,
+        "4": 0.4311,
+        "5": 0.36
+      },
+      "margins": {
+        "0": 5.3777,
+        "1": 4.3806,
+        "2": 6.2959,
+        "3": 7.4385,
+        "4": 3.9569,
+        "5": -6.2879
+      }
+    },
+    {
+      "n": 7,
+      "episode": "emphasis_star",
+      "seconds": 239.8,
+      "util_home": {
+        "0": 0.8813,
+        "1": 0.3556,
+        "2": 0.4326,
+        "3": 0.4424,
+        "4": 0.3958,
+        "5": 0.38,
+        "6": 0.4312
+      },
+      "margins": {
+        "0": 5.2398,
+        "1": 5.5855,
+        "2": 6.3687,
+        "3": 6.7757,
+        "4": -1.814,
+        "5": -5.5147,
+        "6": 7.7412
+      }
+    },
+    {
+      "n": 8,
+      "episode": "dining_merci",
+      "seconds": 273.4,
+      "util_home": {
+        "0": 0.8864,
+        "1": 0.3333,
+        "2": 0.3741,
+        "3": 0.4394,
+        "4": 0.3494,
+        "5": 0.3883,
+        "6": 0.5598,
+        "7": 0.1997
+      },
+      "margins": {
+        "0": 5.3564,
+        "1": 5.1814,
+        "2": 5.9417,
+        "3": 7.6326,
+        "4": -2.0973,
+        "5": -5.5109,
+        "6": 9.6254,
+        "7": 8.1522
+      }
+    }
+  ],
+  "summary": {
+    "mean_gain_logit": 2.6831,
+    "bar_70pct_g1b": 3.2116,
+    "mean_retention_vs_solo": 0.3902,
+    "util_home": {
+      "0": 0.9015,
+      "1": 0.3389,
+      "2": 0.4184,
+      "3": 0.447,
+      "4": 0.3846,
+      "5": 0.4117,
+      "6": 0.567,
+      "7": 0.2954
+    },
+    "experts_below_util_0.5": 6,
+    "mean_gain_low_util": 2.0086
+  },
+  "state_saved": "/home/tliao/VesperLM/lab/sandbox/g3_margin/n8_state.pt",
+  "seconds": 2133.2
+}
