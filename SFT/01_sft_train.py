@@ -133,9 +133,44 @@ SFT_CONFIGS = {
         "eval_interval": 100,
         "val_eval_steps": 30,
     },
+    "470m_k_sft": {
+        # t3 470m_k passport base (val-best @3100). amp bf16 — the residual
+        # stream hits ~37k and overflows fp16. LoRA-only on an 8GB card:
+        # measured on RTX 3070 with VESPER_FUSED_CE=1 — full-FT OOMs even at
+        # micro_batch 2 (peak 6.9GB alloc; fp32 AdamW states dominate), LoRA
+        # r8 runs at 3.4GB (b8) / 4.6GB (b16) peak. max_lr is LoRA-scale.
+        "amp_dtype": "bfloat16",
+        # Rebuilds the t3 checkpoint exactly (incl. full_type="mla" and
+        # router_type="passport"; freqs_cis is in the state dict so
+        # max_seq_len must stay 8192). sft_seq_len is the train slice length.
+        "dim": 1024, "n_layers": 10, "n_heads": 8, "n_kv_heads": 2,
+        "hidden_dim": 1280, "num_experts": 8, "top_k": 2, "max_seq_len": 8192,
+        "linear_type": "kda", "full_type": "mla",
+        "kda_head_dim": 64, "kv_lora_rank": 512, "v_head_dim": 128,
+        "router_type": "passport", "passport_dim": 64,
+        "grad_checkpoint": True,
+
+        "micro_batch_size": 8,
+        "sft_seq_len": 1024,
+        "target_accumulation_steps": 32,
+
+        "beta1": 0.9, "beta2": 0.95,
+        "max_lr": 5e-5,
+        "min_lr": 5e-6,
+        "aux_weight": 0.01,
+
+        "warmup_steps": 20,
+        "total_steps": 300,
+
+        "eval_interval": 50,
+        "val_eval_steps": 30,
+    },
 }
 
-ACTIVE_CONFIG_NAME = "tiny_agent_v2_sft"
+ACTIVE_CONFIG_NAME = os.environ.get("VESPER_SFT_CONFIG", "tiny_agent_v2_sft")
+if ACTIVE_CONFIG_NAME not in SFT_CONFIGS:
+    raise KeyError(f"VESPER_SFT_CONFIG={ACTIVE_CONFIG_NAME!r} not in "
+                   f"{sorted(SFT_CONFIGS)}")
 # Module-level so generate_eval_samples (and any other helper) can use it.
 AMP_DTYPE = (torch.bfloat16
              if SFT_CONFIGS[ACTIVE_CONFIG_NAME].get("amp_dtype") == "bfloat16"
@@ -145,14 +180,26 @@ AMP_DTYPE = (torch.bfloat16
 # Set to None to scan sft_checkpoints/ for a resume instead.
 # Resolution order inside the pretrain checkpoint dir:
 #   1. step_best/checkpoint.pt  (best-val checkpoint from pretrain)
-#   2. highest-numbered step_XXXX/checkpoint.pt
+#   2. <dir>/checkpoint.pt      (pointing at a step_* dir directly)
+#   3. highest-numbered step_XXXX/checkpoint.pt
+# $VESPER_SFT_CKPT overrides the dir/file to start from (e.g.
+# lab/imported/t3_ckpts/step_best for the t3 470m_k passport base).
+_SFT_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PRETRAIN_CKPT_DIR = os.path.join(_REPO_ROOT, "Pretrain", "vesper_linear_checkpoints_v2")
+
+def _repo_path(p):
+    """Env paths may be repo-relative (the lab runner starts jobs from a
+    sandbox cwd); resolve those against the repo root."""
+    return p if os.path.isabs(p) else os.path.join(_REPO_ROOT, p)
 
 def _resolve_pretrain_checkpoint(ckpt_dir):
     best = os.path.join(ckpt_dir, "step_best", "checkpoint.pt")
     if os.path.exists(best):
         return best
+    direct = os.path.join(ckpt_dir, "checkpoint.pt")
+    if os.path.exists(direct):
+        return direct
     if not os.path.isdir(ckpt_dir):
         return None
     steps = [int(d.split("_")[1]) for d in os.listdir(ckpt_dir)
@@ -161,7 +208,9 @@ def _resolve_pretrain_checkpoint(ckpt_dir):
         return None
     return os.path.join(ckpt_dir, f"step_{max(steps)}", "checkpoint.pt")
 
-PRETRAIN_CHECKPOINT = _resolve_pretrain_checkpoint(_PRETRAIN_CKPT_DIR)
+PRETRAIN_CHECKPOINT = _resolve_pretrain_checkpoint(
+    _repo_path(os.environ.get("VESPER_SFT_CKPT")) if os.environ.get("VESPER_SFT_CKPT")
+    else _PRETRAIN_CKPT_DIR)
 
 # ChatML eval prompts — tool-use focused, matching the SFT trace format
 EVAL_PROMPTS = [
@@ -255,7 +304,12 @@ def print_model_stats(model, config, save_path=None):
 # Reads interleaved [token, mask, token, mask, ...] bin files
 # produced by 05_sft_oasst.py and 06_sft_vesper.py
 # ==========================================
-def load_sft_index(index_path="data/sft/index.txt"):
+def load_sft_index(index_path=None):
+    if index_path is None:
+        index_path = _repo_path(os.environ.get(
+            "VESPER_SFT_DATA",
+            os.path.join("Dataset", "data", "sft", "index.txt")))
+    index_dir = os.path.dirname(os.path.abspath(index_path))
     datasets     = {'train': {}, 'val': {}}
     probabilities = {}
     total_weight  = 0.0
@@ -279,7 +333,7 @@ def load_sft_index(index_path="data/sft/index.txt"):
 
             filename = parts[0].strip()
             weight   = float(parts[1].strip())
-            filepath = os.path.join("data/sft", filename)
+            filepath = os.path.join(index_dir, filename)
 
             if not os.path.exists(filepath):
                 print(f"WARNING: {filepath} not found, skipping.")
@@ -384,6 +438,25 @@ def masked_ce_loss(logits, targets, mask):
     return masked_loss / token_count
 
 
+def sft_ce_loss(model, x, y, mask):
+    """Masked assistant-only CE, VRAM-aware.
+
+    With VESPER_FUSED_CE the model computes chunked linear+CE with
+    ignore_index=pad_id and never materializes the (B, T, 65523) logits —
+    scatter pad_id into non-assistant targets so the mean lands exactly on
+    assistant tokens (the SFT bins contain zero pad_id tokens in assistant
+    targets, verified on oasst2_sft.bin). Without fused CE, materialize
+    logits and use the explicit mask. Returns (ce_loss, aux_loss).
+    """
+    base = model.module if hasattr(model, 'module') else model
+    if getattr(base, "fused_ce", False):
+        y_masked = y.masked_fill(mask == 0, base.pad_id)
+        _, ce_loss, aux_loss = model(x, y_masked)
+        return ce_loss, aux_loss
+    logits, _, aux_loss = model(x)
+    return masked_ce_loss(logits, y, mask), aux_loss
+
+
 # ==========================================
 # EVAL GENERATION
 # ==========================================
@@ -452,6 +525,33 @@ def get_latest_sft_checkpoint(checkpoint_dir="sft_checkpoints"):
     return os.path.join(checkpoint_dir, f"step_{max(steps)}", "checkpoint.pt")
 
 
+def export_plain_state_dict(model):
+    """State dict loadable by a plain (unwrapped) VesperLinearLM.
+
+    In LoRA mode (VESPER_SFT_LORA=1) modules are LoRALinear wrappers, whose
+    state keys gain a `.base` segment and carry lora_A/lora_B. Merge the
+    delta into the base weights, export plain `...weight`/`...bias` keys, and
+    unmerge again so training can continue — the exported dict is the same
+    function the wrapped model implements, with no LoRA vocabulary.
+    """
+    try:
+        import lora as _lora
+    except ImportError:
+        _lora = None
+    if _lora is not None and _lora.lora_modules(model):
+        _lora.merge_all(model)
+        try:
+            out = {}
+            for k, v in model.state_dict().items():
+                if k.endswith(".lora_A") or k.endswith(".lora_B"):
+                    continue
+                out[k.replace(".base.", ".")] = v
+            return out
+        finally:
+            _lora.unmerge_all(model)
+    return model.state_dict()
+
+
 def save_chat_checkpoint(model, tokenizer, step, checkpoint_dir, model_config):
     """
     Saves a HuggingFace-compatible checkpoint so you can load it with
@@ -464,8 +564,9 @@ def save_chat_checkpoint(model, tokenizer, step, checkpoint_dir, model_config):
     base_model = model.module if hasattr(model, 'module') else model
 
     # Save raw state dict + config for easy loading in chat script
+    # (LoRA mode exports merged plain keys — see export_plain_state_dict).
     torch.save({
-        'model_state_dict': base_model.state_dict(),
+        'model_state_dict': export_plain_state_dict(base_model),
         'model_config':     model_config,
         'step':             step,
     }, os.path.join(chat_dir, "vesper_chat.pt"))
@@ -486,7 +587,7 @@ def train():
     device         = torch.device(f"cuda:{local_rank}" if local_rank is not None else "cuda:0")
     is_main        = (local_rank == 0) or (local_rank is None)
 
-    tokenizer_path = os.path.join("..", "Pretrain", "custom_tokenizer")
+    tokenizer_path = os.path.join(_REPO_ROOT, "Pretrain", "custom_tokenizer")
     tokenizer      = AutoTokenizer.from_pretrained(tokenizer_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -499,7 +600,9 @@ def train():
     use_scaler        = amp_dtype == torch.float16  # bf16 needs no loss scaling
     target_acc_steps  = cfg.get("target_accumulation_steps", 128)
     accumulation_steps = max(1, target_acc_steps // (world_size * batch_size))
-    seq_len           = cfg["max_seq_len"]
+    # Train slice length; model max_seq_len stays at the checkpoint's (8192
+    # for t3) so freqs_cis matches the state dict.
+    seq_len           = cfg.get("sft_seq_len", cfg["max_seq_len"])
 
     max_lr        = cfg["max_lr"]
     min_lr        = cfg["min_lr"]
@@ -511,7 +614,9 @@ def train():
     eval_interval = cfg["eval_interval"]
     val_eval_steps = cfg["val_eval_steps"]
 
-    checkpoint_dir = "sft_checkpoints"
+    checkpoint_dir = _repo_path(os.environ.get("VESPER_SFT_OUT", "")) \
+        if os.environ.get("VESPER_SFT_OUT") \
+        else os.path.join(_SFT_DIR, "sft_checkpoints")
     best_val_loss = float("inf")
     start_step     = 0
     train_loss_history = []
@@ -556,12 +661,21 @@ def train():
 
         # Pretrain checkpoints carry the *pretrain* config dict (which
         # includes optimizer/stream fields); keep only arch keys so the
-        # model is built from the checkpoint's true dims.
+        # model is built from the checkpoint's true dims. This MUST include
+        # the Vesper-K shape keys (full_type/kda_*/kv_lora_rank/v_head_dim)
+        # and the router keys, or a kda/mla checkpoint silently builds a
+        # gqa/topk model and strict-loads wrong (the pretrain trainer's old
+        # arch_keys bug).
         if loading_pretrain:
             arch_keys_pre = ["dim", "n_layers", "n_heads", "n_kv_heads",
                              "hidden_dim", "num_experts", "top_k",
                              "max_seq_len", "vocab_size", "pad_id",
-                             "linear_type"]
+                             "linear_type", "full_type", "attention_every",
+                             "gla_head_dim", "qk_norm", "kda_head_dim",
+                             "kda_short_conv", "mamba2_state_size",
+                             "kv_lora_rank", "v_head_dim", "linear_force_fp32",
+                             "router_type", "passport_dim",
+                             "router_expert_dropout"]
             model_config = {k: v for k, v in model_config.items()
                             if k in arch_keys_pre}
 
@@ -583,8 +697,15 @@ def train():
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     # ---- Build model ----
+    # arch_keys must cover every shape key the checkpoint can carry —
+    # dropping full_type/router_type silently rebuilds the wrong architecture
+    # (the pretrain trainer's old arch_keys bug).
     arch_keys   = ["dim", "n_layers", "n_heads", "n_kv_heads", "hidden_dim",
                    "num_experts", "top_k", "max_seq_len", "linear_type",
+                   "full_type", "attention_every", "gla_head_dim", "qk_norm",
+                   "kda_head_dim", "kda_short_conv", "mamba2_state_size",
+                   "kv_lora_rank", "v_head_dim", "linear_force_fp32",
+                   "router_type", "passport_dim", "router_expert_dropout",
                    "grad_checkpoint"]
     arch_config = {k: v for k, v in model_config.items() if k in arch_keys}
 
@@ -594,13 +715,58 @@ def train():
         **arch_config
     ).to(device)
 
+    state = None
     if checkpoint is not None:
         state = checkpoint['model']
         # Handle DDP-wrapped or raw state dicts
         state = {k.replace("module.", ""): v for k, v in state.items()}
+
+    # ---- Optional LoRA (VESPER_SFT_LORA=1) ----
+    # Measured on the RTX 3070 8GB: full-FT of 470m_k OOMs even with
+    # VESPER_FUSED_CE (fp32 params+grads ~3.4GB + AdamW states ~3.4GB +
+    # activations; crash at 6.9GB). LoRA r8 peaks at 3.4GB (micro 8 x seq
+    # 1024, fused CE) and is the default for this scale.
+    use_lora = os.environ.get("VESPER_SFT_LORA", "").strip().lower() in (
+        "1", "true", "yes", "on")
+    lora_mod = None
+    if use_lora:
+        sys.path.insert(0, os.path.join(_REPO_ROOT, "Hippocampus"))
+        import lora as lora_mod
+        lora_rank = int(os.environ.get("VESPER_SFT_LORA_RANK", "8"))
+        lora_alpha = float(os.environ.get("VESPER_SFT_LORA_ALPHA", "16"))
+        lora_profile = os.environ.get("VESPER_SFT_LORA_PROFILE") or (
+            "kda_mla" if model_config.get("full_type") == "mla"
+            or model_config.get("linear_type") == "kda" else "gla_gqa")
+
+    def _attach_lora():
+        names = lora_mod.attach_lora(model, rank=lora_rank, alpha=lora_alpha,
+                                     include_router=False,
+                                     target_profile=lora_profile)
+        lora_mod.freeze_trunk(model)
+        return names
+
+    # LoRA-mode SFT checkpoints save wrapped keys -> attach before loading
+    # those; pretrain weights are plain -> attach after loading.
+    wrapped_resume = (use_lora and state is not None and not loading_pretrain
+                      and any(".base." in k for k in state))
+    if wrapped_resume and is_main:
+        print(f"[LoRA] attached before resume load ({len(_attach_lora())} modules)")
+
+    if state is not None:
         missing, unexpected = model.load_state_dict(state, strict=True)
         if is_main and (missing or unexpected):
             print(f"  Checkpoint load — missing keys: {len(missing)}, unexpected: {len(unexpected)}")
+
+    if use_lora and not wrapped_resume:
+        names = _attach_lora()
+        if is_main:
+            n_train = sum(p.numel() for p in lora_mod.lora_parameters(model))
+            print(f"[LoRA] profile={lora_profile} rank={lora_rank} "
+                  f"modules={len(names)} trainable={n_train/1e6:.2f}M "
+                  f"(of {sum(p.numel() for p in model.parameters())/1e6:.1f}M)")
+
+    trainable_params = (list(lora_mod.lora_parameters(model)) if use_lora
+                        else list(model.parameters()))
 
     if is_main:
         print_model_stats(model, model_config)
@@ -609,13 +775,13 @@ def train():
     # Lower weight decay for SFT — we want to nudge not regularize aggressively
     if IS_ROCM:
         optimizer = torch.optim.AdamW(
-            model.parameters(), lr=max_lr, betas=(beta1, beta2), weight_decay=0.01)
+            trainable_params, lr=max_lr, betas=(beta1, beta2), weight_decay=0.01)
     elif HAS_BNB:
         optimizer = bnb.optim.AdamW8bit(
-            model.parameters(), lr=max_lr, betas=(beta1, beta2), weight_decay=0.01)
+            trainable_params, lr=max_lr, betas=(beta1, beta2), weight_decay=0.01)
     else:
         optimizer = torch.optim.AdamW(
-            model.parameters(), lr=max_lr, betas=(beta1, beta2), weight_decay=0.01)
+            trainable_params, lr=max_lr, betas=(beta1, beta2), weight_decay=0.01)
 
     scaler = GradScaler('cuda') if use_scaler else None
 
@@ -637,7 +803,7 @@ def train():
     # ---- Data ----
     if is_main:
         print("\n--- Loading SFT datasets ---")
-    datasets_dict, probabilities = load_sft_index("data/sft/index.txt")
+    datasets_dict, probabilities = load_sft_index()
 
     train_stream = sft_data_stream(
         datasets_dict['train'], probabilities, batch_size, seq_len,
@@ -660,15 +826,15 @@ def train():
     dummy_m = torch.ones(batch_size, seq_len, device=device)
 
     with torch.amp.autocast('cuda', dtype=AMP_DTYPE):
-        dummy_logits, _, dummy_aux = model(dummy_x)
+        dummy_ce, dummy_aux = sft_ce_loss(model, dummy_x, dummy_y, dummy_m)
         dummy_loss = (
-            masked_ce_loss(dummy_logits, dummy_y, dummy_m) / accumulation_steps
+            dummy_ce / accumulation_steps
             + aux_weight * (dummy_aux / accumulation_steps)
         )
 
     (scaler.scale(dummy_loss) if scaler is not None else dummy_loss).backward()
     optimizer.zero_grad()
-    del dummy_x, dummy_y, dummy_m, dummy_logits, dummy_loss, dummy_aux
+    del dummy_x, dummy_y, dummy_m, dummy_ce, dummy_loss, dummy_aux
 
     if is_main:
         max_mem = torch.cuda.memory_allocated(device) / 1e9
@@ -703,9 +869,7 @@ def train():
             mask = mask.pin_memory().to(device, non_blocking=True)
 
             with torch.amp.autocast('cuda', dtype=AMP_DTYPE):
-                logits, _, aux_loss = model(x)
-
-                ce_loss  = masked_ce_loss(logits, y, mask)
+                ce_loss, aux_loss = sft_ce_loss(model, x, y, mask)
                 ce_scaled  = ce_loss  / accumulation_steps
                 aux_scaled = aux_loss / accumulation_steps
                 total_loss = ce_scaled + (aux_weight * aux_scaled)
@@ -739,7 +903,7 @@ def train():
 
         if scaler is not None:
             scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(trainable_params, max_norm=1.0)
         if scaler is not None:
             scaler.step(optimizer)
             scaler.update()
@@ -778,8 +942,8 @@ def train():
                     vy    = vy.to(device)
                     vmask = vmask.to(device)
                     with torch.amp.autocast('cuda', dtype=AMP_DTYPE):
-                        vlogits, _, _ = model(vx, vy)
-                        val_loss += masked_ce_loss(vlogits, vy, vmask).item()
+                        v_ce, _ = sft_ce_loss(model, vx, vy, vmask)
+                        val_loss += v_ce.item()
 
             val_loss /= val_eval_steps
             val_loss_history.append((step, val_loss))
@@ -808,7 +972,7 @@ def train():
 
                 # Snapshot source files
                 try:
-                    shutil.copy(os.path.join("..", "Common", "vesper_linear_model.py"),
+                    shutil.copy(os.path.join(_REPO_ROOT, "Common", "vesper_linear_model.py"),
                                 os.path.join(ckpt_dir, "vesper_linear_model_snapshot.py"))
                     shutil.copy(__file__, os.path.join(ckpt_dir, f"{os.path.basename(__file__)}_snapshot.py"))
                 except Exception as e:
@@ -835,7 +999,7 @@ def train():
                     best_dir = os.path.join(checkpoint_dir, "step_best")
                     os.makedirs(best_dir, exist_ok=True)
                     try:
-                        shutil.copy(os.path.join("..", "Common", "vesper_linear_model.py"),
+                        shutil.copy(os.path.join(_REPO_ROOT, "Common", "vesper_linear_model.py"),
                                     os.path.join(best_dir, "vesper_linear_model_snapshot.py"))
                         shutil.copy(__file__, os.path.join(best_dir, f"{os.path.basename(__file__)}_snapshot.py"))
                     except Exception as e:
