@@ -1,0 +1,17 @@
+{
+  "id": "g3res-8base",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "occupancy-dilution signal run, real spine: N=8 shaped plug-ins on a trained 8-base-expert passport spine (t0-8expert-realdata) regress base CE less than the 4-base lab spine (+8.91%), at retention >= 0.70",
+  "config": "lab_small",
+  "script": "lab/g3_shaped_run.py",
+  "env": {
+    "G3S_N": "8",
+    "G3S_CKPT": "lab/sandbox/t0-8expert-realdata/vesper_linear_checkpoints_lab_tiny/step_best",
+    "G3S_OUT": "lab/results/g3_shaped_n8_8base.json",
+    "G3S_STATE": "lab/sandbox/g3_shaped/n8_8base_state.pt",
+    "G3S_DEVICE": "cuda"
+  },
+  "budget_minutes": 45,
+  "mutation_of": "g3res-dilution-clone"
+}
