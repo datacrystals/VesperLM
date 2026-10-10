@@ -79,31 +79,36 @@ run_one value_embed VESPER_VALUE_EMBED=1 || true
 
 # e: all-three only if a-d all came back clean (checked in the summary pass below)
 python3 - <<'PY'
-import os, re, json, glob, sys
+import os, re, json, sys
 repo = os.environ["REPO"]
 
 def parse(log):
-    ce, tok, steps, dec, warns = [], [], 0, [], []
+    """Trainer prints Step / Tok-s / CE on separate lines of one block."""
+    ce, dec, warns, steps, cur_step, cur_tok = [], [], [], 0, None, None
     for line in open(log, errors="replace"):
-        m = re.search(r"Step\s+(\d+).*?CE Loss:\s*([0-9.eE+-]+)", line, re.S)
-        m2 = re.search(r"CE Loss:\s*([0-9.eE+-]+)", line)
-        m3 = re.search(r"Tok/s:\s*([0-9][0-9,]*)\s*\(GPU\)", line)
         m4 = re.search(r"Step\s+(\d+)", line)
         if m4:
-            steps = max(steps, int(m4.group(1)))
+            cur_step, cur_tok = int(m4.group(1)), None
+            steps = max(steps, cur_step)
+        m3 = re.search(r"Tok/s:\s*([0-9][0-9,]*)\s*\(GPU\)", line)
+        if m3:
+            cur_tok = float(m3.group(1).replace(",", ""))
+        m2 = re.search(r"CE Loss:\s*([0-9.eE+-]+)", line)
         if m2:
-            sm = re.search(r"Step\s+(\d+)", line)
-            tokv = float(m3.group(1).replace(",", "")) if m3 else None
-            ce.append({"step": int(sm.group(1)) if sm else steps,
-                       "ce": float(m2.group(1)), "tok_s": tokv})
+            ce.append({"step": cur_step, "ce": float(m2.group(1)), "tok_s": cur_tok})
         for pat in (r"\[compile\].*", r"\[fused-ce\].*", r"\[value-embed\].*"):
             mm = re.search(pat, line)
             if mm:
                 dec.append(mm.group(0)[:300])
         if re.search(r"warning|Warning|Traceback|CUDA error|hipError|inductor", line):
             warns.append(line.strip()[:300])
+    txt = open(log, errors="replace").read()
+    ces = [c["ce"] for c in ce]
     return {"steps_done": steps, "ce_trace": ce, "decisions": dec,
-            "warnings": warns[:20]}
+            "warnings": warns[:20], "log_tail": txt.splitlines()[-15:],
+            "ce_finite": bool(ces) and all(c == c and abs(c) < 1e6 for c in ces),
+            "pass": bool(ces) and all(c == c and abs(c) < 1e6 for c in ces)
+                    and steps >= 10 and "Traceback" not in txt}
 
 matrix = ["baseline", "compile", "fused_ce", "value_embed"]
 out = {"job_id": "swarm5_speedrun_canary", "runs": {}}
@@ -111,23 +116,14 @@ ok_all = True
 for name in matrix:
     log = os.path.join(repo, "lab", "sandbox", f"canary_{name}.log")
     if not os.path.exists(log):
-        out["runs"][name] = {"error": "no log"}
+        out["runs"][name] = {"error": "no log", "pass": False}
         ok_all = False
         continue
-    p = parse(log)
-    rc = 0
-    p["rc_file_missing"] = False
-    p["log_tail"] = open(log, errors="replace").read().splitlines()[-15:]
-    ces = [c["ce"] for c in p["ce_trace"]]
-    p["ce_finite"] = all(c == c and abs(c) < 1e6 for c in ces) and bool(ces)
-    out["runs"][name] = p
-    # a run "passed" if it stepped, CE finite, and no Traceback in the log
-    txt = open(log, errors="replace").read()
-    good = p["ce_finite"] and p["steps_done"] >= 10 and "Traceback" not in txt
-    out["runs"][name]["pass"] = bool(good)
-    ok_all = ok_all and good
+    out["runs"][name] = parse(log)
+    ok_all = ok_all and out["runs"][name]["pass"]
 out["all_of_a_d_pass"] = ok_all
-print("[canary] a-d pass =", ok_all, "—", {k: v.get("pass") for k, v in out["runs"].items()})
+print("[canary] a-d pass =", ok_all, "—",
+      {k: (v.get("pass"), v.get("ce_trace", [{}])[-1:]) for k, v in out["runs"].items()})
 os.makedirs(os.path.join(repo, "lab", "sandbox", "canary"), exist_ok=True)
 with open(os.path.join(repo, "lab", "sandbox", "canary", "result.json"), "w") as f:
     json.dump(out, f, indent=2)
@@ -142,7 +138,7 @@ else
     echo "[canary] SKIP all3 — one of a-d failed (per plan)"
 fi
 
-# ---- final result.json (include all3 + timing) ----
+# ---- final result.json (include all3 + gate summary) ----
 python3 - <<'PY'
 import os, re, json
 repo = os.environ["REPO"]
@@ -150,18 +146,18 @@ path = os.path.join(repo, "lab", "sandbox", "canary", "result.json")
 out = json.load(open(path)) if os.path.exists(path) else {"runs": {}}
 
 def parse(log):
-    ce, steps, dec, warns = [], 0, [], []
+    ce, dec, warns, steps, cur_step, cur_tok = [], [], [], 0, None, None
     for line in open(log, errors="replace"):
-        m2 = re.search(r"CE Loss:\s*([0-9.eE+-]+)", line)
-        m3 = re.search(r"Tok/s:\s*([0-9][0-9,]*)\s*\(GPU\)", line)
         m4 = re.search(r"Step\s+(\d+)", line)
         if m4:
-            steps = max(steps, int(m4.group(1)))
+            cur_step, cur_tok = int(m4.group(1)), None
+            steps = max(steps, cur_step)
+        m3 = re.search(r"Tok/s:\s*([0-9][0-9,]*)\s*\(GPU\)", line)
+        if m3:
+            cur_tok = float(m3.group(1).replace(",", ""))
+        m2 = re.search(r"CE Loss:\s*([0-9.eE+-]+)", line)
         if m2:
-            sm = re.search(r"Step\s+(\d+)", line)
-            tokv = float(m3.group(1).replace(",", "")) if m3 else None
-            ce.append({"step": int(sm.group(1)) if sm else steps,
-                       "ce": float(m2.group(1)), "tok_s": tokv})
+            ce.append({"step": cur_step, "ce": float(m2.group(1)), "tok_s": cur_tok})
         for pat in (r"\[compile\].*", r"\[fused-ce\].*", r"\[value-embed\].*"):
             mm = re.search(pat, line)
             if mm:
@@ -172,18 +168,19 @@ def parse(log):
     ces = [c["ce"] for c in ce]
     return {"steps_done": steps, "ce_trace": ce, "decisions": dec,
             "warnings": warns[:20], "log_tail": txt.splitlines()[-15:],
-            "ce_finite": all(c == c and abs(c) < 1e6 for c in ces) and bool(ces),
-            "pass": ("Traceback" not in txt) and steps >= 10
-                    and all(c == c and abs(c) < 1e6 for c in ces) and bool(ces)}
+            "ce_finite": bool(ces) and all(c == c and abs(c) < 1e6 for c in ces),
+            "pass": bool(ces) and all(c == c and abs(c) < 1e6 for c in ces)
+                    and steps >= 10 and "Traceback" not in txt}
 
 for name in ("baseline", "compile", "fused_ce", "value_embed", "all3"):
     log = os.path.join(repo, "lab", "sandbox", f"canary_{name}.log")
     if os.path.exists(log):
         out["runs"][name] = parse(log)
     elif name == "all3":
-        out["runs"][name] = {"skipped": "a-d not all passing"}
-print("[canary] FINAL:", json.dumps({k: {"pass": v.get("pass"), "ce": v.get("ce_trace", [])[-2:]}
-                                    for k, v in out.get("runs", {}).items()})[:1500])
+        out["runs"][name] = {"skipped": "a-d not all passing", "pass": None}
+summary = {k: {"pass": v.get("pass"), "ce": v.get("ce_trace", [])[-2:]}
+           for k, v in out.get("runs", {}).items()}
+print("[canary] FINAL:", json.dumps(summary)[:1800])
 with open(path, "w") as f:
     json.dump(out, f, indent=2)
 print("[canary] wrote", path)
