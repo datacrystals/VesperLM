@@ -1,7 +1,7 @@
-# VesperLM — Handoff for the Next Agent (updated 2026-10-09 ~09:55 UTC)
+# VesperLM — Handoff for the Next Agent (updated 2026-10-10 ~03:35 UTC)
 
 **ONECLICK FREE LANE (2026-10-10):** launch = `python3 pod/oneclick_run.py --notebook pod/oneclick_boot.ipynb --job-url https://raw.githubusercontent.com/datacrystals/VesperLM/main/lab/oneclick_jobs/smoke.json --minutes 50` (free AMD OneClick GPU box, 6h max / 10min idle-reap, keepalive + RESULT_JSON exfil via cell stdout; job JSONs in `lab/oneclick_jobs/`, see `pod/ONECLICK.md` §9–10).
-**STATUS:** orchestrator + boot notebook built, local end-to-end dry-run green; live smoke **BLOCKED** — create works (instance `gh-ca7ead92` 2026-10-09 22:58 UTC) but the free tier never scheduled it (1 brief ready window 23:32 + 502, then `pending` through 2026-10-10 01:03 UTC; 20-min attach-retry poll = 120/120 pending); **GPU count / box egress / trainer-on-box UNVERIFIED**. Retry = re-attach first (`--attach "$(status data.url)"`, zero creations; cadence in `pod/ONECLICK.md` §10), only 1 of 2 creations used.
+**STATUS:** orchestrator + boot notebook built, local end-to-end dry-run green; live smoke **BLOCKED** — create works (instance `gh-ca7ead92` 2026-10-09 22:58 UTC) but the free tier never scheduled it (1 brief ready window 23:32 + 502, then `pending` through 2026-10-10 01:03 UTC; 20-min attach-retry poll = 120/120 pending; **swarm5 retry 02:28–03:08 UTC = 240/240 pending** — cumulative ~4.5h queue, 1 window ever); **GPU count / box egress / trainer-on-box UNVERIFIED**. Retry = re-attach first (`--attach "$(status data.url)"`, zero creations; cadence in `pod/ONECLICK.md` §10), only 1 of 2 creations used. Treat the lane as heartbeat-cadence only, never merge-gating.
 **RULES:** no credentials on the box; never commit instance URLs (Jupyter token embedded); admin endpoints off-limits; laptop GPU stays free (all GPU work runs on the box).
 
 **USER DIRECTIVES (standing):** (1) maximally delegate implementation to subagents
@@ -24,6 +24,40 @@ experts, gates G0-G4, G0 done) and SUBSYSTEMS.md (drives/emotions control
 layer, gates E0-E4; E0 = telemetry instrumentation only, do it first and
 cheap). Build order: laptop farm queue → G1 → E0 can start anytime (logging
 only, no GPU).
+
+---
+
+## 2026-10-10 03:35 UTC — SWARM5: speedrun-opts MI300X canary GREEN → MERGE READY ($0.49, destroyed+verified)
+
+- **Merge gate PASSED — recommend `git merge speedrun-opts` into main.** All 5
+  arms green on real MI300X (gfx942, torch 2.9.1+rocm6.3, triton 3.5.1, fla
+  @37a6b1c+patches): baseline / `VESPER_COMPILE=1` / `VESPER_FUSED_CE=1` /
+  `VESPER_VALUE_EMBED=1` / all-three, 15 steps each at lab_tiny KDA+MLA,
+  VESPER_AMP=bf16, VESPER_SEED=123. CE@10 spread across flags **≤0.0025 nats**
+  (baseline 11.0912, compile 11.0915, fused_ce 11.0913, value_embed 11.0890,
+  all3 11.0894; aux loss identical across arms). No crash, no hang, no NaN,
+  no hip/inductor errors. tok/s@seq512: base 53.5k, compile 52.4k (−2%, tiny-
+  model overhead, not meaningful), **fused_ce 56.1k (+5%) with train VRAM
+  0.3GB vs 1.4GB (−80% — logits never materialized)**, value_embed 53.9k,
+  all3 51.8k. Full verdict table + limits: `lab/imported/swarm5/CANARY.md`;
+  logs + `canary_result.json` same dir. Job def (both lanes):
+  `lab/oneclick_jobs/canary.{json,sh}` on speedrun-opts (eab0d7b, 8679206).
+- **value_embed cost note (new):** the tables are vocab-sized — lab_tiny went
+  11.25M→36.41M params (+25.2M = 2×65523-token lookups). Fine, but don't
+  enable it in production without the seeded A/B (quality bet; +2 ckpt keys,
+  flag-on ckpts can't load flag-off).
+- **Lane: devcloud fallback.** OneClick `gh-ca7ead92` polled 40 min
+  (02:28–03:08 UTC, 240/240 pending, zero windows) → starved per plan →
+  droplet `vesper-swarm5-ttl180m-1791601783` (607809725), canary in ~15 min,
+  destroyed 03:24 UTC + verified (`no vesper-* droplets`), **$0.49 settled**
+  (ledger $48.94/$180, open $0). Session total $0.49 (OneClick $0).
+  Droplet bring-up gotcha (new): first-boot banner breaks `scp` — wait for
+  `cloud-init status: done`, transfer via `ssh 'cat > f' < local` (in
+  FAILURES.md 2026-10-10 entry).
+- **Next for main:** merge speedrun-opts (flags stay env-gated default-OFF,
+  byte-compat sha256 already proven on CPU), then optionally quote fused-CE
+  perf from a 470m-scale probe (lab_tiny tok/s is noise for compile).
+- Kill the laptop t3 tunnel keeper when convenient: `pgrep -f "R 2222:localhost:2222"`.
 
 ---
 

@@ -1,0 +1,200 @@
+{
+  "job_id": "swarm5_speedrun_canary",
+  "runs": {
+    "baseline": {
+      "steps_done": 10,
+      "ce_trace": [
+        {
+          "step": 0,
+          "ce": 11.1186,
+          "tok_s": 0.0
+        },
+        {
+          "step": 10,
+          "ce": 11.0912,
+          "tok_s": 53460.0
+        }
+      ],
+      "decisions": [],
+      "warnings": [],
+      "log_tail": [
+        "Hybrid stack: {'kda': 3, 'mla': 1} (4 layers)",
+        "",
+        "Using torch AdamW optimizer",
+        "Using Muon optimizer: 2,853,632 params (Muon) + 8,393,734 params (AdamW)",
+        "",
+        "--- Running Dummy Pass to Pre-allocate Max VRAM ---",
+        "Max VRAM Successfully Reserved: 0.7GB",
+        "---------------------------------------------------",
+        "",
+        "[03:18:36] Step 00000 | 0.00 global steps/s | 0.0 local passes/s",
+        "          Tok/s: 0 (GPU) | 0 (Total) | Total Trained: 4,096",
+        "          LR: 2.00e-05 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.1186 | Aux: 8.0006 | VRAM: 1.4GB",
+        "[03:18:37] Step 00010 | 13.05 global steps/s | 13.1 local passes/s",
+        "          Tok/s: 53,460 (GPU) | 53,460 (Total) | Total Trained: 45,056",
+        "          LR: 2.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.0912 | Aux: 8.0072 | VRAM: 1.4GB"
+      ],
+      "ce_finite": true,
+      "pass": true
+    },
+    "compile": {
+      "steps_done": 10,
+      "ce_trace": [
+        {
+          "step": 0,
+          "ce": 11.1187,
+          "tok_s": 0.0
+        },
+        {
+          "step": 10,
+          "ce": 11.0915,
+          "tok_s": 52350.0
+        }
+      ],
+      "decisions": [
+        "[compile] VESPER_COMPILE=1: compiled 16 dense submodule forwards (MoE expert MLPs + GQA); fla attention wrappers left eager (Triton kernels do not trace under inductor)"
+      ],
+      "warnings": [
+        "[compile] VESPER_COMPILE=1: compiled 16 dense submodule forwards (MoE expert MLPs + GQA); fla attention wrappers left eager (Triton kernels do not trace under inductor)"
+      ],
+      "log_tail": [
+        "Hybrid stack: {'kda': 3, 'mla': 1} (4 layers)",
+        "",
+        "Using torch AdamW optimizer",
+        "Using Muon optimizer: 2,853,632 params (Muon) + 8,393,734 params (AdamW)",
+        "",
+        "--- Running Dummy Pass to Pre-allocate Max VRAM ---",
+        "Max VRAM Successfully Reserved: 0.7GB",
+        "---------------------------------------------------",
+        "",
+        "[03:18:56] Step 00000 | 0.00 global steps/s | 0.0 local passes/s",
+        "          Tok/s: 0 (GPU) | 0 (Total) | Total Trained: 4,096",
+        "          LR: 2.00e-05 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.1187 | Aux: 8.0006 | VRAM: 1.4GB",
+        "[03:18:57] Step 00010 | 12.78 global steps/s | 12.8 local passes/s",
+        "          Tok/s: 52,350 (GPU) | 52,350 (Total) | Total Trained: 45,056",
+        "          LR: 2.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.0915 | Aux: 8.0058 | VRAM: 1.4GB"
+      ],
+      "ce_finite": true,
+      "pass": true
+    },
+    "fused_ce": {
+      "steps_done": 10,
+      "ce_trace": [
+        {
+          "step": 0,
+          "ce": 11.1193,
+          "tok_s": 0.0
+        },
+        {
+          "step": 10,
+          "ce": 11.0913,
+          "tok_s": 56145.0
+        }
+      ],
+      "decisions": [
+        "[fused-ce] VESPER_FUSED_CE=1: logits+softmax+CE replaced by fla FusedLinearCrossEntropyLoss (ignore_index=pad_id=12, mean over non-ignored targets); full logits are never materialized and forward() returns logits=None whenever targets are passed. fla's FLCE is Triton-only \u2014 on CPU (smoke/probes) a p"
+      ],
+      "warnings": [],
+      "log_tail": [
+        "Hybrid stack: {'kda': 3, 'mla': 1} (4 layers)",
+        "",
+        "Using torch AdamW optimizer",
+        "Using Muon optimizer: 2,853,632 params (Muon) + 8,393,734 params (AdamW)",
+        "",
+        "--- Running Dummy Pass to Pre-allocate Max VRAM ---",
+        "Max VRAM Successfully Reserved: 0.2GB",
+        "---------------------------------------------------",
+        "",
+        "[03:19:18] Step 00000 | 0.00 global steps/s | 0.0 local passes/s",
+        "          Tok/s: 0 (GPU) | 0 (Total) | Total Trained: 4,096",
+        "          LR: 2.00e-05 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.1193 | Aux: 8.0006 | VRAM: 0.3GB",
+        "[03:19:19] Step 00010 | 13.71 global steps/s | 13.7 local passes/s",
+        "          Tok/s: 56,145 (GPU) | 56,145 (Total) | Total Trained: 45,056",
+        "          LR: 2.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.0913 | Aux: 8.0066 | VRAM: 0.3GB"
+      ],
+      "ce_finite": true,
+      "pass": true
+    },
+    "value_embed": {
+      "steps_done": 10,
+      "ce_trace": [
+        {
+          "step": 0,
+          "ce": 11.1163,
+          "tok_s": 0.0
+        },
+        {
+          "step": 10,
+          "ce": 11.089,
+          "tok_s": 53871.0
+        }
+      ],
+      "decisions": [
+        "[value-embed] VESPER_VALUE_EMBED=1: token-id value tables added to attention values on first/last layers: layer 0 (kda, width=128), layer 3 (mla, width=256)"
+      ],
+      "warnings": [],
+      "log_tail": [
+        "Hybrid stack: {'kda': 3, 'mla': 1} (4 layers)",
+        "",
+        "Using torch AdamW optimizer",
+        "Using Muon optimizer: 2,853,632 params (Muon) + 33,554,566 params (AdamW)",
+        "",
+        "--- Running Dummy Pass to Pre-allocate Max VRAM ---",
+        "Max VRAM Successfully Reserved: 0.8GB",
+        "---------------------------------------------------",
+        "",
+        "[03:19:37] Step 00000 | 0.00 global steps/s | 0.0 local passes/s",
+        "          Tok/s: 0 (GPU) | 0 (Total) | Total Trained: 4,096",
+        "          LR: 2.00e-05 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.1163 | Aux: 8.0011 | VRAM: 1.8GB",
+        "[03:19:38] Step 00010 | 13.15 global steps/s | 13.2 local passes/s",
+        "          Tok/s: 53,871 (GPU) | 53,871 (Total) | Total Trained: 45,056",
+        "          LR: 2.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.0890 | Aux: 8.0061 | VRAM: 1.8GB"
+      ],
+      "ce_finite": true,
+      "pass": true
+    },
+    "all3": {
+      "steps_done": 10,
+      "ce_trace": [
+        {
+          "step": 0,
+          "ce": 11.1166,
+          "tok_s": 0.0
+        },
+        {
+          "step": 10,
+          "ce": 11.0894,
+          "tok_s": 51834.0
+        }
+      ],
+      "decisions": [
+        "[value-embed] VESPER_VALUE_EMBED=1: token-id value tables added to attention values on first/last layers: layer 0 (kda, width=128), layer 3 (mla, width=256)",
+        "[compile] VESPER_COMPILE=1: compiled 16 dense submodule forwards (MoE expert MLPs + GQA); fla attention wrappers left eager (Triton kernels do not trace under inductor)",
+        "[fused-ce] VESPER_FUSED_CE=1: logits+softmax+CE replaced by fla FusedLinearCrossEntropyLoss (ignore_index=pad_id=12, mean over non-ignored targets); full logits are never materialized and forward() returns logits=None whenever targets are passed. fla's FLCE is Triton-only \u2014 on CPU (smoke/probes) a p"
+      ],
+      "warnings": [
+        "[compile] VESPER_COMPILE=1: compiled 16 dense submodule forwards (MoE expert MLPs + GQA); fla attention wrappers left eager (Triton kernels do not trace under inductor)"
+      ],
+      "log_tail": [
+        "Hybrid stack: {'kda': 3, 'mla': 1} (4 layers)",
+        "",
+        "Using torch AdamW optimizer",
+        "Using Muon optimizer: 2,853,632 params (Muon) + 33,554,566 params (AdamW)",
+        "",
+        "--- Running Dummy Pass to Pre-allocate Max VRAM ---",
+        "Max VRAM Successfully Reserved: 0.3GB",
+        "---------------------------------------------------",
+        "",
+        "[03:19:56] Step 00000 | 0.00 global steps/s | 0.0 local passes/s",
+        "          Tok/s: 0 (GPU) | 0 (Total) | Total Trained: 4,096",
+        "          LR: 2.00e-05 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.1166 | Aux: 8.0011 | VRAM: 0.7GB",
+        "[03:19:57] Step 00010 | 12.65 global steps/s | 12.7 local passes/s",
+        "          Tok/s: 51,834 (GPU) | 51,834 (Total) | Total Trained: 45,056",
+        "          LR: 2.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.0894 | Aux: 8.0071 | VRAM: 0.7GB"
+      ],
+      "ce_finite": true,
+      "pass": true
+    }
+  },
+  "all_of_a_d_pass": true
+}

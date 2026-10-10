@@ -1,0 +1,114 @@
+[boot 03:14:42] python headers first (swarm4: triton AMD hip_utils needs them)
+[boot 03:14:48] venv + ROCm torch (t3 pattern)
+torch 2.9.1+rocm6.3 hip 6.3.42134-a9a80e791
+[boot 03:16:38] clone speedrun-opts
+Cloning into '/root/VesperLM'...
+[boot 03:16:39] pinned fla + patches (t3 pattern)
+patched: /root/venvs/pod/lib/python3.12/site-packages/fla/utils/env.py
+patched: /root/venvs/pod/lib/python3.12/site-packages/fla/layers/mla.py
+patched: /root/venvs/pod/lib/python3.12/site-packages/fla/ops/kda/chunk_bwd.py
+patched: /root/venvs/pod/lib/python3.12/site-packages/fla/ops/kda/chunk_intra.py
+patched: /root/venvs/pod/lib/python3.12/site-packages/fla/ops/kda/gate.py
+patched: /root/venvs/pod/lib/python3.12/site-packages/fla/ops/kda/wy_fast.py
+fla patches OK
+[boot 03:16:46] patch_fla OK
+[boot 03:16:46] run canary matrix
+[canary] repo=/root/VesperLM host=vesper-swarm5-ttl180m-1791601783 utc=2026-10-10T03:16:46Z pwd=/root/VesperLM
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+[canary] torch 2.9.1+rocm6.3 cuda None hip 6.3.42134-a9a80e791 avail True n 1
+[canary] gpu0 AMD Radeon Graphics _CudaDeviceProperties(name='AMD Radeon Graphics', major=9, minor=4, gcnArchName='gfx942:sramecc+:xnack-', total_memory=196288MB, multi_processor_count=304, uuid=31653036-3031-3362-3263-653465356537, pci_bus_id=131, pci_device_id=0, pci_domain_id=0, L2_cache_size=4MB)
+[canary] triton 3.5.1
+
+
+============================ ROCm System Management Interface ============================
+=========================================== ID ===========================================
+GPU[0]		: Device Name: 		AMD Instinct MI300X VF
+GPU[0]		: Device ID: 		0x74b5
+GPU[0]		: Device Rev: 		0x00
+GPU[0]		: Subsystem ID: 	0x74a1
+GPU[0]		: GUID: 		21947
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+[canary] apt python3-dev ok
+already patched: /root/venvs/pod/lib/python3.12/site-packages/fla/utils/env.py
+already patched: /root/venvs/pod/lib/python3.12/site-packages/fla/layers/mla.py
+already patched: /root/venvs/pod/lib/python3.12/site-packages/fla/ops/kda/chunk_bwd.py
+already patched: /root/venvs/pod/lib/python3.12/site-packages/fla/ops/kda/chunk_intra.py
+already patched: /root/venvs/pod/lib/python3.12/site-packages/fla/ops/kda/gate.py
+already patched: /root/venvs/pod/lib/python3.12/site-packages/fla/ops/kda/wy_fast.py
+fla patches OK
+[canary] patch_fla OK
+/opt/amdgpu/share/libdrm/amdgpu.ids: No such file or directory
+[canary] fla 0.6.0 einops ok
+[canary] ===== RUN baseline | flags:  | steps=15 seed=123 =====
+[canary] sandbox: /root/VesperLM/lab/sandbox/canary_baseline
+[canary] RUN baseline rc=0 87s
+Hybrid stack: {'kda': 3, 'mla': 1} (4 layers)
+--- Running Dummy Pass to Pre-allocate Max VRAM ---
+Max VRAM Successfully Reserved: 0.7GB
+[03:18:36] Step 00000 | 0.00 global steps/s | 0.0 local passes/s
+          Tok/s: 0 (GPU) | 0 (Total) | Total Trained: 4,096
+          LR: 2.00e-05 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.1186 | Aux: 8.0006 | VRAM: 1.4GB
+[03:18:37] Step 00010 | 13.05 global steps/s | 13.1 local passes/s
+          Tok/s: 53,460 (GPU) | 53,460 (Total) | Total Trained: 45,056
+          LR: 2.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.0912 | Aux: 8.0072 | VRAM: 1.4GB
+[canary] ===== RUN compile | flags: VESPER_COMPILE=1 | steps=15 seed=123 =====
+[canary] sandbox: /root/VesperLM/lab/sandbox/canary_compile
+[canary] RUN compile rc=0 24s
+[compile] VESPER_COMPILE=1: compiled 16 dense submodule forwards (MoE expert MLPs + GQA); fla attention wrappers left eager (Triton kernels do not trace under inductor)
+Hybrid stack: {'kda': 3, 'mla': 1} (4 layers)
+--- Running Dummy Pass to Pre-allocate Max VRAM ---
+Max VRAM Successfully Reserved: 0.7GB
+[03:18:56] Step 00000 | 0.00 global steps/s | 0.0 local passes/s
+          Tok/s: 0 (GPU) | 0 (Total) | Total Trained: 4,096
+          LR: 2.00e-05 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.1187 | Aux: 8.0006 | VRAM: 1.4GB
+[03:18:57] Step 00010 | 12.78 global steps/s | 12.8 local passes/s
+          Tok/s: 52,350 (GPU) | 52,350 (Total) | Total Trained: 45,056
+          LR: 2.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.0915 | Aux: 8.0058 | VRAM: 1.4GB
+[canary] ===== RUN fused_ce | flags: VESPER_FUSED_CE=1 | steps=15 seed=123 =====
+[canary] sandbox: /root/VesperLM/lab/sandbox/canary_fused_ce
+[canary] RUN fused_ce rc=0 19s
+[fused-ce] VESPER_FUSED_CE=1: logits+softmax+CE replaced by fla FusedLinearCrossEntropyLoss (ignore_index=pad_id=12, mean over non-ignored targets); full logits are never materialized and forward() returns logits=None whenever targets are passed. fla's FLCE is Triton-only — on CPU (smoke/probes) a pure-torch chunked equivalent with the same masking is used instead. Generation (targets=None) still returns real logits.
+Hybrid stack: {'kda': 3, 'mla': 1} (4 layers)
+--- Running Dummy Pass to Pre-allocate Max VRAM ---
+Max VRAM Successfully Reserved: 0.2GB
+[03:19:18] Step 00000 | 0.00 global steps/s | 0.0 local passes/s
+          Tok/s: 0 (GPU) | 0 (Total) | Total Trained: 4,096
+          LR: 2.00e-05 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.1193 | Aux: 8.0006 | VRAM: 0.3GB
+[03:19:19] Step 00010 | 13.71 global steps/s | 13.7 local passes/s
+          Tok/s: 56,145 (GPU) | 56,145 (Total) | Total Trained: 45,056
+          LR: 2.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.0913 | Aux: 8.0066 | VRAM: 0.3GB
+[canary] ===== RUN value_embed | flags: VESPER_VALUE_EMBED=1 | steps=15 seed=123 =====
+[canary] sandbox: /root/VesperLM/lab/sandbox/canary_value_embed
+[canary] RUN value_embed rc=0 19s
+[value-embed] VESPER_VALUE_EMBED=1: token-id value tables added to attention values on first/last layers: layer 0 (kda, width=128), layer 3 (mla, width=256)
+Hybrid stack: {'kda': 3, 'mla': 1} (4 layers)
+--- Running Dummy Pass to Pre-allocate Max VRAM ---
+Max VRAM Successfully Reserved: 0.8GB
+[03:19:37] Step 00000 | 0.00 global steps/s | 0.0 local passes/s
+          Tok/s: 0 (GPU) | 0 (Total) | Total Trained: 4,096
+          LR: 2.00e-05 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.1163 | Aux: 8.0011 | VRAM: 1.8GB
+[03:19:38] Step 00010 | 13.15 global steps/s | 13.2 local passes/s
+          Tok/s: 53,871 (GPU) | 53,871 (Total) | Total Trained: 45,056
+          LR: 2.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.0890 | Aux: 8.0061 | VRAM: 1.8GB
+[canary] a-d pass = True — {'baseline': (True, [{'step': 10, 'ce': 11.0912, 'tok_s': 53460.0}]), 'compile': (True, [{'step': 10, 'ce': 11.0915, 'tok_s': 52350.0}]), 'fused_ce': (True, [{'step': 10, 'ce': 11.0913, 'tok_s': 56145.0}]), 'value_embed': (True, [{'step': 10, 'ce': 11.089, 'tok_s': 53871.0}])}
+[canary] a-d summary rc=0
+[canary] ===== RUN all3 | flags: VESPER_COMPILE=1 VESPER_FUSED_CE=1 VESPER_VALUE_EMBED=1 | steps=15 seed=123 =====
+[canary] sandbox: /root/VesperLM/lab/sandbox/canary_all3
+[canary] RUN all3 rc=0 23s
+[value-embed] VESPER_VALUE_EMBED=1: token-id value tables added to attention values on first/last layers: layer 0 (kda, width=128), layer 3 (mla, width=256)
+[compile] VESPER_COMPILE=1: compiled 16 dense submodule forwards (MoE expert MLPs + GQA); fla attention wrappers left eager (Triton kernels do not trace under inductor)
+[fused-ce] VESPER_FUSED_CE=1: logits+softmax+CE replaced by fla FusedLinearCrossEntropyLoss (ignore_index=pad_id=12, mean over non-ignored targets); full logits are never materialized and forward() returns logits=None whenever targets are passed. fla's FLCE is Triton-only — on CPU (smoke/probes) a pure-torch chunked equivalent with the same masking is used instead. Generation (targets=None) still returns real logits.
+Hybrid stack: {'kda': 3, 'mla': 1} (4 layers)
+--- Running Dummy Pass to Pre-allocate Max VRAM ---
+Max VRAM Successfully Reserved: 0.3GB
+[03:19:56] Step 00000 | 0.00 global steps/s | 0.0 local passes/s
+          Tok/s: 0 (GPU) | 0 (Total) | Total Trained: 4,096
+          LR: 2.00e-05 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.1166 | Aux: 8.0011 | VRAM: 0.7GB
+[03:19:57] Step 00010 | 12.65 global steps/s | 12.7 local passes/s
+          Tok/s: 51,834 (GPU) | 51,834 (Total) | Total Trained: 45,056
+          LR: 2.20e-04 | B2: 0.9972 | Seq: 512 | Phase: 1 | CE Loss: 11.0894 | Aux: 8.0071 | VRAM: 0.7GB
+[canary] FINAL: {"baseline": {"pass": true, "ce": [{"step": 0, "ce": 11.1186, "tok_s": 0.0}, {"step": 10, "ce": 11.0912, "tok_s": 53460.0}]}, "compile": {"pass": true, "ce": [{"step": 0, "ce": 11.1187, "tok_s": 0.0}, {"step": 10, "ce": 11.0915, "tok_s": 52350.0}]}, "fused_ce": {"pass": true, "ce": [{"step": 0, "ce": 11.1193, "tok_s": 0.0}, {"step": 10, "ce": 11.0913, "tok_s": 56145.0}]}, "value_embed": {"pass": true, "ce": [{"step": 0, "ce": 11.1163, "tok_s": 0.0}, {"step": 10, "ce": 11.089, "tok_s": 53871.0}]}, "all3": {"pass": true, "ce": [{"step": 0, "ce": 11.1166, "tok_s": 0.0}, {"step": 10, "ce": 11.0894, "tok_s": 51834.0}]}}
+[canary] wrote /root/VesperLM/lab/sandbox/canary/result.json
+[canary] DONE utc=2026-10-10T03:20:04Z
+[boot 03:20:04] canary finished rc=0
