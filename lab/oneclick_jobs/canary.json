@@ -1,0 +1,16 @@
+{
+  "job_id": "swarm5_speedrun_canary",
+  "repo_url": "https://github.com/datacrystals/VesperLM.git",
+  "ref": "speedrun-opts",
+  "workdir": ".",
+  "env": {
+    "VESPER_CONFIG": "lab_tiny",
+    "VESPER_TOTAL_STEPS": "15",
+    "VESPER_AMP": "bf16",
+    "VESPER_SEED": "123"
+  },
+  "command": "bash lab/oneclick_jobs/canary.sh",
+  "max_minutes": 35,
+  "result_file": "lab/sandbox/canary/result.json",
+  "notes": "swarm5 merge-gate canary for speedrun-opts: flag matrix (baseline / VESPER_COMPILE / VESPER_FUSED_CE / VESPER_VALUE_EMBED / all-three) at lab_tiny KDA+MLA, 15 steps each, VESPER_AMP=bf16, seeded. Gate: no ROCm/compile crash-hang, CE finite and close across flags, tok/s recorded. Logs per flag under lab/sandbox/canary_*/train.log, summary in result.json (RESULT_JSON exfil)."
+}

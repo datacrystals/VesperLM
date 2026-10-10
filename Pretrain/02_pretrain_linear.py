@@ -224,7 +224,10 @@ def train():
     if current_cfg.get("use_muon", True):
         muon_params, adamw_params = [], []
         for name, p in model.named_parameters():
-            if p.ndim == 2 and "tok_embeddings" not in name and "output" not in name:
+            # value_emb (VESPER_VALUE_EMBED) is a token lookup table like
+            # tok_embeddings — keep it on AdamW, Muon is for hidden 2D weights.
+            if (p.ndim == 2 and "tok_embeddings" not in name
+                    and "output" not in name and "value_emb" not in name):
                 muon_params.append(p)
             else:
                 adamw_params.append(p)
