@@ -20,12 +20,13 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cpu_backend as cb
+import telemetry
 from probes import load_probe_set, run_probes, aggregate
 
 
 def build_report(ckpt, lora, probes_path, results, agg, elapsed,
                  max_new, probe_set_sha):
-    return {
+    report = {
         "meta": {
             "ckpt": os.path.abspath(ckpt),
             "lora": os.path.abspath(lora) if lora else None,
@@ -38,6 +39,18 @@ def build_report(ckpt, lora, probes_path, results, agg, elapsed,
         "results": results,
         "aggregate": agg,
     }
+    # E0 drive telemetry (SUBSYSTEMS.md): one reject_mass event per scored
+    # batch. reject_mass = mean per-probe failure mass = 1 - mean(score);
+    # for the binary scorers it is exactly the failed fraction. Logging only.
+    telemetry.log_reject_mass(
+        1.0 - agg["aggregate"], aggregate=agg["aggregate"],
+        n_probes=agg["n_probes"], probe_set_sha=probe_set_sha,
+        ckpt=os.path.abspath(ckpt),
+        protected_reject_mass=round(1.0 - agg["protected_aggregate"], 6),
+        per_category={c: round(1.0 - v, 6)
+                      for c, v in agg["per_category"].items()},
+        elapsed_sec=round(elapsed, 2))
+    return report
 
 
 def main():

@@ -32,6 +32,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cpu_backend as cb
+import telemetry
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROTECTED_EPSILON = 1e-6   # constant; any protected drop beyond this vetoes
@@ -225,6 +226,13 @@ def main():
                             "candidate": cand_report["aggregate"]["aggregate"]},
               "drift": drift}
     log_decision(gate_log, record)
+    # E0 drive telemetry (SUBSYSTEMS.md): the admission verdict. Logging only.
+    telemetry.log_immune_verdict(
+        verdict, source="Immune.gate", action=action, reason=" | ".join(reasons),
+        checks=checks, reasons=reasons, aggregate=record["aggregate"],
+        drift=drift, dry_run=bool(args.dry_run),
+        incumbent=os.path.abspath(args.incumbent),
+        candidate=os.path.abspath(args.candidate))
     run_path = os.path.join(args.log_dir, f"gate_{ts.replace(':', '')}.json")
     with open(run_path, "w") as f:
         json.dump({"one_line": one_line, "record": record,

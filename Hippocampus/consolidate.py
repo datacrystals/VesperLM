@@ -47,6 +47,7 @@ from lora import (attach_lora, freeze_trunk, lora_parameters,
                   lora_modules, save_delta, load_delta, set_lora_enabled,
                   merge_all, unmerge_all,
                   DEFAULT_TARGET_PROFILE, get_target_profile)
+import telemetry
 
 
 # ------------------------------------------------------------------
@@ -843,6 +844,11 @@ def consolidate(log: SessionLog, user_id: str = "default",
     verdict = call_gate(cand_dir, gate_inc_dir, gate_fn=gate_fn, gate_cmd=gate_cmd)
     if verbose:
         print(f"[consolidate] GATE: {verdict.decision} — {verdict.reason}")
+    # E0 drive telemetry (SUBSYSTEMS.md): the admission verdict seen by the
+    # memory loop (stub / CLI / Immune import — whatever call_gate resolved).
+    telemetry.log_immune_verdict(
+        verdict.decision, source="consolidate.call_gate", reason=verdict.reason,
+        metrics=verdict.metrics, user_id=user_id, candidate_dir=cand_dir)
 
     promoted = None
     if verdict.decision == "PROMOTE":
@@ -859,6 +865,18 @@ def consolidate(log: SessionLog, user_id: str = "default",
         if verbose:
             print(f"[consolidate] ROLLBACK — incumbent unchanged: "
                   f"{incumbent_path if os.path.exists(incumbent_path) else '(none)'}")
+
+    # E0 drive telemetry (SUBSYSTEMS.md): one consolidation event per pass.
+    telemetry.log_consolidation(
+        verdict.decision, user_id=user_id, n_triples=len(triples),
+        reason=verdict.reason,
+        mean_reward=stats.get("mean_reward"),
+        unique_response_ratio=stats.get("unique_response_ratio"),
+        top_response_fraction=stats.get("top_response_fraction"),
+        loss0=stats.get("loss0"), loss_final=stats.get("loss_final"),
+        final_kl=stats.get("final_kl"),
+        train_seconds=stats.get("train_seconds"),
+        target_profile=profile_name, promoted=promoted is not None)
 
     return ConsolidateResult(
         decision=verdict.decision, reason=verdict.reason,

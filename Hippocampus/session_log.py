@@ -18,10 +18,18 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, Iterable, List, Optional
+
+_COMMON = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Common")
+if _COMMON not in sys.path:
+    sys.path.insert(0, _COMMON)
+
+import telemetry
 
 VALID_MARKS = ("approve", "reject", "neutral")
 
@@ -103,6 +111,10 @@ class SessionLog:
             raise ValueError(f"mark must be one of {VALID_MARKS}, got {mark!r}")
         if not 0.0 <= confidence <= 1.0:
             raise ValueError("confidence must be in [0, 1]")
+        # E0 drive telemetry (SUBSYSTEMS.md): one feedback event per mark.
+        # Logging only; the session log below remains the memory of record.
+        telemetry.log_feedback(session_id, turn_id, mark, confidence,
+                               has_correction=correction is not None)
         return self.append({
             "type": "feedback", "session_id": session_id, "turn_id": turn_id,
             "mark": mark, "confidence": confidence, "note": note,

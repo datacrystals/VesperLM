@@ -63,6 +63,7 @@ _spec.loader.exec_module(p01)
 from vesper_linear_model import VesperLinearLM
 from muon import Muon
 from configs.model_configs import get_model_config
+import telemetry
 
 ACTIVE_CONFIG_NAME = os.environ.get("VESPER_CONFIG", "470m")
 
@@ -442,6 +443,16 @@ def train():
                     val_loss += v_ce_loss.item()
             val_loss /= val_eval_steps
             val_loss_history.append((step, val_loss))
+            # E0 drive telemetry (SUBSYSTEMS.md): val NLL trend, one event per
+            # val run (rank 0 only). Logging only.
+            if is_main:
+                telemetry.log_val_nll(
+                    step, val_loss,
+                    best_val_nll=(best_val_loss
+                                  if best_val_loss != float("inf") else None),
+                    prev_val_nll=(val_loss_history[-2][1]
+                                  if len(val_loss_history) > 1 else None),
+                    val_eval_steps=val_eval_steps)
 
             if is_main:
                 print(f"\n--- Validation at Step {step} | Val Loss: {val_loss:.4f} ---")
