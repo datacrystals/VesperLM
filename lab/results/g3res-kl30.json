@@ -1,0 +1,25 @@
+{
+  "id": "g3res-kl30",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "text_KL 30 at N=8 shaped consolidation: completes the log-linear KL curve; expect base-CE <1% if the trend holds, with retention monitored for the cliff",
+  "config": "lab_small",
+  "script": "lab/g3_shaped_run.py",
+  "env": {
+    "G3S_N": "8",
+    "G3S_TEXT_KL": "30.0",
+    "G3S_OUT": "lab/results/g3_shaped_n8_kl30.json",
+    "G3S_STATE": "lab/sandbox/g3_shaped/n8_shaped_kl30_state.pt",
+    "G3S_DEVICE": "cuda"
+  },
+  "budget_minutes": 60,
+  "mutation_of": "g3res-kl24",
+  "val_loss_final": null,
+  "val_loss_series": [],
+  "ce_last": null,
+  "tok_s_avg": null,
+  "steps_done": 0,
+  "seconds": 2010.1,
+  "rc": 0,
+  "stopped": null
+}

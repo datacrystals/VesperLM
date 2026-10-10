@@ -894,6 +894,35 @@ inference only.)*
   run with owner_mass 0.85 + scoring home in the recipe is the natural
   end-to-end confirmation if the bump is adopted.
 
+## 2026-10-10 — g3res-kl24 / g3res-kl30 (KL curve completion) — OUTCOME LOG: the KL lever SATURATES — base CE +1.53% (KL 24) / +1.67% (KL 30) vs +1.82% (KL 12): the <1% bar is NOT reachable by text-KL pressure; the log-linear extrapolation is falsified
+*(outcome log — the second-priority sweep points for the residual curve.)*
+- Method: `lab/g3_shaped_run.py` N=8 shaped, fresh consolidation at
+  text_KL 24.0 / 30.0 (G3S_TEXT_KL knob), same seed/recipe as the 3/6/12
+  arms. Farm jobs g3res-kl24 (retention-side data below) and g3res-kl30
+  (2007s). Results `lab/results/g3_shaped_n8_kl{24,30}.json`,
+  logs `lab/logs/g3res-kl*.log`.
+- **Complete curve (base-CE Δ / retention / p_any):** KL 3: +8.91% / 1.07
+  / 0.590; KL 6: +3.25% / 1.33 / 0.617; KL 12: +1.82% / 0.75 / 0.626;
+  KL 24: **+1.53%** / 0.788 / 0.606; KL 30: **+1.67%** / 0.804 / 0.596.
+  Per-ep KL24 ret: 1.00/0.90/0.73/0.74/0.71/0.73/0.56/0.93 (all but
+  computing ≥ 0.70); KL30: 0.94/0.80/0.50/0.46/1.40/0.74/0.73/0.87.
+- **Verdict: SATURATION at ≈ +1.5-1.7% from KL 12 on.** The earlier
+  log-linear read ("halving per KL doubling → KL 24-30 reaches <1%") is
+  **falsified** — the residual stops falling after KL 12 while retention
+  holds (0.75-0.80 across 12-30). Mechanism: text-KL makes contaminated
+  tokens cheap only up to the point where the expert's off-home output
+  matches the base DISTRIBUTION; beyond that the remaining residual is
+  the routing displacement itself (a plug row still writes at ~0.6
+  weight on base tokens), which no output-side pressure touches.
+- What it rules out: text-KL pressure (at any tested strength) as a
+  route to the <1% CE bar. The bar now needs an addressing-side change
+  (reduce base-token plug occupancy), a displacement-aware mix rule, or
+  an explicit re-scope (e.g. <2% as the N=8 coexistence CE bar).
+- Next tried: nothing further this cycle — full state of the residual
+  line: row-side closed, pool-side closed/confounded, KL saturates
+  at +1.6%. The owner_mass 0.85 fix (delivery) is the actionable recipe
+  change from this cycle.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.

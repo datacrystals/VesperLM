@@ -604,7 +604,10 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   the shape recipe's PASS is also spine-conditional (delivery fails on
   lab_tiny/8-base). **Residual line summary: the KL lever is the only
   one that moves CE without silencing (+8.9%→+1.8% at KL 12, retention
-  0.75); row-side and pool-side levers are closed.**
+  0.75); row-side and pool-side levers are closed.** KL curve completed
+  (24/30 points): **saturation at +1.5-1.7% from KL 12 on** (KL 24:
+  +1.53%/0.788; KL 30: +1.67%/0.804) — the log-linear extrapolation to
+  <1% is falsified; the bar needs an addressing-side change or a re-scope.
   (lab/results/g3_shaped_n8_kl6.json, g3_shaped_n8_kl12.json,
   g3_dilution_clone.json, g3_shaped_n8_8base.json)
   **Spine-conditional delivery: diagnosed and FIXED (2026-10-10).** The
