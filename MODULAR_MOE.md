@@ -641,9 +641,15 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   the baked-in recipe delivers more mass on base tokens too).
   **Spine-portability is CLOSED GREEN** — shaped memories PASS the
   retention bar on both lab_small 4-base and lab_tiny 8-base with the
-  recipe. N=16 shaped on the same spine/recipe is the full coexistence
-  story (g3res-8base-e2e-n16).
-  (lab/results/g3_shaped_n8_8base_e2e.json)
+  recipe. (lab/results/g3_shaped_n8_8base_e2e.json)
+  **N=16 on the real spine — PASS (retention 0.953, 15/16 eps ≥ 0.70,
+  util_min 0.66, contam_max 0.139 clean):** the full coexistence story is
+  green on t0-8expert-realdata with the same recipe — retention is flat
+  in N (0.94 at N=8 → 0.95 at N=16) once owner_mass sits above the
+  delivery cliff. Base CE +3.68% (7.2086→7.4735) at p_any_plug 0.889 —
+  the group-occupancy residual grows with N on this spine (+2.85% →
+  +3.68%) and remains the one open bar. (lab/results/
+  g3_shaped_n16_8base_e2e.json)
   Original gate text: 16 episodic experts plugged sequentially
   into t2 (tiny_agent_k); all section-6 purity gates still hold for every
   expert, and base-mix val CE has not regressed >1% vs pre-library. This

@@ -958,6 +958,39 @@ recipe run as the pipeline recipe, not as a post-hoc pass.)*
   full coexistence story (g3res-8base-e2e-n16).
 - Next tried: N=16 shaped on the same spine with the same recipe.
 
+## 2026-10-10 — g3res-8base-e2e-n16 (full coexistence story, real spine) — OUTCOME LOG: PASS — N=16 shaped on t0-8expert-realdata with the owner_mass 0.85 + scoring-home recipe holds retention 0.953 (15/16 eps ≥ 0.70) — coexistence at N=16 is green on the real spine
+*(outcome log — the N=16 completion of the e2e confirmation.)*
+- Method: `lab/g3_shaped_run.py` N=16 (`ms.SHAPED_16`) on the same
+  t0-8expert-realdata 8-base spine, same recipe as g3res-8base-e2e
+  (owner_mass 0.85, home_mode scoring, 80/800/800, text_KL 3.0),
+  self-consistent solos. Farm job g3res-8base-e2e-n16 (3780s). Results
+  `lab/results/g3_shaped_n16_8base_e2e.json`, state
+  `lab/sandbox/g3_shaped/n16_8base_e2e_state.pt`,
+  log `lab/logs/g3res-8base-e2e-n16.log`.
+- **VERDICT: PASS — retention 0.953** (bar 0.70; N=8 same recipe 0.944;
+  the un-fixed recipe at N=8 was 0.397). Per-ep (ret/util/contam): math
+  1.10/1.00/0.03, cooking 1.09/0.75/0.12, astronomy 0.99/0.75/0.07,
+  music 0.79/0.74/0.08, sports 1.00/0.78/0.14, anatomy 0.69/0.69/0.10,
+  computing 0.85/0.73/0.10, geology 1.00/0.69/0.07, history 1.00/0.73/0.12,
+  travel 1.00/0.75/0.13, weather 0.99/0.71/0.09, money 0.98/0.75/0.09,
+  chess 1.01/0.75/0.10, ocean 0.80/0.77/0.09, forest 0.97/0.66/0.14,
+  bridge 0.99/0.76/0.08. **15 of 16 clear 0.70** (anatomy 0.687
+  marginal). util_min 0.661, **contam_max 0.139 clean** (bar 0.3).
+- **Base CE: 7.2086 → 7.4735 = +3.68%** (documented; p_any_plug 0.889,
+  p_both 0.655 — 16 plug rows on an 8-base pool saturate top-2 more, as
+  expected; the residual grows with N on this spine: +2.85% at N=8 →
+  +3.68% at N=16, consistent with the group-occupancy residual story).
+- What it confirms: **the full coexistence story is green on the real
+  spine** — N=16 shaped memories with the calibrated recipe hold the
+  margin-retention bar where the un-calibrated recipe collapsed at N=8.
+  Retention is flat in N (0.94 → 0.95) once owner_mass sits above the
+  delivery cliff; the open item is only the base-CE residual (+3.7%),
+  which is the known group-occupancy cost (KL lever saturates at
+  ~+1.6% on lab_small; not yet re-tested at this N/spine).
+- Next tried: nothing further this cycle — spine-portability and N=16
+  coexistence on the real spine are both closed green with the
+  owner_mass 0.85 + scoring-home recipe.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.
