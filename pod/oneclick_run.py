@@ -107,12 +107,26 @@ def norm_payload(payload):
 
 
 def parse_jupyter_url(url, token=None):
-    """Return (http_base, ws_base, token) from a Jupyter URL."""
+    """Return (http_base, ws_base, token) from a Jupyter URL.
+
+    Handles both bare-host form (http://node:port/lab?token=…) and the
+    production proxied form
+    (https://ocr.oneclickamd.ai/instance/<id>/lab/tree/<nb>.ipynb?token=…),
+    where the Jupyter REST API lives under the proxy prefix
+    (https://…/instance/<id>/api/…).
+    """
     p = urlparse(url)
     if p.scheme not in ("http", "https"):
         raise ValueError(f"not an http(s) Jupyter URL: {url!r}")
-    http_base = f"{p.scheme}://{p.netloc}"
-    ws_base = ("wss" if p.scheme == "https" else "ws") + f"://{p.netloc}"
+    path = p.path or ""
+    cut = len(path)
+    for marker in ("/lab", "/tree", "/notebooks", "/doc", "/api", "/files"):
+        idx = path.find(marker)
+        if idx != -1:
+            cut = min(cut, idx)
+    prefix = path[:cut].rstrip("/")
+    http_base = f"{p.scheme}://{p.netloc}{prefix}"
+    ws_base = ("wss" if p.scheme == "https" else "ws") + f"://{p.netloc}{prefix}"
     if token is None:
         token = (parse_qs(p.query).get("token") or [None])[0]
     return http_base, ws_base, token
@@ -212,10 +226,11 @@ class RemoteKernel:
     queues keyed by parent msg_id.
     """
 
-    def __init__(self, jupyter_url, log, token=None, keepalive_secs=300):
+    def __init__(self, jupyter_url, log, token=None, keepalive_secs=300, cookies=None):
         self.http_base, self.ws_base, self.token = parse_jupyter_url(jupyter_url, token)
         self.log = log
         self.keepalive_secs = keepalive_secs
+        self.cookies = dict(cookies or {})
         self.session_id = uuid.uuid4().hex
         self.kernel_id = None
         self.ws = None
@@ -228,6 +243,8 @@ class RemoteKernel:
         self.s = requests.Session()
         if self.token:
             self.s.headers["Authorization"] = f"token {self.token}"
+        if self.cookies:
+            self.s.cookies.update(self.cookies)
 
     # ---------- HTTP helpers ----------
 
@@ -237,6 +254,7 @@ class RemoteKernel:
     def wait_server(self, timeout_secs=180):
         deadline = time.time() + timeout_secs
         last_err = None
+        last_log = 0.0
         while time.time() < deadline:
             try:
                 r = self.s.get(self._url("/api/status"), params=self._auth(), timeout=15)
@@ -246,6 +264,9 @@ class RemoteKernel:
                 last_err = f"http {r.status_code}"
             except requests.RequestException as e:
                 last_err = f"{type(e).__name__}: {e}"
+            if time.time() - last_log > 30:
+                self.log.line(f"  waiting for jupyter at {self.http_base}: {last_err}")
+                last_log = time.time()
             time.sleep(3)
         raise TimeoutError(f"jupyter server not reachable at {self.http_base}: {last_err}")
 
@@ -281,6 +302,8 @@ class RemoteKernel:
         headers = []
         if self.token:
             headers.append(f"Authorization: token {self.token}")
+        if self.cookies:
+            headers.append("Cookie: " + "; ".join(f"{k}={v}" for k, v in self.cookies.items()))
         self.ws = websocket.create_connection(
             ws_url, header=headers, timeout=20, enable_multithread=True)
         self._reader_thread = threading.Thread(target=self._reader, daemon=True)
@@ -541,16 +564,21 @@ def main():
             created = mgr.create(args.org, args.repo, args.branch,
                                  notebook_path.replace(os.sep, "/"), wall_deadline)
             instance_id = created.get("instance_id") or ""
+            status = str(created.get("status") or "").lower()
             jupyter_url = created.get("url") or ""
-            if not jupyter_url:
+            if status not in READY_STATES or not jupyter_url:
                 if not instance_id:
-                    raise RuntimeError(f"create returned neither url nor instance_id: {created}")
+                    raise RuntimeError(f"create returned neither ready url nor "
+                                       f"instance_id: {created}")
+                log.line(f"create status={status or '-'} — polling until ready")
                 ready = mgr.wait_ready(instance_id, wall_deadline,
                                        boot_timeout_secs=args.boot_timeout_min * 60)
-                jupyter_url = ready.get("url") or ""
+                jupyter_url = ready.get("url") or jupyter_url
+                status = str(ready.get("status") or "").lower()
             if not jupyter_url:
                 raise RuntimeError("instance ready but no url returned")
-            log.line(f"instance ready: id={instance_id or '-'} url={jupyter_url}")
+            log.line(f"instance ready: id={instance_id or '-'} status={status} "
+                     f"url={jupyter_url}")
         except (RuntimeError, TimeoutError) as e:
             log.line(f"FATAL: {e}")
             log.line("no unauthenticated teardown endpoint exists; nothing to clean up")
@@ -567,10 +595,16 @@ def main():
     log.add_secret(args.token)
 
     # ---- drive cells ----
+    # The manager tracks instances via cookie amd_oneclick_gh_instance; the
+    # front proxy may require it on /instance/<id>/ routes — always send it.
+    m = re.search(r"/instance/([^/]+)", urlparse(args.attach or jupyter_url).path or "")
+    cookies = {"amd_oneclick_gh_instance": m.group(1)} if m else {}
+    if cookies:
+        log.line(f"instance cookie set for: {m.group(1)}")
     try:
         k = RemoteKernel(args.attach or jupyter_url, log, token=args.token or url_token,
-                         keepalive_secs=args.keepalive_secs)
-        k.wait_server(timeout_secs=min(300, max(30, wall_deadline - time.time())))
+                         keepalive_secs=args.keepalive_secs, cookies=cookies)
+        k.wait_server(timeout_secs=min(600, max(30, wall_deadline - time.time())))
         k.start()
     except (TimeoutError, requests.RequestException, websocket.WebSocketException,
             ValueError, OSError) as e:

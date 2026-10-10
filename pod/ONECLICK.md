@@ -402,3 +402,160 @@ instance at a time out of politeness to a free shared service.
 - Radeon Cloud docs (rate limits): `https://github.com/AMD-AIM/radeon-cloud-docs` (`src/content/docs/api/rate-limits.md`)
 - Radeon Cloud credits guide (official Zhihu): `https://github.com/AMD-AIM/zhihu_rednote_articles` (`zhihu/05-radeon-cloud-credits-guide`)
 - Third-party runbook: `https://github.com/joelhenwang/lfm2-training-rocm-eaft-comt-luspo-sdft` (`docs/oneclickamd_runbook.md`)
+
+---
+
+## 9. Built lane (2026-10-09): orchestrator + boot notebook + smoke job
+
+Files (all committed to `main`):
+
+| File | Role |
+|---|---|
+| `pod/oneclick_run.py` | laptop-side orchestrator: create → poll ready → drive notebook cells over the Jupyter REST+websocket kernel API → stream stdout to a local log → hard wall-clock cap |
+| `pod/oneclick_boot.ipynb` | generic 5-cell bootstrap notebook driven by the orchestrator (probe → fetch job JSON → clone+deps → run job → RESULT_JSON) |
+| `lab/oneclick_jobs/smoke.json` | smoke job config (the `--job-url` target; schema below) |
+| `lab/oneclick_jobs/smoke.sh` | smoke job command: stage the `lab/runner.py` sandbox, 30-step `lab_tiny` farm-style trainer run, write `result.json` |
+
+Launch one-liner (from the laptop; do NOT run the trainer locally):
+
+    python3 pod/oneclick_run.py --notebook pod/oneclick_boot.ipynb \
+      --job-url https://raw.githubusercontent.com/datacrystals/VesperLM/main/lab/oneclick_jobs/smoke.json \
+      --minutes 50
+
+Options: `--org/--repo/--branch` (default `datacrystals/VesperLM/main`), `--base`
+(manager URL), `--log` (default `lab/logs/oneclick_<utc>.log`), `--max-create-attempts`
+(default 3, bounded retries on busy/queue/5xx/"creation failed"), `--boot-timeout-min`
+(default 15), `--keepalive-secs` (default 300), `--attach <jupyter-url>` (skip create;
+drive an existing instance — also the preemption-retry path).
+
+### 9.1 Job JSON schema (fetched by notebook cell 2)
+
+    {
+      "job_id": "...",            // required
+      "repo_url": "https://github.com/datacrystals/VesperLM.git",  // required
+      "ref": "main",              // required (branch or tag; tarball fallback uses it)
+      "workdir": ".",             // required, relative to the cloned repo root
+      "env": {"VESPER_CONFIG": "lab_tiny", ...},   // exported to the command
+      "pip": ["flash-linear-attention", ...],      // documented intent; cell 3
+                                                   // installs whatever import-fails
+      "command": "bash lab/oneclick_jobs/smoke.sh",// required, run with cwd=workdir
+      "max_minutes": 12,          // bounds the notebook-side keepalive
+      "result_file": "lab/sandbox/smoke/result.json"  // required; cell 5 exfils it
+    }
+
+Cell flow: cell 1 prints `PROBE_JSON:<json>` (GPU count/type via `rocm-smi` +
+`torch.cuda.device_count()`, torch/ROCm versions, CPU/RAM/disk, and egress
+reachability probes to github.com / raw.githubusercontent.com / codeload.github.com /
+huggingface.co / hf-mirror.com / pypi.org / pypi.tuna.tsinghua.edu.cn — any HTTP
+response counts as reachable). Cell 2 fetches the job JSON from `JOB_URL`; the
+orchestrator substitutes the `__ONECLICK_JOB_URL__` placeholder in the cell source at
+exec time (manual fallback: committed `lab/oneclick_jobs/smoke.json` on main).
+Cell 3 clones `repo_url@ref` (fallback: `codeload.github.com` tarball) and pip-installs
+missing deps (mirror first, `pypi.org` fallback). Cell 4 runs `command` streaming
+stdout and starts a **bounded** keepalive that appends a timestamp line to
+`/proc/1/fd/1` every 240 s (container-log idle-reaper defense) until the job ends or
+`max_minutes`+10 min elapse. Cell 5 prints `RESULT_JSON:<json>` with `result_file`'s
+contents. **All exfil is cell stdout captured by the orchestrator; no credentials on
+the box.**
+
+### 9.2 Runtime API behaviors observed (2026-10-09, beyond §2)
+
+- Create response is **flat** (`status`/`message`/`url`/`instance_id`) as the launcher
+  JS shows; the first response is `status="allocating"` **with `url` already populated**
+  — it is NOT ready yet. Poll `/api/github/notebook/status?instance_id=` until
+  `running`/`ready` before using the URL. Statuses map to k8s pod phase: `pending` =
+  pod unscheduled (resource queue), `loading` = image pull, `initializing` =
+  ContainerCreating, `jupyter_starting`/`running`/`ready` = container up / Jupyter
+  answering (mirror `app/k8s_client.py` `get_pod_status`).
+- **`data.url` is a proxied path form**, not the mirror's `http://node:port/lab`:
+  `https://ocr.oneclickamd.ai/instance/<instance_id>/lab/tree/<nb>.ipynb?token=<tok>`.
+  The Jupyter REST API and kernel websocket therefore live under the prefix
+  `https://ocr.oneclickamd.ai/instance/<instance_id>/api/...`; the orchestrator strips
+  the `/lab|/tree|/notebooks|/doc|/api|/files` suffix to build the base. Jupyter token
+  observed as the mirror default `amd-oneclick` — the URL still must be treated as a
+  secret and never committed (orchestrator redacts it from local logs).
+- Instance IDs are mirror-style deterministic `gh-<md5(org/repo/path)[:8]>` (e.g.
+  `gh-ca7ead92` for `datacrystals/VesperLM/pod/oneclick_boot.ipynb`) despite the
+  cookie-tracked flow — status lookup by `instance_id` works without the cookie.
+- **Resource queue + preemption are real and heavy**: create succeeds instantly
+  (manager accepts), then the pod sits `pending`/"Waiting for resources..." for tens
+  of minutes; a window opened ~34 min after create, the manager reported `ready`, and
+  the pod was preempted again within ~1 min (nginx 502 on every `/instance/<id>/…`
+  path, manager status back to `pending`). Design consequence: treat ready as
+  transient, attach fast, retry attach cycles against the **same** instance_id (no new
+  creation), and keep job cells restartable/idempotent.
+- Teardown: openapi.json (fetched fresh 2026-10-09) exposes destroy only under HTTP
+  Basic `/api/admin/*` — deliberately not used (§7). There is no unauthenticated
+  delete/stop. After we go quiet, the idle reaper (~10 min without container log
+  output) reclaims the pod; the notebook keepalive is bounded so it cannot pin a pod
+  to the 6 h max lifetime. Orchestrator exit codes: 0 ok, 2 create/connect fatal,
+  3 wall-cap, 4 cell failure, 5 no RESULT_JSON, 6 job rc != 0.
+
+---
+
+## 10. Smoke test 2026-10-09 (ran 22:58–00:35 UTC) — **BLOCKED on free-tier resource queue**
+
+Outcome: **smoke NOT executed on GPU** — instance creation succeeded (1 of 2 budget
+used; id `gh-ca7ead92`), but the free tier never gave the pod a sustained scheduling
+window. Everything box-side (GPU count, torch/ROCm versions, box egress, trainer
+behavior) is therefore **UNVERIFIED** and marked so below.
+
+Timeline (UTC, from `lab/logs/oneclick_smoke.log` + poll loop):
+
+| Time | Event |
+|---|---|
+| 22:58:34 | `oneclick_run` create `POST /api/github/notebook/create` for `pod/oneclick_boot.ipynb` |
+| 22:58:35 | `200` → `status=allocating`, `instance_id=gh-ca7ead92`, `url` populated **before ready** |
+| 22:58–23:32 | status `pending` / "Waiting for resources..." (k8s pod unscheduled) |
+| ~23:32:48 | status briefly `ready` (scheduling window after ~34 min in queue) |
+| 23:33–23:38 | every `/instance/gh-ca7ead92/…` route returned **nginx 502**; orchestrator `wait_server` exhausted (5 min) → `ORCH_EXIT=2` |
+| ~23:38+ | status back to `pending` / "Waiting for resources..." (window lost) |
+| 23:43–00:35 | 3×25 min wait/attach cycles polled every 10 s; **still `pending` at 00:35** (62+ min) |
+
+What the 502-while-`ready` window means is **UNVERIFIED** — two candidate causes,
+both now defended against in `pod/oneclick_run.py` but **not live-tested**:
+(a) the front proxy gates `/instance/<id>/` on the manager cookie
+`amd_oneclick_gh_instance` (orchestrator now always sends it on REST + websocket);
+(b) the pod was preempted/reaped in the gap (mirror idle-reaper = 10 min without
+container log output — plausible if proxied requests never reached the pod). The
+orchestrator also now sends `wait_server` progress logs and accepts `--attach` retry
+cycles against the same instance id (no new creation).
+
+### Answers to the smoke questions
+
+| Question | Verdict |
+|---|---|
+| GPU count (8xMI300X vs 1) | **UNVERIFIED** — `PROBE_JSON` never ran on a box. Mirror default `GPU_LIMIT=1` vs user report 8x remains open; the probe settles it on the first successful run |
+| torch / ROCm versions | **UNVERIFIED** (image `vllm_paddle:ppocr-oneclick` implies torch+ROCm preinstalled) |
+| Box egress (github.com, raw, codeload, hf, hf-mirror, pypi) | **UNVERIFIED from inside a box**; manager-side raw.githubusercontent fetch works (it downloaded our notebook path), and `create` accepts arbitrary public paths |
+| Trainer 30-step `lab_tiny` behavior | **UNVERIFIED on-box**; pipeline locally validated (below) |
+| Teardown | No unauthenticated delete/stop exists (openapi fresh 2026-10-09); admin Basic endpoints deliberately untouched; idle reaper + bounded keepalive is the reclaim path |
+
+### What WAS verified
+
+1. **Headless create works end-to-end**: unauthenticated `POST` returns
+   `instance_id` + `url` + sets `amd_oneclick_gh_instance` cookie; status polling by
+   `instance_id` works without the cookie. Instance ids look deterministic per
+   notebook path (`gh-…`), so re-running the same path reuses/overwrites the same
+   instance — attach-retry is free.
+2. **URL shape** (§9.2): proxied `https://ocr.oneclickamd.ai/instance/<id>/lab/tree/…
+   ?token=amd-oneclick`; Jupyter API under `/instance/<id>/api/…`. Token redacted in
+   logs; never commit instance URLs.
+3. **Local end-to-end dry-run PASSES** (2026-10-09 22:52 UTC): `oneclick_run.py
+   --attach` against a local `jupyter-server` drove all 5 boot cells (probe → job
+   fetch via placeholder substitution → clone+deps → streamed job stdout → RESULT_JSON
+   capture) with `cells ok: [True,True,True,True,True]`, exit 0, token redaction
+   confirmed. Protocol code (kernel start, websocket execute_request/iopub demux,
+   keepalive, wall-cap interrupt) is sound; only live-box behavior is missing.
+
+### Next attempt (when free capacity exists)
+
+    python3 pod/oneclick_run.py --notebook pod/oneclick_boot.ipynb \
+      --job-url https://raw.githubusercontent.com/datacrystals/VesperLM/main/lab/oneclick_jobs/smoke.json \
+      --minutes 50
+
+Budget note: 1 of the 2 allowed creations was used (`gh-ca7ead92`, 2026-10-09
+22:58:35 UTC). The pending pod holds no GPU; if it ever schedules while unattended,
+the idle reaper (10 min) reclaims it once quiet — nothing to clean up by hand. A
+second (retry) creation is still available for a fixable failure; re-attach to
+`gh-ca7ead92` costs nothing first.
