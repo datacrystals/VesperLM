@@ -1,0 +1,25 @@
+{
+  "id": "g3res-dilution-clone",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "occupancy-dilution signal run: the plug-induced base-CE residual shrinks as the base-expert pool grows at fixed N=8 shaped plug-ins (cloned-base curve 4/8/16/32 on the saved state)",
+  "config": "lab_small",
+  "script": "lab/g3_dilution_clone.py",
+  "env": {
+    "G3D_STATE": "lab/sandbox/g3_shaped/n8_shaped_state.pt",
+    "G3D_SOLO_JSON": "lab/results/g3_shaped_n8.json",
+    "G3D_OUT": "lab/results/g3_dilution_clone.json",
+    "G3D_BASE_SIZES": "4,8,16,32",
+    "G3D_DEVICE": "cuda"
+  },
+  "budget_minutes": 20,
+  "mutation_of": "g3res-textkl12",
+  "val_loss_final": null,
+  "val_loss_series": [],
+  "ce_last": null,
+  "tok_s_avg": null,
+  "steps_done": 0,
+  "seconds": 61.0,
+  "rc": 0,
+  "stopped": null
+}

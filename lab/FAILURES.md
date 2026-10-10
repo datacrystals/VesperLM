@@ -695,6 +695,118 @@ N=8 shaped state.)*
   hierarchical domain→memory addressing rung (§8.5's live fallback tree)
   if both fail.
 
+## 2026-10-10 — g3res-textkl6 / g3res-textkl12 (N-scaled base-neutrality at consolidation) — OUTCOME LOG: the KL lever WORKS and scales the residual down ~5× (base CE +8.91% → +3.25% → +1.82% at text_KL 3/6/12) with retention holding (1.07/1.33/0.75) — but the <1% CE bar is still not met at KL 12 and retention is already sliding
+*(outcome log — branch (i) from the residual entry: G1b's text-KL 3.0 gave
++0.6% at N=1 but +8.9% at N=8; test pressure scaled with N.)*
+- Method: `lab/g3_shaped_run.py` N=8 shaped, fresh full consolidation per
+  arm with `G3S_TEXT_KL` ∈ {6.0, 12.0} (new env knob; 3.0 baseline is the
+  recorded `g3_shaped_n8.json` run — same script, same seed 0). Self-
+  consistent solo refs rebuilt per arm. Farm jobs g3res-textkl6
+  (1994s) / g3res-textkl12 (2075s). Results
+  `lab/results/g3_shaped_n8_kl{6,12}.json`, logs `lab/logs/g3res-textkl*.log`.
+- **Numbers (bar: CE regression <1% AND retention ≥0.70):**
+  text_KL 3.0: CE +8.91%, retention 1.071, p_any 0.590 (baseline);
+  text_KL 6.0: CE **+3.25%**, retention **1.325** (PASS retention),
+  p_any 0.617;
+  text_KL 12.0: CE **+1.82%**, retention **0.750** (PASS retention, at the
+  edge), p_any 0.626.
+  Per-ep KL12 (ret/util): math 1.01/0.95, cooking 1.03/0.46, astronomy
+  0.70/0.41, music 0.48/0.32, sports 0.40/0.42, anatomy 0.90/0.32,
+  computing 0.68/0.32, geology 0.81/0.40. (KL6's 1.325 mean includes
+  another sports solo-ref outlier at 4.48; excl. sports ≈ 0.87.)
+- **Mechanism confirmed (G1b's claim at N=8):** p_any_plug is ~0.62 at
+  every KL — the lever does NOT change occupancy; it makes contaminated
+  tokens CE-cheap (expert outputs stay base-like off-home). The residual
+  halves roughly per KL doubling (log-linear), so the bar would need
+  text_KL ~24–30 — but retention at KL 12 is already sliding toward the
+  0.70 line (music 0.48, sports 0.40), so the dual bar likely cannot be
+  met by KL pressure alone: the two objectives trade off.
+- Verdict per the dual bar: **PARTIAL — both arms PASS retention, both
+  MISS the CE bar (3.25% / 1.82% vs <1%)**. The N-scaled base-neutrality
+  branch is the strongest residual lever measured so far (5× reduction)
+  but is not sufficient by itself inside the tested range.
+- What it rules out: "text-KL 3.0 is enough at N=8" (it is not — the N=1
+  recipe does not scale); and "KL pressure alone can close the residual
+  without retention cost" (extrapolation says the crossover needs KL
+  where retention is likely gone).
+- Next tried: the occupancy-dilution signal run (see next entry) in the
+  same cycle, plus the real-spine 8-base companion.
+
+## 2026-10-10 — g3res-dilution-clone (occupancy-dilution check) — OUTCOME LOG: DILUTION_WEAK_OR_ABSENT — the plug-induced base-CE residual does NOT shrink with base-pool share (8.91% → 7.71% → 7.67% → 7.77% at 4/8/16/32 base rows); the N=8 residual is not a tiny-pool artifact
+*(signal run, not a gate — the scale-artifact hypothesis test.)*
+- Method: `lab/g3_dilution_clone.py` on the saved N=8 shaped state
+  (`lab/sandbox/g3_shaped/n8_shaped_state.pt`): expand the base pool from
+  the 4 trained experts to 8/16/32 by CLONING them (weights copied,
+  passport rows + 1e-2 noise) — constant expert quality, varying pool
+  share (plug share 0.67 → 0.50 → 0.33 → 0.20). Control arm per pool
+  size: same cloned pool WITHOUT plug rows, so the reported residual is
+  plug-induced (CE_with_plugs − CE_clone_only), not clone-diversity drift
+  (which is small: +0.46–0.48% at 8–32). Farm job g3res-dilution.
+  Results `lab/results/g3_dilution_clone.json`,
+  `lab/logs/g3res-dilution-clone.log`.
+- **Curve (plug residual / p_any / retention):** 4: +8.91% / 0.590 / 1.07;
+  8: +7.71% / 0.407 / 0.74; 16: +7.67% / 0.404 / 0.72; 32: +7.77% /
+  0.401 / 0.72. Doubling the base pool ONCE cuts the residual ~1.3× and
+  p_any ~1.4×; from 8→32 rows (share 0.50→0.20) both are FLAT.
+- **Hypothesis verdict: REJECTED (weak at best).** If the residual were
+  slot-arithmetic, plug share 0.67→0.20 would shrink it proportionally;
+  it stays ~7.7%. What does shrink (p_any 0.59→0.40) does not translate
+  to CE — so each remaining plug displacement is individually damaging
+  (a plug expert's off-home output rewriting the mix), and clone-pool
+  top-2 saturation (two clones of one expert) caps the dilution effect.
+  The companion real-spine run (8 independently trained base experts,
+  g3res-8base) checks whether trained diversity recovers what cloning
+  could not.
+- What it rules out: "the residual will dissolve at t2-scale expert pools
+  for free" — pool growth alone does not fix it. Coexistence cost at N=8
+  is a per-displacement base-neutrality problem (consistent with the KL
+  arm being the effective lever).
+- Next tried: g3res-8base (real trained 8-base spine, full shaped
+  pipeline) queued same cycle.
+
+## 2026-10-10 — g3res-8base (occupancy-dilution companion, real spine) — OUTCOME LOG: CONFUSING SIGNAL — base-CE residual is small on the trained 8-base spine (+1.44%) but memory delivery COLLAPSES there (retention 0.397 FAIL, p_any 0.795): the CE number is confounded with silencing, not clean dilution evidence
+*(signal run — real 8 trained base experts instead of clones; cross-spine,
+so expert-count is confounded with model size and base quality.)*
+- Method: `lab/g3_shaped_run.py` N=8 shaped on the trained 8-expert
+  passport spine `t0-8expert-realdata` (lab_tiny: dim 128, 4 layers,
+  hidden 384, 8 base experts, top-2 — vs the lab_small reference's dim
+  256 / 6 layers / 4 base). First attempt died in 8s on a path bug
+  (repo-relative `G3S_CKPT` resolved against the job's `cwd=sandbox` —
+  fixed by applying the `_abs` resolver; requeued same cycle). Full
+  recipe, text_KL 3.0, self-consistent solos. 1436s. Results
+  `lab/results/g3_shaped_n8_8base.json`, `lab/logs/g3res-8base.log`.
+- **Numbers:** base CE 7.2086 → 7.3125 = **+1.44%** (bar <1%; vs +8.91%
+  on 4-base lab_small) with p_any_plug **0.795** (HIGHER than 4-base's
+  0.590) / p_both 0.334. **Retention 0.397 FAIL** (bar 0.70): per-ep
+  (ret/util) math 1.23/0.97, cooking 0.11/0.55, astronomy 0.29/0.55,
+  music 0.65/0.48, sports 0.11/0.53, anatomy 0.08/0.60, computing
+  0.08/0.47, geology 0.64/0.54 — the token-substitution shape that PASSES
+  on lab_small mostly collapses on this spine (util stays high; delivery
+  does not follow).
+- **Read: NOT clean dilution evidence.** The CE residual did shrink
+  (+1.44% vs +8.91%) — but that coincides with memories being silenced
+  (retention 0.397), the same confound that made the buggy family router
+  look CE-positive. A plug expert that stops delivering is cheap;
+  the number cannot be credited to the larger pool. p_any even ROSE to
+  0.795 — occupancy is not what moved. Cross-spine caveats stack on top:
+  weaker base model (pre-CE 7.21 vs 6.77), different size, different
+  training run.
+- Combined with the clone curve (same-spine: residual flat 7.7% as share
+  falls 0.67→0.20), the dilution hypothesis stays REJECTED: pool share
+  does not drive the residual; active off-home plug outputs do. The
+  shape recipe's N=8 PASS is also spine-conditional — on lab_tiny/8-base
+  the delivery side fails, so "shaped memories pass everywhere" is
+  falsified as stated.
+- What it rules out: crediting small CE regressions when retention has
+  collapsed (report the pair, never CE alone); and "more trained base
+  experts alone fix the residual" as a free lunch.
+- Next tried: nothing further this cycle — the residual line's tested
+  levers are now: row-side pressure (closed), KL base-neutrality (best
+  lever: +8.9%→+1.8% at KL 12, retention sliding), pool growth (closed /
+  confounded). Remaining honest options: KL ~24–30 with retention
+  monitoring, hybrid KL + family-calibrated two-stage, or re-scope the
+  <1% bar for N=8 coexistence.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.

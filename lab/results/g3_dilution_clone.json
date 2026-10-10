@@ -1,0 +1,152 @@
+{
+  "gate": "G3-dilution-clone",
+  "signal": "DILUTION_WEAK_OR_ABSENT",
+  "verdict": "plug-induced base-CE residual vs base-pool size: 4:+8.91% -> 8:+7.71% -> 16:+7.67% -> 32:+7.77%; residual does not shrink materially with pool size \u2014 the residual is not a tiny-pool artifact",
+  "state": "/home/tliao/VesperLM/lab/sandbox/g3_shaped/n8_shaped_state.pt",
+  "ce_pre": 6.7735,
+  "noise": 0.01,
+  "curve": [
+    {
+      "base_pool": 4,
+      "n_plug": 8,
+      "pool_rows": 12,
+      "plug_pool_share": 0.6667,
+      "ce_lib": 7.3771,
+      "base_ce_regression_pct": 8.911,
+      "ce_clone_only": 6.7735,
+      "clone_drift_pct": 0.0,
+      "plug_residual": 0.6036,
+      "plug_residual_pct": 8.911,
+      "p_any_plug_in_top2": 0.5895752310752869,
+      "p_both_plug_in_top2": 0.17055771499872208,
+      "mean_retention": 1.0712,
+      "retention": {
+        "math_words": 1.0231,
+        "cooking_counts": 1.0015,
+        "astronomy_counts": 1.0382,
+        "music_counts": 0.7735,
+        "sports_counts": 2.4759,
+        "anatomy_counts": 1.0641,
+        "computing_counts": 0.4672,
+        "geology_counts": 0.726
+      },
+      "util_home": {
+        "math_words": 0.9514,
+        "cooking_counts": 0.4293,
+        "astronomy_counts": 0.4472,
+        "music_counts": 0.3462,
+        "sports_counts": 0.4308,
+        "anatomy_counts": 0.336,
+        "computing_counts": 0.2952,
+        "geology_counts": 0.4474
+      }
+    },
+    {
+      "base_pool": 8,
+      "n_plug": 8,
+      "pool_rows": 16,
+      "plug_pool_share": 0.5,
+      "ce_lib": 7.3289,
+      "base_ce_regression_pct": 8.2,
+      "ce_clone_only": 6.8046,
+      "clone_drift_pct": 0.459,
+      "plug_residual": 0.5243,
+      "plug_residual_pct": 7.705,
+      "p_any_plug_in_top2": 0.4068579723437627,
+      "p_both_plug_in_top2": 0.20387483884890875,
+      "mean_retention": 0.7359,
+      "retention": {
+        "math_words": 0.6739,
+        "cooking_counts": 0.9934,
+        "astronomy_counts": 0.9948,
+        "music_counts": 0.3664,
+        "sports_counts": 1.3808,
+        "anatomy_counts": 0.4547,
+        "computing_counts": 0.5421,
+        "geology_counts": 0.4814
+      },
+      "util_home": {
+        "math_words": 0.7361,
+        "cooking_counts": 0.197,
+        "astronomy_counts": 0.3056,
+        "music_counts": 0.2103,
+        "sports_counts": 0.2154,
+        "anatomy_counts": 0.1667,
+        "computing_counts": 0.2143,
+        "geology_counts": 0.2368
+      }
+    },
+    {
+      "base_pool": 16,
+      "n_plug": 8,
+      "pool_rows": 24,
+      "plug_pool_share": 0.3333,
+      "ce_lib": 7.328,
+      "base_ce_regression_pct": 8.186,
+      "ce_clone_only": 6.806,
+      "clone_drift_pct": 0.48,
+      "plug_residual": 0.522,
+      "plug_residual_pct": 7.669,
+      "p_any_plug_in_top2": 0.40353437264760333,
+      "p_both_plug_in_top2": 0.20209143807490668,
+      "mean_retention": 0.7221,
+      "retention": {
+        "math_words": 0.6742,
+        "cooking_counts": 0.9937,
+        "astronomy_counts": 0.9957,
+        "music_counts": 0.2523,
+        "sports_counts": 1.3826,
+        "anatomy_counts": 0.4553,
+        "computing_counts": 0.5414,
+        "geology_counts": 0.4814
+      },
+      "util_home": {
+        "math_words": 0.7326,
+        "cooking_counts": 0.197,
+        "astronomy_counts": 0.3028,
+        "music_counts": 0.2077,
+        "sports_counts": 0.2154,
+        "anatomy_counts": 0.1667,
+        "computing_counts": 0.2143,
+        "geology_counts": 0.2515
+      }
+    },
+    {
+      "base_pool": 32,
+      "n_plug": 8,
+      "pool_rows": 40,
+      "plug_pool_share": 0.2,
+      "ce_lib": 7.334,
+      "base_ce_regression_pct": 8.275,
+      "ce_clone_only": 6.805,
+      "clone_drift_pct": 0.465,
+      "plug_residual": 0.529,
+      "plug_residual_pct": 7.773,
+      "p_any_plug_in_top2": 0.4013456503550212,
+      "p_both_plug_in_top2": 0.20176718632380167,
+      "mean_retention": 0.7247,
+      "retention": {
+        "math_words": 0.6733,
+        "cooking_counts": 0.9939,
+        "astronomy_counts": 0.9955,
+        "music_counts": 0.2519,
+        "sports_counts": 1.4057,
+        "anatomy_counts": 0.4554,
+        "computing_counts": 0.5406,
+        "geology_counts": 0.4814
+      },
+      "util_home": {
+        "math_words": 0.7326,
+        "cooking_counts": 0.1995,
+        "astronomy_counts": 0.3,
+        "music_counts": 0.2051,
+        "sports_counts": 0.2154,
+        "anatomy_counts": 0.1532,
+        "computing_counts": 0.2143,
+        "geology_counts": 0.2515
+      }
+    }
+  ],
+  "note": "base pool expanded by cloning trained base experts (weights copied, passport rows + noise); plug rows fixed at the saved N=8 shaped library \u2014 isolates pool share at constant expert quality; companion real-spine run: g3_shaped_run.py on t0-8expert (8 trained base)",
+  "seconds": 58.0
+}

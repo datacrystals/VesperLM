@@ -584,6 +584,29 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   N), re-scope the CE bar as a known coexistence cost, or the hierarchical
   domain→memory addressing rung.
   (lab/results/g3_plug_bias_ab.json, g3_family_cal.json)
+  **N-scaled base-neutrality + occupancy-dilution (2026-10-10):** (1) KL
+  pressure at consolidation scales the residual down ~5× — text_KL 3/6/12
+  → base CE **+8.91% / +3.25% / +1.82%** with retention 1.07/1.33/0.75
+  (all ≥ 0.70) at **constant p_any ≈ 0.62**: G1b's mechanism confirmed at
+  N=8 (contaminated tokens become CE-cheap, occupancy untouched). The
+  <1% bar would need text_KL ≈ 24–30 (log-linear), but retention already
+  slides at 12 (music 0.48, sports 0.40) — KL pressure alone likely
+  cannot meet the dual bar. (2) Occupancy-dilution signal run REJECTED
+  the scale-artifact hypothesis: cloning the base pool to 8/16/32 rows
+  (plug share 0.67→0.20, constant expert quality, clone-only CE control)
+  leaves the plug residual flat at ~7.7% (4-row: +8.91%) even as p_any
+  halves 0.59→0.40 — the residual is per-displacement base-neutrality
+  damage, not slot arithmetic, and should NOT be expected to dissolve at
+  t2 pool sizes for free. The real-spine 8-base companion
+  (t0-8expert-realdata, full shaped pipeline) shows base CE +1.44% but
+  with retention collapsed to 0.397 (memories silenced) and p_any up to
+  0.795 — the small CE number is the silencing confound, not dilution;
+  the shape recipe's PASS is also spine-conditional (delivery fails on
+  lab_tiny/8-base). **Residual line summary: the KL lever is the only
+  one that moves CE without silencing (+8.9%→+1.8% at KL 12, retention
+  0.75); row-side and pool-side levers are closed.**
+  (lab/results/g3_shaped_n8_kl6.json, g3_shaped_n8_kl12.json,
+  g3_dilution_clone.json, g3_shaped_n8_8base.json)
   Original gate text: 16 episodic experts plugged sequentially
   into t2 (tiny_agent_k); all section-6 purity gates still hold for every
   expert, and base-mix val CE has not regressed >1% vs pre-library. This

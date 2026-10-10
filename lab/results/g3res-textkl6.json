@@ -1,0 +1,25 @@
+{
+  "id": "g3res-textkl6",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "N-scaled base-neutrality: consolidation at text_KL 6.0 (vs 3.0's +8.91% base-CE residual) shrinks the group-occupancy residual below 1% while N=8 shaped retention stays >= 0.70",
+  "config": "lab_small",
+  "script": "lab/g3_shaped_run.py",
+  "env": {
+    "G3S_N": "8",
+    "G3S_TEXT_KL": "6.0",
+    "G3S_OUT": "lab/results/g3_shaped_n8_kl6.json",
+    "G3S_STATE": "lab/sandbox/g3_shaped/n8_shaped_kl6_state.pt",
+    "G3S_DEVICE": "cuda"
+  },
+  "budget_minutes": 60,
+  "mutation_of": "g3sh-n8-shaped",
+  "val_loss_final": null,
+  "val_loss_series": [],
+  "ce_last": null,
+  "tok_s_avg": null,
+  "steps_done": 0,
+  "seconds": 1997.1,
+  "rc": 0,
+  "stopped": null
+}

@@ -48,15 +48,14 @@ import g3_coexistence as g3  # noqa: E402
 import memory_shaping as ms  # noqa: E402
 from consolidate import load_base_model  # noqa: E402
 
-CKPT = os.path.join(
-    REPO, "lab", "sandbox", "t1-diag-realdata-mb4",
-    "vesper_linear_checkpoints_lab_small", "step_best")
+_CKPT_ENV = os.environ.get("G3S_CKPT")
 DEVICE = os.environ.get("G3S_DEVICE") or (
     "cuda" if torch.cuda.is_available() else "cpu")
 N_EPS = int(os.environ.get("G3S_N", "8"))
 CONS_STEPS = int(os.environ.get("G3S_CONS_STEPS", "80"))
 RECAL_STEPS = int(os.environ.get("G3S_RECAL_STEPS", "800"))
 FINAL_JOINT = int(os.environ.get("G3S_FINAL_JOINT", "800"))
+TEXT_KL = float(os.environ.get("G3S_TEXT_KL", "3.0"))
 CONS_LR = 2e-3
 RECAL_LR = 1e-2
 SEED = int(os.environ.get("G3S_SEED", "0"))
@@ -68,6 +67,9 @@ def _abs(p):
     return p if os.path.isabs(p) else os.path.join(REPO, p)
 
 
+CKPT = (_abs(_CKPT_ENV) if _CKPT_ENV else os.path.join(
+    REPO, "lab", "sandbox", "t1-diag-realdata-mb4",
+    "vesper_linear_checkpoints_lab_small", "step_best"))
 OUT = _abs(os.environ.get("G3S_OUT") or
            os.path.join("lab", "results", f"g3_shaped_n{N_EPS}.json"))
 STATE_OUT = _abs(os.environ.get("G3S_STATE") or
@@ -155,7 +157,8 @@ def main():
         model, tok_global = load_fresh()
         experts, rows, info = ms.consolidate_episode(
             model, tok_global, episodes[j], BASE_MIX,
-            steps=CONS_STEPS, lr=CONS_LR, device=DEVICE, tag=f"solo{j}")
+            steps=CONS_STEPS, lr=CONS_LR, device=DEVICE, tag=f"solo{j}",
+            text_kl_coef=TEXT_KL)
         home = [ms.episode_home_ids(tok_global, episodes[j], DEVICE)]
         ms.plug_and_recal(model, experts, rows, home, BASE_MIX,
                           recal_steps=RECAL_STEPS, recal_lr=RECAL_LR,
@@ -182,7 +185,8 @@ def main():
         t_ins = time.time()
         experts, rows, info = ms.consolidate_episode(
             model, tok_global, episodes[j], BASE_MIX,
-            steps=CONS_STEPS, lr=CONS_LR, device=DEVICE, tag=f"ep{j}")
+            steps=CONS_STEPS, lr=CONS_LR, device=DEVICE, tag=f"ep{j}",
+            text_kl_coef=TEXT_KL)
         home_lists = [ms.episode_home_ids(tok_global, episodes[k], DEVICE)
                       for k in range(N_EPS)]
         rstat = ms.plug_and_recal(
@@ -253,7 +257,7 @@ def main():
     torch.save({"state_dict": ms.state_dict_cpu(model),
                 "n": N_EPS, "episodes": [episodes[k].name for k in live],
                 "recipe": {"cons": CONS_STEPS, "recal": RECAL_STEPS,
-                           "joint": FINAL_JOINT, "text_kl": 3.0}},
+                           "joint": FINAL_JOINT, "text_kl": TEXT_KL}},
                STATE_OUT)
     print(f"  state saved: {STATE_OUT}")
 
@@ -275,7 +279,7 @@ def main():
         "fixture": f"memory_shaping.SHAPED_{N_EPS} (all token-substitution deltas)",
         "shape_report": report,
         "recipe": {"cons": CONS_STEPS, "recal": RECAL_STEPS,
-                   "joint": FINAL_JOINT, "text_kl": 3.0, "owner_mass": 0.55},
+                   "joint": FINAL_JOINT, "text_kl": TEXT_KL, "owner_mass": 0.55},
         "standing_bar": {"metric": "margin retention vs solo", "bar": ms.RETENTION_BAR,
                          "anchor_n8": ANCHOR_N8},
         "pre_library": {str(j): pre[j] for j in pre},

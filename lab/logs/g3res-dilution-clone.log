@@ -1,0 +1,10 @@
+dilution-clone  state=/home/tliao/VesperLM/lab/sandbox/g3_shaped/n8_shaped_state.pt  base_sizes=[4, 8, 16, 32]  noise=0.01  device=cuda
+  base  4 (+0 clones)  share 0.67  CE 7.3771 (+8.911%)  clone-only 6.7735 (+0.000%)  plug-resid +8.911%  p_any 0.590  ret 1.0712
+  base  8 (+4 clones)  share 0.50  CE 7.3289 (+8.200%)  clone-only 6.8046 (+0.459%)  plug-resid +7.705%  p_any 0.407  ret 0.7359
+  base 16 (+12 clones)  share 0.33  CE 7.3280 (+8.186%)  clone-only 6.8060 (+0.480%)  plug-resid +7.669%  p_any 0.404  ret 0.7221
+  base 32 (+28 clones)  share 0.20  CE 7.3340 (+8.275%)  clone-only 6.8050 (+0.465%)  plug-resid +7.773%  p_any 0.401  ret 0.7247
+
+  SIGNAL: DILUTION_WEAK_OR_ABSENT — plug-induced base-CE residual vs base-pool size: 4:+8.91% -> 8:+7.71% -> 16:+7.67% -> 32:+7.77%; residual does not shrink materially with pool size — the residual is not a tiny-pool artifact
+
+wrote /home/tliao/VesperLM/lab/results/g3_dilution_clone.json
+total time: 58.0s
