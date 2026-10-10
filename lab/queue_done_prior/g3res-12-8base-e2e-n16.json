@@ -1,0 +1,19 @@
+{
+  "id": "g3res-8base-e2e-n16",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "full coexistence story on the real spine: N=16 shaped with the owner_mass 0.85 + scoring-prefix home recipe holds retention >= 0.70 on t0-8expert-realdata",
+  "config": "lab_small",
+  "script": "lab/g3_shaped_run.py",
+  "env": {
+    "G3S_N": "16",
+    "G3S_CKPT": "lab/sandbox/t0-8expert-realdata/vesper_linear_checkpoints_lab_tiny/step_best",
+    "G3S_OWNER_MASS": "0.85",
+    "G3S_HOME_MODE": "scoring",
+    "G3S_OUT": "lab/results/g3_shaped_n16_8base_e2e.json",
+    "G3S_STATE": "lab/sandbox/g3_shaped/n16_8base_e2e_state.pt",
+    "G3S_DEVICE": "cuda"
+  },
+  "budget_minutes": 90,
+  "mutation_of": "g3res-8base-e2e"
+}

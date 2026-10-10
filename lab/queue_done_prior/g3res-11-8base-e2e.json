@@ -1,0 +1,19 @@
+{
+  "id": "g3res-8base-e2e",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "end-to-end G3 confirmation on the real spine: N=8 shaped pipeline with owner_mass 0.85 and scoring-prefix home baked into the recipe from the start (g3res-ownerfix arm A) reaches retention >= 0.70 on t0-8expert-realdata, base-CE ~+1.5%, contam clean",
+  "config": "lab_small",
+  "script": "lab/g3_shaped_run.py",
+  "env": {
+    "G3S_N": "8",
+    "G3S_CKPT": "lab/sandbox/t0-8expert-realdata/vesper_linear_checkpoints_lab_tiny/step_best",
+    "G3S_OWNER_MASS": "0.85",
+    "G3S_HOME_MODE": "scoring",
+    "G3S_OUT": "lab/results/g3_shaped_n8_8base_e2e.json",
+    "G3S_STATE": "lab/sandbox/g3_shaped/n8_8base_e2e_state.pt",
+    "G3S_DEVICE": "cuda"
+  },
+  "budget_minutes": 45,
+  "mutation_of": "g3res-8base"
+}

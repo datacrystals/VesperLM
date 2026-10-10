@@ -630,6 +630,20 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   is now spine-portable; a full 8-base pipeline run with the bump is the
   end-to-end confirmation. (lab/results/g3_delivery_diag.json,
   g3_owner_mass_fix.json)
+  **End-to-end confirmation — PASS (2026-10-10):** the owner_mass 0.85 +
+  scoring-prefix home recipe baked into the pipeline from the start
+  (`G3S_OWNER_MASS`/`G3S_HOME_MODE=scoring` knobs, applied to every mex
+  pass — solo, per-insert, closing joint) reaches **N=8 shaped retention
+  0.944** on the t0-8expert-realdata 8-base spine (was 0.397; 7/8 eps ≥
+  0.70, anatomy 0.69 marginal), scoring-position util_min **0.76** (the
+  P8 gap is closed by construction), contam_max **0.208** clean, base CE
+  +2.85% documented (a little above the post-hoc pass's +1.55% because
+  the baked-in recipe delivers more mass on base tokens too).
+  **Spine-portability is CLOSED GREEN** — shaped memories PASS the
+  retention bar on both lab_small 4-base and lab_tiny 8-base with the
+  recipe. N=16 shaped on the same spine/recipe is the full coexistence
+  story (g3res-8base-e2e-n16).
+  (lab/results/g3_shaped_n8_8base_e2e.json)
   Original gate text: 16 episodic experts plugged sequentially
   into t2 (tiny_agent_k); all section-6 purity gates still hold for every
   expert, and base-mix val CE has not regressed >1% vs pre-library. This

@@ -923,6 +923,41 @@ inference only.)*
   at +1.6%. The owner_mass 0.85 fix (delivery) is the actionable recipe
   change from this cycle.
 
+## 2026-10-10 — g3res-8base-e2e (end-to-end G3 confirmation, real spine) — OUTCOME LOG: PASS — N=8 shaped with owner_mass 0.85 + scoring-prefix home baked into the recipe from the start reaches retention 0.944 (was 0.397) on t0-8expert-realdata; spine-portability question CLOSED GREEN
+*(outcome log — the natural G3 confirmation: the g3res-ownerfix arm-A
+recipe run as the pipeline recipe, not as a post-hoc pass.)*
+- Method: `lab/g3_shaped_run.py` N=8 on the t0-8expert-realdata spine
+  (lab_tiny 8-base) with the new `G3S_OWNER_MASS=0.85` +
+  `G3S_HOME_MODE=scoring` knobs (recal home data = prompt+stated[:first-
+  divergence] scoring prefixes, owner_mass 0.55→0.85 in every mex pass —
+  solo, per-insert, and closing joint), full recipe (80/800/800,
+  text_KL 3.0), self-consistent solos under the same recipe. Farm job
+  g3res-8base-e2e (1291s). Results
+  `lab/results/g3_shaped_n8_8base_e2e.json`, state
+  `lab/sandbox/g3_shaped/n8_8base_e2e_state.pt`,
+  log `lab/logs/g3res-8base-e2e.log`.
+- **VERDICT: PASS — retention 0.944** (bar 0.70; without the recipe
+  change the same spine/fixture scored 0.397). Per-ep (ret/util/contam):
+  math 1.07/1.00/0.07, cooking 1.10/0.79/0.16, astronomy 1.00/0.87/0.12,
+  music 0.81/0.76/0.13, sports 1.00/0.81/0.21, anatomy 0.69/0.88/0.17,
+  computing 0.88/0.81/0.18, geology 1.00/0.81/0.15. 7/8 clear 0.70
+  (anatomy 0.693 is a hair under). Scoring-position util is uniformly
+  high (util_min 0.76 — the P8 gap is closed by construction).
+- **Base CE: 7.2086 → 7.4139 = +2.85%** (documented; bar for this run is
+  documentation, not <1% — that bar belongs to the residual line and is
+  still open at ~+1.6-2.8% depending on spine/recipe). Per-expert
+  contamination clean: contam_max 0.208 < 0.3 (p_any_plug 0.789,
+  p_both 0.400). Note the e2e CE is a little above the post-hoc fix's
+  +1.55% — the baked-in recipe delivers more (util 0.8-1.0 vs 0.5),
+  i.e. more plug mass on base tokens too; report both honestly.
+- What it confirms: the delivery collapse was a calibration problem and
+  the owner_mass+scoring-home recipe generalizes from a post-hoc pass to
+  the full pipeline — **shaped memories are spine-portable** (lab_small
+  4-base and lab_tiny 8-base both PASS the retention bar with the
+  recipe). The N=16 shaped variant on the same spine is queued as the
+  full coexistence story (g3res-8base-e2e-n16).
+- Next tried: N=16 shaped on the same spine with the same recipe.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.
