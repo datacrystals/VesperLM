@@ -14,6 +14,11 @@ before its 7-day stale expiry. Carry both directives forward through compactions
 lab/FAILURES.md (entry template + fallback tree live there), pick the next
 untried branch (cheapest first), and queue it in the same heartbeat cycle.
 Only interrupt the user for budget or architecture-direction decisions.
+(4b) COMPUTE PREFERENCE (2026-10-10): prefer the FREE AMD OneClick lane
+(pod/oneclick_run.py — see pod/ONECLICK.md) for any droplet-eligible job that
+fits its constraints (<=6h, queue-tolerant). Fall back to paid devcloud
+droplets only when oneclick is starved/unfit. Poll cadence: attach-check per
+heartbeat; creation budget 2/day unless user lifts it.
 (4) DESIGN SPECS approved 2026-10-09: MODULAR_MOE.md §8 (episodic memory as
 experts, gates G0-G4, G0 done) and SUBSYSTEMS.md (drives/emotions control
 layer, gates E0-E4; E0 = telemetry instrumentation only, do it first and
