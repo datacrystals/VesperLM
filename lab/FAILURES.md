@@ -615,6 +615,86 @@ fixture and the margin-retention bar.)*
   Named next branch for the residual: family-row mex calibration
   (owner=family) or base-neutral weighting of plug rows.
 
+## 2026-10-10 — g3res-plugbias (branch b: base-neutral plug weighting) — OUTCOME LOG: NEGATIVE — a plug-row logit bias cannot separate base from home at this overlap: the CE/retention trade-off curve is monotone and no bias satisfies both bars (best retention-feasible point still +6.7% base CE; CE-feasible points kill delivery)
+*(outcome log — the cheaper of the two named residual branches; pure
+inference-time, one knob, no training.)*
+- Method: `lab/g3_plug_bias_ab.py` on the saved N=8 shaped library state
+  (`lab/sandbox/g3_shaped/n8_shaped_state.pt`, solo refs
+  `lab/results/g3_shaped_n8.json`). `PlugBiasRouter` subtracts β from every
+  plug-row logit before the top-2 contest (β=0 is exactly the as-saved
+  router — verified: reproduces CE 7.3771 / retention 1.0712 / p_any 0.590
+  to 3 decimals). Sweep β ∈ {0, 0.5, …, 5}, same margin/occupancy
+  machinery as the state's run (bias-aware occupancy — `g3.routing_matrix`
+  computes logits directly and would silently measure β=0). Farm job
+  g3res-plugbias (57s GPU). Results `lab/results/g3_plug_bias_ab.json`,
+  `lab/logs/g3res-plugbias.log`.
+- **VERDICT: NEGATIVE.** The curve is monotone and the two bars are
+  mutually exclusive: β 0→5 walks CE +8.91% → +0.21% and p_any 0.590 →
+  0.039, but retention 1.07 → 0.009 in the same span. Per β
+  (CE reg / p_any / retention): 0.0: +8.91/0.590/1.07; 0.5: +7.95/0.476/
+  0.95; 1.0: +6.73/0.377/**0.70** (last retention-feasible point, still
+  6.7× the CE bar); 2.0: +3.44/0.231/0.44; 3.0: +1.41/0.135/0.15;
+  3.5: **+0.89**/0.100/0.07 (first CE-feasible point, retention dead);
+  5.0: +0.21/0.039/0.01. util_home_min falls 0.295 → 0.003.
+- Root cause (mechanism): base tokens and home tokens overlap in the
+  plug-row logit distribution — a scalar bias cannot keep home delivery
+  (which needs plug rows to win by evidence) while suppressing base
+  hijacks (which happen at similar evidence levels). The residual is not a
+  calibration artifact; it needs structure (family-level training) or
+  expert-side base-neutrality.
+- What it rules out: any single-threshold / bias / temperature reweighting
+  of plug rows as the residual fix — the whole family of monotone plug
+  penalties is closed by this curve (β is the strongest monotone member:
+  it dominates admission margins and weight scaling on the same axis).
+- Next tried: branch (a), family-row mex calibration (owner=family,
+  section-4.4a target at family granularity over the two-stage router) —
+  the other named branch, queued same cycle as `g3res-2-familycal.json`.
+
+## 2026-10-10 — g3res-familycal (branch a: family-row mex calibration, owner=family) — OUTCOME LOG: NEGATIVE — trained family rows keep delivery perfectly (retention 1.071) but only trim the residual (+8.91% → +7.45% base CE at p_any 0.473); family rows never go silent on base
+*(outcome log — the other named residual branch, same cycle, same saved
+N=8 shaped state.)*
+- Method: `lab/g3_family_cal.py` on `lab/sandbox/g3_shaped/n8_shaped_state.pt`
+  (refs `lab/results/g3_shaped_n8.json`). `g3_family_ab`'s fixed
+  `FamilyRouter` two-stage (avg-linkage families on this state:
+  `[[0],[1,2],[3,4,5,6],[7]]`, k=4); ONLY fam_rows trained (base rows,
+  member rows, experts, query, spine frozen) with the §4.4a mutual-exclusion
+  target at family granularity: home of family f → family row f gets
+  owner_mass 0.55, base rows share 1−0.55, other families 0; base-mix
+  tokens → base rows share 1.0, family rows 0. 800 AdamW steps (lr 1e-2),
+  two-stage occupancy/util measurement (family slot resolves to argmax
+  member). Farm job g3res-familycal (369s GPU). Results
+  `lab/results/g3_family_cal.json`, `lab/logs/g3res-familycal.log`.
+- **VERDICT: NEGATIVE (retention side PASS, CE side FAIL).** As-saved flat
+  7.3771 (+8.91%) → family-cal 7.2781 (**+7.45%**, bar <1%); p_any_plug
+  0.590 → **0.473**; p_both 0.171 → 0.095. **Retention 1.071 unchanged**
+  (per-ep: math 1.02, cooking 0.92, astronomy 0.95, music 0.70, sports
+  2.64, anatomy 1.04, computing 0.48, geology 0.81) — the two-stage
+  delivery path costs nothing once family rows are trained; util_home_min
+  0.204. So (a) is strictly better than the untrained fixed rerun
+  (which lost 0.25 retention) but the CE bar is missed by 7×.
+- Root cause (mechanism): the calibration loss barely moves (98.2 → 94.0
+  over 800 steps) — family rows are means of high-norm member rows (plug
+  norms 17–34 vs base ~2), so they win the stage-1 contest on nearly every
+  token; the mex target's base-silence pressure is too weak at lr 1e-2 /
+  800 steps to overcome that norm advantage, and the home terms actively
+  push the same rows to fire. Same overlap story as branch (b): base and
+  home evidence is not separable by row-side pressure alone.
+- What it rules out: family-row mex calibration at the joint-cal cadence
+  (800 steps, lr 1e-2) as a sufficient residual fix. Together with the
+  (b) sweep, BOTH named row-side branches are closed: row-side pressure
+  (monotone penalties, trained family rows) cannot deliver base-CE < 1%
+  while holding delivery. The residual needs expert-side base-neutrality
+  (the G1b lever that worked at N=1: text-KL 3.0 gave +0.60% there — the
+  same coefficient at N=8 group occupancy still gives +8.9%) or a
+  fundamentally different addressing mechanism.
+- Next tried: none inside this cycle — both named branches are exhausted
+  and documented. Named candidates for the next cycle: (i) strengthen
+  base-neutrality at consolidation time (text-KL above 3.0, scaled with N)
+  so contaminated tokens are CE-cheap per G1b's finding; (ii) accept the
+  residual as a known cost of coexistence and re-scope the bar; (iii) the
+  hierarchical domain→memory addressing rung (§8.5's live fallback tree)
+  if both fail.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.

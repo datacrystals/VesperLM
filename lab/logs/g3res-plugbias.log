@@ -1,0 +1,16 @@
+plug-bias sweep  state=/home/tliao/VesperLM/lab/sandbox/g3_shaped/n8_shaped_state.pt  betas=[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0]  device=cuda
+  beta   0.0  CE 7.3771 (+8.911%)  p_any 0.590  ret 1.0712  util_min 0.295  fail
+  beta   0.5  CE 7.3117 (+7.946%)  p_any 0.476  ret 0.9456  util_min 0.229  fail
+  beta   1.0  CE 7.2295 (+6.732%)  p_any 0.377  ret 0.7007  util_min 0.113  fail
+  beta   1.5  CE 7.1267 (+5.214%)  p_any 0.298  ret 0.5913  util_min 0.081  fail
+  beta   2.0  CE 7.0062 (+3.435%)  p_any 0.231  ret 0.4379  util_min 0.054  fail
+  beta   2.5  CE 6.9234 (+2.214%)  p_any 0.178  ret 0.2394  util_min 0.038  fail
+  beta   3.0  CE 6.8691 (+1.412%)  p_any 0.135  ret 0.1454  util_min 0.018  fail
+  beta   3.5  CE 6.8335 (+0.886%)  p_any 0.100  ret 0.0727  util_min 0.010  fail
+  beta   4.0  CE 6.8115 (+0.561%)  p_any 0.074  ret 0.0383  util_min 0.003  fail
+  beta   5.0  CE 6.7878 (+0.211%)  p_any 0.039  ret 0.009  util_min 0.003  fail
+
+  SIGNAL: NEGATIVE — no beta passes both bars — retention-preserving betas still regress base CE (+6.73% at beta 1.0, best of the ret-feasible set); bias alone cannot separate base from home at this overlap — family-row mex calibration is the fallback branch
+
+wrote /home/tliao/VesperLM/lab/results/g3_plug_bias_ab.json
+total time: 56.9s

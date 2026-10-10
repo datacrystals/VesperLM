@@ -1,0 +1,17 @@
+family-cal  state=/home/tliao/VesperLM/lab/sandbox/g3_shaped/n8_shaped_state.pt  K=4  steps=800  device=cuda
+  families (4): [[0], [1, 2], [3, 4, 5, 6], [7]]
+  as-saved flat CE 7.3771 (pre-library 6.7735)
+  [fam-cal] step    0  loss +98.1972
+  [fam-cal] step  133  loss +93.2724
+  [fam-cal] step  266  loss +95.6623
+  [fam-cal] step  399  loss +94.6847
+  [fam-cal] step  532  loss +96.2790
+  [fam-cal] step  665  loss +93.8184
+  [fam-cal] step  798  loss +94.3562
+  [fam-cal] step  799  loss +93.9744
+
+  CE 7.2781 (+7.450%)  p_any 0.4729  p_both 0.0947  ret 1.070725  util_min 0.204
+  SIGNAL: NEGATIVE — retention holds (1.071) but base CE still regresses +7.45% (bar <1%) at p_any 0.473 — trained family rows reduce but do not close the occupancy residual; next branch: base-neutral expert re-consolidation or per-family admission margins
+
+wrote /home/tliao/VesperLM/lab/results/g3_family_cal.json
+total time: 369.0s

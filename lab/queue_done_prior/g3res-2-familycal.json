@@ -1,0 +1,18 @@
+{
+  "id": "g3res-familycal",
+  "tier": "t1",
+  "baseline": false,
+  "hypothesis": "family-row mex calibration (owner=family, section-4.4a target at family granularity) makes family rows silent on base (p_any drops) while keeping N=8 shaped retention >= 0.70, closing the base-CE residual below 1%",
+  "config": "lab_small",
+  "script": "lab/g3_family_cal.py",
+  "env": {
+    "G3C_STATE": "lab/sandbox/g3_shaped/n8_shaped_state.pt",
+    "G3C_SOLO_JSON": "lab/results/g3_shaped_n8.json",
+    "G3C_OUT": "lab/results/g3_family_cal.json",
+    "G3C_K": "4",
+    "G3C_STEPS": "800",
+    "G3C_DEVICE": "cuda"
+  },
+  "budget_minutes": 30,
+  "mutation_of": "g3res-plugbias"
+}

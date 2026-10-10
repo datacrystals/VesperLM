@@ -561,6 +561,29 @@ a continuous talk -> buffer -> consolidate -> plug-in loop.
   the residual: family-row mex calibration (owner=family) or base-neutral
   weighting of plug rows. (lab/results/g3_family_ab.json (buggy, preserved)
   + g3_family_ab_fix.json (fixed rerun))
+  **Base-CE residual: both named follow-up branches measured — both
+  NEGATIVE (2026-10-10).** (b) base-neutral plug weighting, the cheaper
+  one first: plug-logit bias sweep on the saved N=8 shaped state
+  (`g3_plug_bias_ab.py`, β 0→5, pure inference, 57s) — the CE/retention
+  curve is monotone and the bars are mutually exclusive (β 1.0 is the last
+  retention-feasible point at CE +6.73%; β 3.5 is the first CE-feasible
+  point at retention 0.07); a scalar bias cannot separate base from home
+  at this overlap, closing the whole family of monotone plug penalties.
+  (a) family-row mex calibration (`g3_family_cal.py`, owner=family §4.4a
+  target on fam_rows only, 800 steps, 369s): retention **holds at 1.071**
+  (two-stage delivery is free once family rows train) but base CE only
+  trims **+8.91% → +7.45%** (p_any 0.590 → 0.473) — family rows are means
+  of high-norm member rows (plug norms 17–34 vs base ~2) and the mex
+  base-silence pressure (loss 98→94) cannot overcome that norm advantage.
+  **Conclusion: row-side pressure is exhausted — the residual is
+  structural at the group-occupancy level** (8 rows × ~0.10 per-expert
+  contam on base tokens displaces base experts). G1b's base-neutrality
+  lever (text-KL 3.0 → CE +0.60% at N=1) is already in the consolidation
+  recipe and still yields +8.9% at N=8, so the named next cycle branches
+  are: strengthen base-neutrality at consolidation (text-KL scaled with
+  N), re-scope the CE bar as a known coexistence cost, or the hierarchical
+  domain→memory addressing rung.
+  (lab/results/g3_plug_bias_ab.json, g3_family_cal.json)
   Original gate text: 16 episodic experts plugged sequentially
   into t2 (tiny_agent_k); all section-6 purity gates still hold for every
   expert, and base-mix val CE has not regressed >1% vs pre-library. This
