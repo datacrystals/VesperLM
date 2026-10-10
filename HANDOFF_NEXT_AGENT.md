@@ -689,3 +689,16 @@ Advice already given: free vLLM config pass on existing 8× MI50 first → 1–2
 flashes to vLLM on them), hates cloud, mortal budget, wants ~1TB VRAM long-term for ~1T-param
 4-bit models. Serving note: Chinese frontier models are mostly 4-bit (K3), GLM 8-bit — a
 768B GLM-5.3 at 8-bit needs ~800GB → 10× MI210 (640GB) does NOT fit; 8× MI300X (1.5TB) does.
+
+---
+
+## 2026-10-10 ~16:20 UTC — LAPTOP OFFLINE PAUSE (user at hackathon)
+
+User shut the laptop down temporarily (AI hackathon); **r740 box (192.168.1.153)
+stays up — the 429M run is unaffected**. On resume: this session's cron fires
+coalesce into one delivery; agent-25's SFT task (PID was mid-run, config
+470m_k_sft, output lab/imported/sft_470m/) will show lost/stopped — resume
+agent-25; SFT ckpts save per-step so partial progress is usable (eval any
+step_*/chat_model with SFT/eval_chat.py). Farm runner + attach-pollers die
+with the laptop; restart runner (`systemd-inhibit ... python3 lab/runner.py
+--slots 1 --watch`) on return. Nothing was left mid-queue.
