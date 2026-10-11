@@ -74,7 +74,21 @@ kernels if any appear; (c) run the full-FT recipe on a CDNA box (MI300X lane,
 same recipe as the DDP plan below). **Do not start training until the gate
 passes** — GLA/KDA forward is Triton-only.
 
-**Recipe parked for the retry** (4-GPU DDP, GPUs 0,3,4,5 — never 1,2): full-FT
+**RETRY RESULT (2026-10-11, one attempt, no third stack): branch (a) CLOSED.**
+In `/data/tliao/vesper_sft/venv_triton_old`: torch 2.6.0+rocm6.2.4 bundles
+**triton 3.2.0** (not 3.0.x as hoped) — hello-world `@triton.jit` fails with
+the same `error: unsupported target: 'gfx906'`; torch 2.5.1+rocm6.2 bundles
+**triton 3.1.0** — same hello-world failure, plus fla 0.6.0@37a6b1c won't
+import against that Autotuner API (`unexpected keyword argument 'do_bench'`).
+All three Triton generations tested (3.1.0 / 3.2.0 / 3.5.1) reject gfx906 at
+LLVM lowering. **FINAL VERDICT: MI50/gfx906 is viable for serving (vLLM /
+rocBLAS inference — the box's hackathon jobs run fine) but NOT for the
+fla/Triton training stack. Full-FT of 470m_k belongs on the MI300X lane.**
+Branch (b) is the only untried software path (upstream fla torch/universal
+kernels — none exist in fla 0.6.0); branch (c) is the way forward.
+
+**Recipe parked for the MI300X lane** (was: 4-GPU DDP on MI50, GPUs 0,3,4,5 —
+never 1,2): full-FT
 427M, fp32 AdamW (fits 32GB: ~2.6G params+grads + ~5.2G AdamW states), bf16 AMP
 + `VESPER_FUSED_CE=1`, seq 1024, micro-batch to fill 32G (measure first),
 32–64k tok/step effective (4×mb×1024×accum), lr 2e-5→2e-6 cosine warmup 100,
