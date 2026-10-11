@@ -1,0 +1,37 @@
+Hi! Thanks for hopping on a call. I wanted to check how the onboarding went and
+whether the import from your old tool finished cleanly.
+
+No worries at all — take your time. Whenever you're ready, just drop me a note
+and I'll walk you through the next steps. There's no rush on our side.
+
+Could you clarify what you meant by "the dashboard looks off"? A screenshot
+would help a lot, and if you can tell me which browser you're on, that would
+narrow it down quickly.
+
+Sure, happy to extend the trial by two weeks. I've applied the extension to
+your account just now, so you should see the new date on the billing page. Let
+me know if it doesn't show up.
+
+I think we're mostly aligned. My only open question is about the timeline for
+the migration — is the end of the month still realistic from your side, or
+should we plan for the first week of the next one?
+
+Thanks for the detailed write-up, that's really helpful. I'll share it with the
+team before tomorrow's meeting and come back with comments. One thing I noticed
+is that the second section repeats a bit of the intro.
+
+Got it, that makes sense. Let me confirm with engineering and get back to you
+before end of day. In the meantime you can keep using the staging environment —
+it won't be touched during the update.
+
+Hey, are you around for a quick sync later? Nothing urgent, I just want to
+align on the demo script before the client call on Thursday. Fifteen minutes
+should be plenty.
+
+Really appreciate you flagging that. It's exactly the kind of thing that's easy
+to miss in review. I've added a note to the ticket so it doesn't get lost, and
+we'll fold the fix into the next patch.
+
+Thanks again for your patience while we sorted this out. If anything else comes
+up, you can reply here or book a slot directly on my calendar — whichever is
+easier for you. Have a good evening!

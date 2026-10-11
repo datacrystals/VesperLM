@@ -1,0 +1,85 @@
+def merge_sorted_lists(left, right):
+    """Merge two sorted lists into one sorted list without using extra space."""
+    i = j = 0
+    out = []
+    while i < len(left) and j < len(right):
+        if left[i] <= right[j]:
+            out.append(left[i])
+            i += 1
+        else:
+            out.append(right[j])
+            j += 1
+    out.extend(left[i:])
+    out.extend(right[j:])
+    return out
+
+class ConnectionPool:
+    def __init__(self, max_size=8, timeout=30.0):
+        self.max_size = max_size
+        self.timeout = timeout
+        self._idle = []
+        self._in_use = set()
+
+    def acquire(self):
+        if self._idle:
+            conn = self._idle.pop()
+        elif len(self._in_use) < self.max_size:
+            conn = self._create()
+        else:
+            raise RuntimeError("pool exhausted")
+        self._in_use.add(conn)
+        return conn
+
+    def release(self, conn):
+        self._in_use.discard(conn)
+        self._idle.append(conn)
+
+SELECT users.id, users.name, orders.total
+FROM users
+JOIN orders ON orders.user_id = users.id
+WHERE orders.created_at > NOW() - INTERVAL '7 days'
+ORDER BY orders.total DESC
+LIMIT 50;
+
+git rebase -i HEAD~3
+# pick, squash, reword — then force-push with lease:
+git push --force-with-lease origin feature/branch
+
+fn main() {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for line in std::io::stdin().lines().map_while(Result::ok) {
+        for word in line.split_whitespace() {
+            *counts.entry(word.to_lowercase()).or_insert(0) += 1;
+        }
+    }
+    let mut pairs: Vec<_> = counts.into_iter().collect();
+    pairs.sort_by(|a, b| b.1.cmp(&a.1));
+    for (word, n) in pairs.iter().take(20) {
+        println!("{n}\t{word}");
+    }
+}
+
+// A tiny static file server in Go.
+// Usage: go run main.go -addr :8080 -root ./public
+func main() {
+    addr := flag.String("addr", ":8080", "listen address")
+    root := flag.String("root", ".", "directory to serve")
+    flag.Parse()
+    http.Handle("/", http.FileServer(http.Dir(*root)))
+    log.Fatal(http.ListenAndServe(*addr, nil))
+}
+
+The stack trace pointed at a null reference inside the serializer, but the real
+bug was upstream: the cache returned a partially initialized record because the
+invalidation key omitted the tenant id. Once the key included the tenant, the
+race disappeared. Lesson: cache keys are part of your API contract.
+
+To profile a Python program, run it under cProfile and sort by tottime. Often
+the hot spot is not the algorithm but a quadratic list concatenation in a loop.
+Replacing list += with list.extend, or building with a list comprehension and
+join, can remove the whole class of problem without changing the design.
+
+Unit tests should assert behavior, not implementation. A test that pins the
+exact number of internal calls will break on every refactor even when the
+observable output is unchanged. Prefer golden outputs, property assertions,
+and boundary cases: empty input, one element, duplicates, very large values.

@@ -1,0 +1,46 @@
+Mixed validation slice for the D0 graft-parity gate. The harness tokenizes this
+file and evaluates stock routing versus passport-grafted routing on identical
+batches; the domain labels of the profiling corpus are not required here.
+
+The function sorted the input twice by accident, which was harmless but
+confusing to read; the fix was to sort once and reuse the result. Tests for
+empty lists and single-element lists were added alongside the change.
+
+If the discriminant of a quadratic is zero, the parabola touches the x-axis at
+exactly one point. Completing the square is a reliable way to see this without
+memorizing the formula.
+
+The workshop on community gardening was rescheduled to Saturday morning
+because the greenhouse tour overran. Participants who already paid can move
+their tickets or request a refund through the organizer.
+
+Thanks for sending the revised draft. The structure is much clearer now. My
+main suggestion is to move the limitations section before the conclusion, so
+readers see the caveats while the results are still fresh.
+
+Asteroids in the main belt are leftovers from planet formation; Jupiter's
+gravity stirred them too much for a planet to coalesce there. Occasional
+collisions produce meteorites that land on Earth and give labs fresh samples.
+
+SELECT count(*) FROM events WHERE kind = 'signup' AND created_at::date =
+CURRENT_DATE - 1; -- daily growth is computed at midnight from this query.
+
+The museum's new ceramics gallery opens with pieces spanning four centuries,
+from coarse provincial ware to delicate export porcelain. The lighting was
+rebuilt around the objects, and the labels include recipes for the glazes.
+
+Entropy measures the number of microstates consistent with a macrostate. The
+second law says an isolated system's entropy never decreases, which is why
+heat flows from hot to cold and not the reverse without work being done.
+
+Local schools will start a shared music program in the autumn, lending
+instruments to students who want to learn but cannot buy one. Recital dates
+are already penciled in for December at the community hall.
+
+Hello, is this the right place to ask about the repair cafe? I have a table
+lamp with a frayed cord and a wobbly switch. If someone could look at it this
+weekend, that would save me from buying a new one.
+
+Regular expressions are powerful but can become unreadable quickly. Named
+groups and the verbose flag that allows comments make them maintainable; when
+a regex grows past a screenful, a small parser is often the better tool.

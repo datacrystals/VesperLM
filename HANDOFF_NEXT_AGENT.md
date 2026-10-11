@@ -41,6 +41,46 @@ data first.
 
 ---
 
+## 2026-10-11 — MODULAR_MOE §9 D0 graft-parity PREPARED (GPU run pending a free ≥16GB card)
+
+**Everything except the GPU measurement is done.** Donor downloaded +
+pinned: `allenai/OLMoE-1B-7B-0924` @ **`6d84c48581ece794365f2b8e9cfb043c68ade9c5`**
+(13GB, 3 safetensor shards sha256'd in `lab/graft_d0_runbook.md`), staged OUTSIDE
+the repo at `/home/tliao/.cache/vesper_d0/OLMoE-1B-7B-0924` (re-fetch snippet in
+the runbook for box/droplet; NEVER commit weights). Harness
+`lab/graft_d0_parity.py` implements §9.2 Variant A as the §9.6 registry path:
+expert profiling (activation homes + co-activation graph §9.7) → prototype
+passport init (mean router query over home-profile data) → router-only recal
+(MSE+KL to stock logits, Adam on passport rows only) → registry .pt → two-pass
+parity measurement (final-logit cosine + CE delta + per-layer MoE-output cosine
++ per-layer top-k agreement) + per-domain purity vs the donor's own
+routing-entropy baseline. `--init exact` arm = algebraic ceiling (P rows =
+sqrt(d_r)·W_stock rows, identity query map) — bit-level equivalence reference.
+
+**Mock self-test 14/14 PASS** (`python3 lab/graft_d0_parity.py --synthetic`,
+CPU ~6s): exact-init identity (cos 1.000000), profile home-recovery 9/9,
+prototype 0.9544→recal 0.9985 cos (agree 0.708→0.977), registry round-trip,
+metric sanity, graft install/uninstall, purity margins 0.0 — the GPU run is
+pure measurement. **Real-donor CPU smoke also ran the full pipeline** (bf16,
+transformers 5.17, 16 MoE layers found): `--init exact` **PASSES D0 on CPU**
+(logit cos **0.9999**, ΔCE **+0.0013**, all gates green) — graft path verified
+against real OlmoeTopKRouter/top-8-no-renorm semantics. Prototype smoke at toy
+calibration (320 tok, 10 recal) predictably fails the bars but recal MSE drops
+~5×/layer and profile mushiness is 0.72 (consistent with §9.2's mushy-donor
+caveat).
+
+**Runbook:** `lab/graft_d0_runbook.md` — exact commands (P40: `--dtype
+float16`, sm_61 has NO bf16; MI300X: bfloat16), VRAM ~16GB at bs2×512, ~15-45
+min on a P40 / ~5-10 min MI300X at 100k tokens, and the numeric PASS bar
+(cosine > 0.9 stretch > 0.99, |ΔCE| < 0.05 nats, per-layer MoE cos > 0.9,
+top-k agree > 0.8, purity_graft ≥ purity_stock − 0.02 every domain). Data
+fixtures `lab/graft_d0_texts/` (tiny, plumbing only — gate wants a ≥50k-token
+mixed slice; snippet in runbook). **Next: run the gate when a ≥16GB GPU frees
+(box P40s ~Oct 12 or an MI300X droplet if approved), record the JSON verdict
+here; if prototype+recal passes, D1 plug-in can start against the registry .pt.**
+
+---
+
 ## 2026-10-11 — MI50 full-FT SFT: STOPPED at GPU smoke gate — Triton rejects gfx906
 
 **Gate FAIL, no training started.** Env built on `tliao@100.64.0.7` (8× MI50/MI60

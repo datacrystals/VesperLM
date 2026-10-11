@@ -1,0 +1,48 @@
+The quadratic formula states that for ax^2 + bx + c = 0 with a nonzero, the
+solutions are x = (-b ± sqrt(b^2 - 4ac)) / (2a). The discriminant b^2 - 4ac
+determins the nature of the roots: positive gives two distinct real roots,
+zero a repeated root, and negative a pair of complex conjugates.
+
+A geometric series 1 + r + r^2 + ... + r^n converges to 1/(1-r) when |r| < 1
+as n goes to infinity. The partial sum of the first n terms is (1 - r^n)/(1 - r),
+which is the identity used to convert repeating decimals into fractions.
+
+Integration by parts is the product rule run backwards: the integral of u dv
+equals uv minus the integral of v du. Choosing u to be something that
+simplifies when differentiated — a logarithm or a polynomial — and dv to be
+something easy to integrate is the standard strategy.
+
+The prime number theorem describes the asymptotic distribution of primes: the
+count of primes below x is approximately x / ln(x). Equivalently, the gap
+between consecutive primes near x grows like ln(x). Probabilistic heuristics
+suggest the twin prime conjecture is true, but a proof remains open.
+
+Bayes' theorem updates a belief after evidence: the posterior probability of a
+hypothesis given data equals the likelihood times the prior, divided by the
+marginal probability of the data. In practice the denominator is often the
+hard part, which is why sampling methods and variational approximations exist.
+
+A matrix is diagonalizable when it has a full set of eigenvectors. Symmetric
+real matrices are always diagonalizable with orthogonal eigenvectors, which is
+why covariance matrices decompose cleanly into principal components: the
+eigenvectors give directions of variance and the eigenvalues its magnitude.
+
+To prove a statement by induction, verify the base case, assume it holds for n,
+and derive it for n+1. Strong induction assumes all cases up to n instead of
+just n itself; the two forms are logically equivalent but one or the other
+often makes the inductive step fall out directly.
+
+The Pythagorean theorem says a^2 + b^2 = c^2 for a right triangle with legs a
+and b and hypotenuse c. Its converse also holds: any triangle whose sides
+satisfy the relation is right-angled. The distance formula in the plane is the
+theorem applied to the horizontal and vertical differences of two points.
+
+Convergence of sequences: a sequence converges to L when for every epsilon > 0
+there is an index beyond which all terms lie within epsilon of L. A sequence
+that is bounded and monotone converges; this is the monotone convergence
+theorem and it is the workhorse behind many existence proofs.
+
+0.999... equals 1. One quick argument: let x = 0.999..., then 10x = 9.999...,
+so 10x - x = 9, giving x = 1. The more careful argument is that the sequence
+of partial sums 0.9, 0.99, 0.999 is Cauchy and its limit is the real number 1
+by the completeness of the reals.
