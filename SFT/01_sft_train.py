@@ -981,7 +981,14 @@ def train():
                 print_model_stats(model, model_config,
                                   save_path=os.path.join(ckpt_dir, "model_stats.txt"))
 
-                # Full training checkpoint (resumable)
+                # Full training checkpoint (resumable).
+                # Update best_val_loss BEFORE serializing: step_N/checkpoint.pt
+                # is what a resume loads, so writing the pre-update value here
+                # resets the tracker to inf on resume and makes every later
+                # eval claim "NEW BEST" (clobbering step_best even when worse).
+                is_best = val_loss < best_val_loss
+                if is_best:
+                    best_val_loss = val_loss
                 ckpt = {
                     'model_config':        model_config,
                     'model':               model.module.state_dict() if is_distributed else model.state_dict(),
@@ -994,8 +1001,7 @@ def train():
                 }
                 torch.save(ckpt, os.path.join(ckpt_dir, "checkpoint.pt"))
 
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
+                if is_best:
                     best_dir = os.path.join(checkpoint_dir, "step_best")
                     os.makedirs(best_dir, exist_ok=True)
                     try:
