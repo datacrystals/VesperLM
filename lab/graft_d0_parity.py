@@ -51,6 +51,12 @@ lab/graft_d0_runbook.md sets them): mean final-logit cosine > 0.9 (stretch
 > 0.99 for `--init exact`), |dCE| < 0.05 nats, per-layer MoE-output cosine
 > 0.9 mean, top-k set agreement > 0.8, and purity_graft(d) >= purity_stock(d)
 - 0.02 for every domain.
+
+Scaling knob (lab/graft_registry_sweep.py sweeps it): `--passport-dim d_r`
+runs the bank at product passport_dim rank (query map = top-d_r right singular
+vectors of the stock gate rows, learned in recal); `--init svd` is the matching
+rank-d_r algebraic ceiling (truncated SVD of the stock gate). Default
+(passport_dim = d_model, identity query map) is bit-identical to the D0 run.
 """
 
 from __future__ import annotations
@@ -396,10 +402,78 @@ def init_passports_exact(banks: list[PassportBank],
 
 
 def init_passports_prototype(banks: list[PassportBank], stats: RouteStats) -> None:
-    """Spec init: p_e = mean router query over the expert's home-profile data."""
+    """Spec init: p_e = mean router query over the expert's home-profile data.
+
+    With a non-identity query map the prototype is the mean QUERY
+    (W_q . h) over home hits — proto (E, d_model) projected by W_q.T.
+    """
     _, proto, _ = stats.home_and_prototypes()
     for l, bank in enumerate(banks):
-        bank.P.data.copy_(proto[l].float())
+        p = proto[l].float()
+        if bank.W_q is not None:
+            p = p @ bank.W_q.data.float().cpu().T
+        bank.P.data.copy_(p)
+        bank.layer_scale = 1.0
+
+
+def _svd_wq_rows(w: torch.Tensor, d_r: int) -> torch.Tensor:
+    """(d_r, d_model) rows = top-d_r right singular vectors of gate rows w (E, d_model).
+
+    Rows past min(E, d_model) are zero-padded (dead capacity: the stock gate's
+    row space cannot use them; recal may still learn into them).
+    """
+    full = d_r > min(w.shape)
+    _, _, vh = torch.linalg.svd(w, full_matrices=full)
+    rows = vh[:d_r]
+    if rows.shape[0] < d_r:
+        rows = torch.cat([rows, torch.zeros(d_r - rows.shape[0], vh.shape[1])], 0)
+    return rows
+
+
+def init_wq_svd(banks: list[PassportBank],
+                stock_weights: list[torch.Tensor]) -> None:
+    """Query map W_q rows = top-d_r right singular vectors of the stock gate rows.
+
+    Closed form from the stock gate alone (no data, no gradient steps) — the
+    registry "compile-time" choice for the query map when d_r < d_model
+    (product PassportRouter learns W_q during pretraining; a graft must
+    derive it). Rows beyond the gate's rank pad the orthogonal complement
+    (dead for exactness; prototype keeps P ~ 0 there).
+    """
+    for bank, w in zip(banks, stock_weights):
+        if bank.W_q is None:
+            continue
+        bank.W_q.data.copy_(_svd_wq_rows(w.data.float().cpu(), bank.d_r))
+
+
+def init_passports_svd_exact(banks: list[PassportBank],
+                             stock_weights: list[torch.Tensor]) -> None:
+    """Rank-d_r algebraic ceiling of the graft: best rank-d_r fit of the stock gate.
+
+    W = U S V^T (economy SVD of the (E, d_model) gate rows) -> W_q = V_r^T,
+    p_e = sqrt(d_r) * (U S)[e, :d_r]  =>  score_e = h . W_r[e] exactly, the
+    rank-d_r truncated SVD of the stock router. At d_r >= rank(W) this is
+    bit-level stock-logit identity; below it, the ceiling is the rank
+    approximation. Init arm `--init svd` — the number prototype+recal is
+    measured against at each passport_dim.
+    """
+    for bank, w in zip(banks, stock_weights):
+        w = w.data.float().cpu()
+        if bank.W_q is None:
+            bank.P.data.copy_(w * math.sqrt(bank.d_r))
+            bank.layer_scale = 1.0
+            continue
+        full = bank.d_r > min(w.shape)
+        u, s, vh = torch.linalg.svd(w, full_matrices=full)
+        r = bank.d_r
+        rows = vh[:r]
+        if rows.shape[0] < r:
+            rows = torch.cat([rows, torch.zeros(r - rows.shape[0], vh.shape[1])], 0)
+        bank.W_q.data.copy_(rows)
+        coef = torch.zeros(w.shape[0], r)
+        k = min(r, s.numel())
+        coef[:, :k] = u[:, :k] * s[:k]
+        bank.P.data.copy_(coef * math.sqrt(bank.d_r))
         bank.layer_scale = 1.0
 
 
@@ -453,25 +527,34 @@ def collect_route_pairs(model: nn.Module, blocks: list[nn.Module],
 def recalibrate(banks: list[PassportBank],
                 pairs: list[tuple[torch.Tensor, torch.Tensor]],
                 steps: int, lr: float, kl_w: float = 0.1) -> dict:
-    """Router-only recal: fit P to stock logits (MSE + softmax KL) on pairs.
+    """Router-only recal: fit P (and W_q when the bank has one) to stock logits.
 
-    No model backprop — gradients flow into passport rows only. This is the
+    Loss = MSE + softmax-KL on (h, stock-logits) pairs. No model backprop —
+    gradients flow into passport rows (and the query map) only. This is the
     cheap recal the recipe budgets (G2 falsified zero-shot plug-in; §9.6 has
-    the registry pay it once at compile time, never the end user).
+    the registry pay it once at compile time, never the end user). With the
+    identity query map (W_q = None, the D0 anchor) this is P-only, bit-for-bit
+    the D0 recal; with d_r < d_model both router factors fit (both are router
+    params in the product PassportRouter).
     """
     report = {"steps": steps, "lr": lr, "kl_w": kl_w, "per_layer": []}
     if steps <= 0:
         return report
     for li, (bank, (h, stock_logits)) in enumerate(zip(banks, pairs)):
         p = nn.Parameter(bank.P.data.float().clone().cpu())
-        opt = torch.optim.Adam([p], lr=lr)
+        params = [p]
+        wq = None
+        if bank.W_q is not None:
+            wq = nn.Parameter(bank.W_q.data.float().clone().cpu())
+            params.append(wq)
+        opt = torch.optim.Adam(params, lr=lr)
         stock_logits = stock_logits.float().cpu()
         h = h.float().cpu()
         first = last = None
         with torch.enable_grad():  # callers may run under no_grad
             for step in range(steps):
                 opt.zero_grad()
-                q = h if bank.W_q is None else h @ bank.W_q.float().T.cpu()
+                q = h if wq is None else h @ wq.T
                 s = (q @ p.T) / math.sqrt(bank.d_r) * bank.layer_scale
                 mse = F.mse_loss(s, stock_logits)
                 kl = F.kl_div(F.log_softmax(s, dim=-1),
@@ -484,6 +567,8 @@ def recalibrate(banks: list[PassportBank],
                     first = float(mse.detach())
                 last = float(mse.detach())
         bank.P.data.copy_(p.data.to(bank.P.device))
+        if wq is not None:
+            bank.W_q.data.copy_(wq.data.to(bank.W_q.device))
         report["per_layer"].append(
             {"layer": li, "mse_first": first, "mse_last": last})
     return report
@@ -1043,7 +1128,11 @@ def run_pipeline(model, blocks, domain_batches, val_batches, n_domains: int,
            "init": args.init, "phase": args.phase}
     t0 = time.time()
 
-    banks = [PassportBank(e, h, learn_wq=args.learn_wq) for _ in blocks]
+    d_r = args.passport_dim or h
+    learn_wq = bool(args.learn_wq) or (d_r != h)
+    if d_r != h and not learn_wq:
+        raise ValueError("passport_dim != d_model requires a query map")
+    banks = [PassportBank(e, h, d_r=d_r, learn_wq=learn_wq) for _ in blocks]
     graft_gates = make_graft_gates(blocks, banks, top_k, norm_topk)
 
     # ---- phase: precompute (profile -> init -> recal -> registry) ----
@@ -1063,7 +1152,11 @@ def run_pipeline(model, blocks, domain_batches, val_batches, n_domains: int,
         }
         if args.init == "exact":
             init_passports_exact(banks, stock_weights)
+        elif args.init == "svd":
+            init_passports_svd_exact(banks, stock_weights)
         else:
+            if banks[0].W_q is not None:
+                init_wq_svd(banks, stock_weights)
             init_passports_prototype(banks, stats_stock)
         pairs = collect_route_pairs(model, blocks, stock_weights,
                                     domain_batches, device, args.max_cal_pairs)
@@ -1083,11 +1176,15 @@ def run_pipeline(model, blocks, domain_batches, val_batches, n_domains: int,
                             args.recal_kl_w)
             recal_report["round_detail"].append(r)
         out["recal"] = recal_report
+        out["passport_dim"] = d_r
+        out["query_map"] = "identity" if banks[0].W_q is None else "svd+learned"
         registry_meta.update({
             "init": args.init,
             "recal_steps": args.recal_steps,
             "recal_rounds": args.recal_rounds,
             "recal_lr": args.recal_lr,
+            "passport_dim": d_r,
+            "query_map": "identity" if banks[0].W_q is None else "svd+learned",
             "profile_home_domain": home.tolist(),
             "profile_mushiness_mean": float(mush.mean()),
             "coactivation_top_pairs": out["profile"]["coactivation_top_pairs"],
@@ -1202,6 +1299,45 @@ def run_synthetic_tests() -> int:
           rep1["logit_cosine_mean"] >= 0.98 and abs(rep1["ce_delta"]) < 0.05,
           f"cos={rep1['logit_cosine_mean']:.4f} dCE={rep1['ce_delta']:.4f}")
 
+    # 4b. reduced-dim banks (passport_dim < d_model): SVD query map + rank ceiling
+    r_full = min(e, h)  # rank bound of the stock gate rows (E, d_model)
+    banks_svd = [PassportBank(e, h, d_r=r_full, learn_wq=True) for _ in blocks]
+    init_passports_svd_exact(banks_svd, stock_weights)
+    err_svd = max(
+        float((banks_svd[i].scores(htest)
+               - F.linear(htest, stock_weights[i].float())).abs().max())
+        for i in range(len(blocks)))
+    check("svd_init_exact_at_gate_rank", err_svd < 1e-3,
+          f"d_r={r_full}==rank bound: max|score - stock| = {err_svd:.2e}")
+
+    dr_small = 4
+    banks_r4 = [PassportBank(e, h, d_r=dr_small, learn_wq=True) for _ in blocks]
+    init_wq_svd(banks_r4, stock_weights)
+    init_passports_prototype(banks_r4, stats)
+    pairs4 = collect_route_pairs(model, blocks, stock_weights, cal_batches,
+                                 device, max_pairs_per_layer=4096)
+    fit_layer_scales(banks_r4, pairs4)
+    graft4 = make_graft_gates(blocks, banks_r4, top_k, norm_topk)
+    rep4a = parity_measure(model, blocks, graft4, val_batches, device).as_dict()
+    recalibrate(banks_r4, pairs4, steps=300, lr=0.05, kl_w=0.1)
+    graft4 = make_graft_gates(blocks, banks_r4, top_k, norm_topk)
+    rep4b = parity_measure(model, blocks, graft4, val_batches, device).as_dict()
+    check("reduced_dim_recal_improves",
+          rep4b["logit_cosine_mean"] > rep4a["logit_cosine_mean"] + 1e-6,
+          f"d_r={dr_small}: cos {rep4a['logit_cosine_mean']:.4f} -> "
+          f"{rep4b['logit_cosine_mean']:.4f}")
+    check("reduced_dim_recal_floor",
+          rep4b["logit_cosine_mean"] >= 0.9 and abs(rep4b["ce_delta"]) < 0.05,
+          f"cos={rep4b['logit_cosine_mean']:.4f} dCE={rep4b['ce_delta']:.4f}")
+    banks_svd4 = [PassportBank(e, h, d_r=dr_small, learn_wq=True) for _ in blocks]
+    init_passports_svd_exact(banks_svd4, stock_weights)
+    err_svd4 = max(
+        float((banks_svd4[i].scores(htest)
+               - F.linear(htest, stock_weights[i].float())).abs().max())
+        for i in range(len(blocks)))
+    check("svd_ceiling_degrades_below_rank", err_svd4 > err_svd,
+          f"rank-{dr_small} err {err_svd4:.2e} > rank-{r_full} err {err_svd:.2e}")
+
     # 5. registry round-trip preserves routes bit-near-exactly
     reg_path = os.path.join(REPO_ROOT, "lab", "imported", "graft_d0",
                             "_selftest_registry.pt")
@@ -1216,6 +1352,14 @@ def run_synthetic_tests() -> int:
     rep2 = parity_measure(model, blocks, graft_r, val_batches, device).as_dict()
     check("registry_roundtrip_parity_identical",
           abs(rep2["logit_cosine_mean"] - rep1["logit_cosine_mean"]) < 1e-6)
+    save_registry(reg_path, banks_r4, {"test": "wq"})
+    banks_wq, meta_wq = load_registry(reg_path)
+    err_wq = max(
+        float((banks_wq[i].scores(htest) - banks_r4[i].scores(htest)).abs().max())
+        for i in range(len(blocks)))
+    check("registry_roundtrip_wq",
+          err_wq < 1e-6 and meta_wq.get("test") == "wq",
+          f"max|score delta| = {err_wq:.2e} (d_r={dr_small} + W_q)")
     try:
         os.remove(reg_path)
     except OSError:
@@ -1275,8 +1419,15 @@ def main() -> int:
                     help="weights dtype (P40/sm_61: float16 — no bf16 there)")
     ap.add_argument("--phase", default="all",
                     choices=["precompute", "parity", "all"])
-    ap.add_argument("--init", default="prototype", choices=["prototype", "exact"],
-                    help="prototype = §9.2 spec init; exact = algebraic ceiling")
+    ap.add_argument("--init", default="prototype",
+                    choices=["prototype", "exact", "svd"],
+                    help="prototype = §9.2 spec init; exact = identity-query "
+                         "algebraic ceiling (d_r = d_model); svd = rank-d_r "
+                         "truncated-SVD ceiling of the stock gate")
+    ap.add_argument("--passport-dim", type=int, default=None,
+                    help="passport rank d_r (product passport_dim). Default: "
+                         "d_model with identity query map (the D0 anchor). "
+                         "d_r < d_model uses the SVD query map (learned in recal)")
     ap.add_argument("--recal-steps", type=int, default=300)
     ap.add_argument("--recal-lr", type=float, default=0.05)
     ap.add_argument("--recal-kl-w", type=float, default=0.1)

@@ -207,3 +207,15 @@ Prep-phase evidence (same day, laptop):
    can run on the MI50 box too; training VesperLM experts still belongs on the
    MI300X lane (fla/Triton gfx906 wall — `lab/FAILURES.md`). P40s are not
    needed for anything D0-related.
+
+## 8. Registry scaling sweep (2026-10-11) — passport_dim x recal-effort
+
+The cheap measurement behind the §9.6 registry cost story is done:
+`lab/graft_registry_sweep.md` (table + saturation conclusion) +
+`lab/graft_registry_sweep.json` (21 cells; harness `lab/graft_registry_sweep.py`,
+run on this box's GPU 4, fp16, same slice as §3). Headline: parity saturates at
+passport_dim **64 = the stock gate's rank** (SVD init at dim>=64 is
+bit-exact); recal is mandatory (prototype-only ~0.66 cos at every dim); the
+smallest registry keeping cos>=0.99 is the D0 anchor itself (8.01MB — reduced
+dims shrink the per-expert passport row, not the artifact, because the
+per-layer query map dominates it).

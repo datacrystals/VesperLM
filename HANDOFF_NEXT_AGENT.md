@@ -251,6 +251,61 @@ Full story in `lab/FAILURES.md` d15 entry.
 
 ---
 
+## 2026-10-11 — MODULAR_MOE §9 registry/passport scaling sweep: SATURATES AT passport_dim 64 (= stock-gate rank); recal mandatory; smallest registry at cos>=0.99 is the D0 anchor (8.01MB) — reduced dims cut the plug-in cost, not the artifact
+
+**The scaling table the registry story needed** (MI50 box GPU 4 only, fp16,
+HIP shims auto, same D0 slice 97,280 domain + 86,016 val OLMoE tokens).
+21 cells = passport_dim {8,16,32,64,128} x recal rounds {0=prototype-only,
+1,2} + the D0 anchor (dim 2048, identity query map, 2 rounds — re-measured on
+the same basis: cos **0.99913** / dCE **+0.00075** = D0 exactly) + SVD
+rank-ceiling arms. **Full table + conclusion: `lab/graft_registry_sweep.md`;
+compact JSON: `lab/graft_registry_sweep.json`** (harness
+`lab/graft_registry_sweep.py`, wallet-free; wall **8,158s = 2.27h**, peak VRAM
+**14.45 GiB**; recal wall/cell 0-248s, parity pass 217-362s).
+
+**logit cos @ 86k val tok (dCE / top-k agree / MoE cos per cell in the md):**
+
+| passport_dim | r0 | r1 r2 | registry MB |
+|---|---|---|---|
+| 8 | 0.662 | 0.862 / 0.871 | 1.04 |
+| 16 | 0.662 | 0.937 / 0.940 | 2.07 |
+| 32 | 0.663 | 0.972 / 0.980 | 4.14 |
+| 64 | 0.663 | 0.986 / **0.9958** | 8.26 |
+| 128 | 0.663 | 0.988 / 0.9969 | 16.51 |
+| 2048 anchor | — | — / 0.9991 | 8.01 |
+
+SVD ceilings (0 recal): 0.785 / 0.891 / 0.968 / **0.99995** / 0.99995 — the
+stock gate is (64 x 2048), **rank exactly 64** (Frobenius energy 51/67/85/100%
+at 8/16/32/64), so dim >= 64 is algebraically exact and dim 64 ≈ dim 128.
+
+**Conclusions (numbers in md):** (1) **saturation at passport_dim 64** = the
+stock gate's rank — above it parity is flat (0.9958 vs 0.9969 at r2), below it
+quality tracks the singular spectrum. (2) **Prototype-only is dead** (cos
+~0.66 at EVERY dim — init-limited, not rank-limited); recal is mandatory: 1
+round gets dim64 to 0.986, the 2nd (on-trajectory) round crosses 0.99 — the
+G2/§9.6 recal is the cheap compile (minutes of CPU Adam). (3) **Smallest
+registry keeping cos >= 0.99 = the D0 anchor at 8.01MB** (cos 0.99913) —
+reduced dims do NOT shrink the shipped artifact at the bar, because per-layer
+W_q (d_r x d_model) dominates it (dim64 artifact 8.26MB > anchor; dim32 4.14MB
+tops out at 0.980). (4) What does get 32x cheaper: **per-expert plug-in cost**
+— a passport row is d_r floats (256B vs 8KB per expert/layer at d_r=64 vs
+2048) while W_q is per-spine. Next knob if artifact size binds: shared/
+quantized W_q (~0.78MB at dim64; `recalibrate_shared()` drafted in the sweep
+script, UNTESTED). Honest caveats in the md (SVD arm is an unweighted
+factorization — recal can beat it on-val below full rank; min-cos stays ugly
+below the bar; top-k agree 0.63-0.67 at the pass cells vs 0.84 anchor).
+
+**Ops (this run):** process survived TWO agent-session reaps under `nohup`
+(the "died at grid_dim64_r2" reports were false — the log's last flushed line
+is not process death; check `kill -0` ON THE BOX). Cells were only in the log
++ per-cell .pt until exit → **`lab/graft_sweep_salvage.py` + `--resume`
+per-cell checkpointing now in `lab/graft_registry_sweep.py`** (flush after
+every cell; FAILURES.md entry). Standing OPS RULE: launch remote GPU jobs
+detached (`setsid nohup ... &`), watch result files not PIDs. No new gfx906
+kernel walls (standard torch only; D0 shims carried).
+
+---
+
 ## 2026-10-11 — MODULAR_MOE §9 **D0 GATE RUN: PASS** (MI50 box, GPU 0, 10.3 min)
 
 **D0 (graft parity) PASSES — prototype+recal registry recipe reproduces the
