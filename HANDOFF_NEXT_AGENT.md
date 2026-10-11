@@ -1671,3 +1671,40 @@ talkable verdict).
 saved); MI50 box idle & available again (GPUs 0,3-7, never 1&2 hackathon);
 budget call still open: MI300X pretrain tokens ~$65-200 (recommended) vs
 nothing. v2 SFT result comparison pending. Cron coalesces while offline.
+
+---
+
+## 2026-10-11 — THE GRAB STORY, synthesized (MI50 day, all pushed)
+
+Question of the day: "can you take bits of a model and get a full one?"
+**Answer: yes for pretrained expert cores (wrap verbatim), yes-as-behavior
+(distill), NO for scratch-trained deltas (yet) — provenance is the binding
+constraint, not routing.**
+
+| experiment | result | commit |
+|---|---|---|
+| D0 graft parity (OLMoE) | PASS cos 0.999 (stretch) | c837c4d |
+| D2 cross-family (Phi-mini-MoE) | PASS cos 0.998 (stretch) | fa6ad0f |
+| D1 plug-in (scratch delta) | formal PASS 4/5, quality FAIL | e64fcfa |
+| D1.5 feature translators | FAIL 0.55-0.69 — transplant path dead | 0ed906d |
+| Passport sweep | sat at dim=gate rank 64; algebraic passports free for linear gates | 19cf4ed, 4fe9e6a |
+| D2 margin recal | clean negative; ceiling-normalized metric | 4fe9e6a |
+| Door 3 distill | skill REAL (KL 5.17->2.59), quality FAIL | 7e0a442 |
+| **Door 2.5 WRAP** | **quality PASS 0.439 vs 1.072 masked — frozen pretrained Phi core verbatim** | f348b7a |
+| Delivery contract A/B | additive-lambda wins 3/5; not the binding constraint | 366c94d |
+| Expert-fit v2 (contract x recipe) | FAIL in-sample both arms -> provenance diagnosis | 93188b0 |
+| Provenance arms (wrap distilled core / deliver-no-refit) | RUNNING (agent-38) | — |
+
+**Consolidated conclusions:** (1) registry/passport routing is universal
+(2 families, algebraic passports pass all gates on linear-gate donors);
+(2) expert provenance decides quality: frozen cores that learned something
+real (donor-pretrained or distilled) + thin task-loss adapters (lr 3e-3,
+wd 0) are the working recipe; scratch/refit deltas fail across 3 contracts
+and 6 recipes; (3) feature-space transplant between existing models is
+dead (D1.5) — grab = wrap (weights) or distill (behavior); (4) delivery
+contract should be additive-lambda for plug-ins (mass competition starves
+stock experts); (5) economics: ~8MB spine registry + 256B/row, wrap
+adapters ~786k params.
+**Open:** provenance arms (wrap-the-distilled-core) — the last rung;
+expert-fit budget scaling for scratch deltas; Door-2 expressiveness tax
+(needs fla GPU); wrap generalization beyond 11k calibration tokens.
