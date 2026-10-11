@@ -1116,3 +1116,9 @@ cheap MI300X" — is LOCAL-ONLY, never committed (the repo is public). The
 field guide lives at /home/tliao/HACKATHON_MI300.md (outside the repo).
 HACKATHON_MI300.md was briefly committed (7233212) then scrubbed via
 reset+force-push on user demand.
+
+**OPS LESSON (2026-10-11): long GPU jobs on remote boxes MUST be launched
+detached (`setsid`/`nohup ... &`) — agent-session timeout/reap kills the ssh
+connection and SIGHUPs every remote child (killed D1/sweep/D2 mid-run on the
+MI50 box; three runs lost to this in one evening). Watchers should poll
+result files, not PIDs over ssh.**
