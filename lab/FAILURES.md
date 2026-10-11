@@ -18,6 +18,88 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-11 — graft-registry-sweep — OPS INCIDENT: agent session reaped at the 2h cap mid-sweep; remote job SURVIVED but results existed only in the log + per-cell .pt files until process exit — salvage/checkpoint machinery added
+- Evidence: registry/passport scaling sweep (`lab/graft_registry_sweep.py`,
+  MI50 box GPU 4, PID 1836484) was mid-`grid_dim64_r2` when the agent session
+  hit its cap twice; each reap SIGHUP'd the *local* waiters and produced a
+  false "job died" read (the last *flushed log line* was mistaken for process
+  end; a watcher also checked the PID on the wrong machine). The remote
+  `nohup` python never died — verified box-side (`kill -0`, GPU4 74% use).
+  Completed-cell numbers lived only in `sweep_run.log` print lines + registry
+  .pt files because the script wrote its JSON only at process exit — a real
+  second death would have cost the table.
+- Root cause: (1) long agent turns + 2h session cap vs multi-hour GPU sweeps;
+  (2) job supervision via ssh-attached waits and PID checks from the wrong
+  host; (3) end-of-run-only results persistence in the sweep script.
+- What it rules out: nothing scientific — the sweep completed its measurement
+  (all 21 cells). It rules out ssh-attached waits and non-detached launches
+  for any multi-hour box job.
+- Next tried: salvage parser (`lab/graft_sweep_salvage.py`, log lines →
+  resumable checkpoint JSON, box-side watcher loop under `setsid`), and
+  `lab/graft_registry_sweep.py --resume` now flushes a checkpoint
+  (`out_json + .ckpt.json`) after EVERY cell and skips completed ids on
+  relaunch. Launch rule going forward (HANDOFF OPS RULE): `setsid nohup ... &`
+  for remote GPU jobs, watch result files not PIDs.
+
+## 2026-10-11 — d1-plugin-pass-1 — foreign expert plug-in onto graft: delivery vs neutrality is a Pareto frontier under naive recal (both sides fail alone)
+- Evidence: `lab/graft_d1_plugin.py` on `tliao@100.64.0.7` GPU 0 (donor OLMoE
+  -1B-7B-0924 fp16 + D0 registry graft; code-domain expert = 16 SwiGLU deltas,
+  forced-dispatch CE training + contrastive router recal). Box
+  `/data/tliao/graft_d0_out/olmoe_d1.json` + `d1_run.log` (untracked).
+  Attempt 1 (expert lr 1e-3, text-KL 3.0, reject_w 5): delivery GREAT —
+  retention vs solo **0.989**, util_code 0.514, contam 0.277 — but base
+  parity **0.782 FAIL** and CE-code-active worse than masked. Attempt 2
+  (expert lr 1e-4, L2 pen 10, reject_w 10): neutrality GREAT — parity
+  **0.977 PASS**, contam **0.091** — but retention **0.487 FAIL**, util_code
+  **0.286 FAIL**, and CE-active still worse than masked (2.97 vs 1.26).
+  Task bars: retention ≥ 0.70, parity ≥ 0.95, contam ≤ 0.30.
+- Root cause: three stacked effects. (1) **Forced-dispatch expert training is
+  unstable at 7B scale**: text-KL through the frozen trunk either explodes
+  (KL 1501, attempt 1) or dominates the CE gradient (KL 319 while code CE
+  degrades 0.46→2.7, attempt 2) — and the out-norm L2 is inert at natural
+  expert-output scale (~1e-4·mean) unless weighted ~1e3+. (2) **Teacher-forced
+  router recal over-predicts delivery**: attempt-2 phase-B hit p_new_code
+  0.887 at the gate on cached pre-plug hidden states, but in-situ routing mass
+  was only 0.207 / util 0.286 — upstream h drifts once the row is live
+  (same class of gap as G2's zero-shot surprise). (3) **reject_w trades the
+  two s6 gates against each other** (5→10 moved contam 0.277→0.091 but util
+  0.514→0.286). s6 quality (CE_code active vs masked) additionally requires
+  the delta to actually lower average code CE — margin probes (delta_margin
+  convention) improve (pre −3.39 → lib +1.70 in attempt 1) even when average
+  CE does not; the two metrics disagree and D1's §6 gate is CE-based.
+- What it rules out: a single teacher-forced contrastive recal + G1b text-KL
+  is NOT sufficient for D1 on a 7B donor; plug-in delivery cannot be certified
+  from gate-level p_new alone — in-situ utilization/mass must be measured.
+- Next tried: **the §8.4 delivery-cliff fix** (owner-mass 0.55→0.85 closing
+  recal — the sibling memory-expert line turned retention 0.397→1.100 with
+  it) transplanted into the D1 recipe: explicit owner-mass target **0.85** on
+  home (code) tokens in the recal loss (`--owner-mass`, `--mass-w`), plus an
+  **on-trajectory recal round 2** (pairs collected with the plug-in live) to
+  close the teacher-forced gap, plus direct off-domain L2 (`--out-pen 3000`)
+  replacing trunk-KL as the neutrality control.
+- **Outcome (attempt 3, 2026-10-11, ~29 min GPU 0):** the mass fix WORKED for
+  delivery — retention **0.487 → 3.62 PASS**, s6 utilization **0.286 → 0.940
+  PASS** (in-situ code mass 0.897, exactly the 0.85 target; on-trajectory
+  round 2 closed the teacher-forced gap: gate p_new_base 0.066 → 0.020), and
+  contaminatation stayed ≤0.3 (0.213). But the verdict is still FAIL on two
+  gates with a new, sharper root cause: **owner-mass 0.85 is right for §8
+  memory episodes whose owner DELIVERS, wrong for an augmenting expert with a
+  small delta** — with `norm_topk_prob=false` the softmax mass IS the merge
+  scale, so a 0.90-mass row holding a near-zero delta (out_norm2 ~1e-6, the
+  L2 pen crushed it) starves the 8 stock experts to 0.10 total: code CE
+  1.26 → **14.28** (s6 quality FAIL) and base CE +2.05 → parity **0.927 FAIL**
+  (bar 0.95). Margins even read "lib > solo" (retention 3.6) because the
+  margin probes reward SUPPRESSING stock experts on adversarial positions —
+  a metric artifact, not delivery. Lesson: for D1 the §6 utilization gate is
+  top-k MEMBERSHIP, not mass — the operating point is high membership with
+  modest mass (~0.3), not the memory line's 0.85 dominance.
+- Next tried (attempt 4, queued detached `setsid nohup` per ops rule): the
+  untried middle of the Pareto frontier — **owner-mass 0.35 + mass_w 2 + 
+  reject_w 10** (membership up via CE+mass targets, contamination down hard
+  for parity, stock experts keep ~65% of merge scale) + out_pen 300 (delta
+  may grow enough to be net-useful). Archived attempt-3 JSON:
+  `olmoe_d1_attempt3_mass085.json` on the box.
+
 ## 2026-10-11 — d15-translator-fidelity — telemetry-trained translators MISS the 0.9 held-out-cosine bar for every non-trivial basis pair (variant B deprioritized per §9.5)
 - Evidence: `lab/graft_d15_translator.py` on the MI50 box GPU 3 (fp16, OLMoE
   donor + D0 registry + `graft_d0` gate slices; synthetic 18/18). Two
