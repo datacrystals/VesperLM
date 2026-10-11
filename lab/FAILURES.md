@@ -32,12 +32,28 @@ a lucky pass.
 - What it rules out: any fla-linear-attention training on the MI50 box with a
   torch 2.9.1+rocm6.4-era Triton. Full-FT SFT of 470m_k on gfx906 with this
   stack is closed until the Triton is swapped.
-- Next tried: parked for retry with an older Triton (torch 2.6/2.7 + rocm6.2
-  wheel era, matching /opt/rocm-6.2.4 which still ships gfx906 tensile
-  kernels) or move the recipe to the MI300X lane. Extra gotcha recorded:
-  ROCBLAS_TENSILE_LIBPATH=/opt/rocm-6.2.4/lib/rocblas/library is required even
-  for plain matmul on gfx906 (wheel Tensile lib lacks gfx906; this is what the
-  box's hackathon processes export).
+- Next tried: **RETRY CLOSED (same day, one attempt, no third stack).** Older
+  Triton stacks tested in `/data/tliao/vesper_sft/venv_triton_old` (kept the
+  2.9.1 venv intact):
+  1. torch 2.6.0+rocm6.2.4 (bundles **pytorch-triton-rocm 3.2.0**) —
+     hello-world `@triton.jit` FAILS identically: `error: unsupported target:
+     'gfx906'`. gfx906 appears 0× in that wheel's `backends/amd/compiler.py`.
+  2. torch 2.5.1+rocm6.2 (bundles **pytorch-triton-rocm 3.1.0**) — hello-world
+     FAILS identically again (`unsupported target: 'gfx906'` in make_llir).
+     Second wall behind it: fla 0.6.0@37a6b1c won't even import against triton
+     3.1.0's Autotuner API (`Autotuner.__init__() got an unexpected keyword
+     argument 'do_bench'` in fla/ops/utils/cache.py) — fla 0.6.0 needs the
+     newer triton, which needs a non-gfx906 AMD backend. Deadlock either way.
+  **Conclusion: MI50/gfx906 is viable for serving (vLLM/rocBLAS inference —
+  the hackathon jobs run fine) but NOT for the fla/Triton training stack.**
+  Triton's AMD backend dropped gfx906 before 3.1.0; all three tested wheels
+  (3.1.0 / 3.2.0 / 3.5.1) reject it at LLVM lowering, before fla code runs.
+  Full-FT of 470m_k (and any fla-GLA/KDA training) belongs on the MI300X lane.
+  Keep ROCBLAS_TENSILE_LIBPATH=/opt/rocm-6.2.4/lib/rocblas/library for any
+  gfx906 matmul work (wheel Tensile lib lacks gfx906 — what the box's
+  hackathon processes export). Scratch left on box under /data/tliao/vesper_sft/
+  (venvs, triton caches, staged t3 ckpt 3.5G, repo) — root's 24G untouched;
+  delete `/data/tliao/vesper_sft` if the lane is abandoned for good.
 
 ## 2026-10-10 — swarm5-oneclick-canary — free OneClick lane starved again (40-min attach poll, zero scheduling windows)
 - Evidence: `gh-ca7ead92` status polled 02:28:51–03:08:48 UTC (240×10s) via
