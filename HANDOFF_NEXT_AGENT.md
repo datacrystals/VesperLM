@@ -41,6 +41,52 @@ data first.
 
 ---
 
+## 2026-10-11 — Door 4 DELIVERY CONTRACT head-to-head: additive-λ wins, quality still open (expert-fit bottleneck confirmed in-sample)
+
+**Setup:** the D1 s6_quality + Door-3 blocker (train "stock+e_new", deliver
+"~0.09·stock+0.91·e_new") tested against its two named fixes on the D1 code
+plug-in (`lab/door4_delivery_contract.py`, MI50 GPU 4 only, fp16, HIP shims;
+d0/d1 imported read-only — sibling lanes own those files). Bars: parity
+≥0.95 / retention ≥0.70 / contam ≤0.30 / quality = held-out CE delivered <
+masked. Full numbers in `lab/FAILURES.md` door4 entry + box
+`/data/tliao/graft_d0_out/door4.json`.
+
+| gate | (a) delivered-mass fit | **(b) additive λ (learned 0.47)** | winner |
+|---|---|---|---|
+| base parity | 0.9467 | 0.8870 | (a) |
+| retention vs solo | 1.055 | 1.070 | tie |
+| contamination | 0.048 | 0.057 | tie |
+| §6 utilization | 0.195 | **0.593** | (b) |
+| §6 quality held-out (train) | 11.90 vs 1.74 (16.50 vs 1.26) | **7.46 vs 1.74 (4.48 vs 1.26)** | (b) |
+| verdict | FAIL | FAIL | — |
+
+**Contract verdict: (b) additive fixed-weight delivery is the winner to carry
+forward** — stock merge stays bit-identical to the masked control (mass
+confound gone by construction), quality gap roughly halves, utilization
+passes. **But the quality bar fails under BOTH contracts — and the blocker is
+now localized to the expert fit, in-sample**: even on its own training slice
+the delivered CE is worse than masked (16.5 / 4.48 vs 1.26) — a frozen-trunk
+16-layer SwiGLU delta on 12k tokens with out_pen 300 oscillates and stays
+near-zero. Removing the mass-competition explanation shrinks the gap but does
+not close it; the plug-in quality story is an adapter-training-recipe problem
+(data volume, penalty balance, schedule), not a router-contract problem.
+Parity damage under (b) concentrates on the 5.7% of base tokens where the
+plug-in fires (cos min −0.90) — a helpful selective delta moves quality and
+parity together. Also measured: post-training on-trajectory row recal (new in
+this cycle — deep-layer rows go stale when the trained delta drifts h)
+partially recovers utilization but does not fix it in (a).
+
+**Next (queued): expert-fit recipe v2 under contract (b)** — LoRA-style
+budget (more data, 1-2k steps, LR schedule), contrastive neutrality terms
+with independent weights, λ swept per-layer. Door-3 distilled expert not
+re-run this cycle (same fit bottleneck expected). Platform notes: runs
+detached `setsid nohup` on GPU 4 per ops rule; incremental JSON; the additive
+merge needs λ cast to the activation dtype (fp32 λ promoted the residual and
+broke fp16 attention — fixed in-file). Docs numerical-only per provider
+safety note.
+
+---
+
 ## 2026-10-11 — MODULAR_MOE §10.2 **Door 2.5 first experiment (the grab): FOREIGN weights ARE hostable verbatim — quality sub-gate PASSES (code CE 1.072 masked → 0.439 plugged → 0.101 forced) — first quality pass of the line; margin-retention bar degenerate (solo gain −0.28), skill generalization NOT shown (held-out code CE +0.03)** (MI50 box, GPU 3 only, fp16)
 
 **Q (§10.2): can a FOREIGN model's expert core be hosted VERBATIM behind
