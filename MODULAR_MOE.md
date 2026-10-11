@@ -803,6 +803,17 @@ native donor output (target: >0.9 cosine on the expert's top singular
 directions), then end-to-end section-6 purity gates. If fidelity <0.7 even
 in-domain, variant B is deprioritized to variant-A-only per 9.5.
 
+**STATUS 2026-10-11 (D1.5 measured, `lab/graft_d15_translator.py`): FAIL the
+0.9 bar and the <0.7 deprioritize line FIRES** — route-conditioned
+linear/2-layer translators on OLMoE telemetry (gate slices, D0 registry)
+reach held-out cosine 0.55–0.63 on within-donor cross-layer pairs (same-layer
+control = 1.0) and 0.64–0.69 cross-model vs Granite-3.0-1B-A400M-MoE
+(word-aligned pooling); train cos saturates at 0.72–0.76 and the 2-layer MLP
+does not beat linear → feature availability, not capacity (the §9.3a
+falsifier's reading). Per §9.5 variant B is deprioritized to variant-A-only
+until a translator class clears the bars; soft layer-attention (sharpening 2)
+and token-level pairing remain untried.
+
 ### 9.7 Harvest granularity: co-adaptation clusters
 
 Donor experts co-adapt under their router — each is shaped to complement its

@@ -18,6 +18,53 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-11 — d15-translator-fidelity — telemetry-trained translators MISS the 0.9 held-out-cosine bar for every non-trivial basis pair (variant B deprioritized per §9.5)
+- Evidence: `lab/graft_d15_translator.py` on the MI50 box GPU 3 (fp16, OLMoE
+  donor + D0 registry + `graft_d0` gate slices; synthetic 18/18). Two
+  instantiations of the §9.3a paired-activation translator (route-conditioned
+  ridge-linear vs 2-layer MLP, both directions, identity/mean baselines,
+  iid + route-held-out + domain-held-out splits, per-route breakdown, and the
+  spec's transplanted-output cosine incl. top-32 singular directions):
+  (a) within-donor cross-layer pairs 2:12 / 6:12 / 12:12 → held-out cos
+  **0.5528 / 0.6296 / 1.0000** (12:12 = same-layer CONTROL, identity baseline
+  1.0 → harness sound; identity baselines 0.2075 / 0.4172 show the gaps are
+  real basis differences). (b) cross-model OLMoE ↔
+  `ibm-granite/granite-3.0-1b-a400m-base` (word-aligned char-offset pooling,
+  18,529 paired words, donor layer 12) → held-out cos **0.6437** (host layer
+  12) / **0.6885** (host layer 18); train 0.72/0.76; route-held 0.61/0.66;
+  domain-held 0.54/0.59; expert-output cos 0.47/0.55 (top-dirs 0.63/0.70);
+  per-route macro 0.667, worst 0.556, best 0.898 — no route ≥ 0.9. Bars:
+  lane 0.9 **FAIL** everywhere; §9.5 deprioritize (<0.7 in-domain) **fires**
+  (0.55–0.69 band). Full tables: `lab/imported/graft_d15/d15{,_crossmodel}.json`.
+- Root cause (evidence-ranked): (1) **feature availability, not translator
+  capacity** — train cos itself saturates at 0.72–0.76 (the map is not
+  learnable even in-sample) and the 2-layer MLP does not beat the linear map
+  (mild overfit instead); this is §9.3a's pre-registered falsifier reading
+  ("the host spine lacks the features, not the translator the capacity").
+  (2) Word-level pairing (cross-model) smooths both sides, so the true
+  per-token fidelity is at best this good. (3) Layer correspondence matters:
+  within-donor fidelity scales with depth gap (1.0 @0 → 0.63 @6 → 0.55 @10);
+  the best cross-model cell (deep host layer 18, route-conditioned) reaches
+  0.69–0.70, consistent with "closer correspondence ≈ better stitching".
+- What it rules out: naive linear/2-layer telemetry translators as a drop-in
+  bridge for variant B at 1B-class scale — plug-in of donor experts into a
+  foreign spine at ≥0.9 feature fidelity is NOT supported by this capacity
+  class. Does NOT rule out: soft attention over donor layers / per-(expert,
+  layer) translators (§9.3a sharpening 2, untried), token-level 1:1 subword
+  pairing, much larger residual translators, or larger host spines (the
+  falsifier predicts host quality bounds fidelity).
+- Next tried: none in-lane (fail-fast per instructions; both intended
+  measurements completed cleanly). Queued options for a revisit: the
+  sharpening-2 layer-attention translator, the `--expert-scope` one-manifold
+  arm, and/or accepting §9.5's fallback (variant-A-only: one grafted host per
+  donor family, mixed at the serving layer) — which is the standing
+  recommendation of this entry.
+- Platform addendum (gfx906): the D1.5 word-pooling path (`bool-mask` gather
+  + `index_add_` on GPU) hit the same async `hipErrorInvalidDeviceFunction`
+  wall as the d0-gfx906 entry's `torch.sort` (AMD_SERIALIZE_KERNEL=3 for
+  localization); trivial shim = pool on CPU (tensors are T×2048). Trivial
+  shims are fine on this box; anything larger belongs on MI300X.
+
 ## 2026-10-11 — d0-gfx906-moe-kernels — torch ROCm wheel missing grouped-GEMM + a broken sort kernel (D0 recovered via shims)
 - Evidence: D0 gate run (`lab/graft_d0_parity.py`, OLMoE-1B-7B-0924 fp16,
   `tliao@100.64.0.7` GPU 0, torch 2.9.1+rocm6.4) died twice on the first MoE
