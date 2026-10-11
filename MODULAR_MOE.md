@@ -857,6 +857,29 @@ experiment (lab scale): one OLMoE/Phi-mini-MoE expert → wrap → recal →
 D1-gate it (parity/retention/contam bars from §9.4). Success = exact foreign
 weights hostable; failure mode = adapters can't bridge → Door 3.
 
+**STATUS 2026-10-11 (`lab/door25_wrap_expert.py`, MI50 GPU 3): GRAB WORKS
+AT THE INTERFACE — the foreign core is hostable verbatim and the quality
+sub-gate PASSES for the first time in the line (home CE 1.072 masked →
+0.439 plugged → 0.101 forced); skill generalization NOT yet shown.**
+Phi-mini-MoE @f620b32c L13 e8 SwiGLU (11.8M params) frozen behind
+adapter_down/adapter_up at d_canon=64 (786,432 trainable; host_in/host_out
+per §4.2), plugged at one depth-matched OLMoE layer of the D0 registry
+graft; task-loss fit (CE + out_pen 300, lr 3e-3 / wd 0 — D1's wd 0.01
+starves thin wraps to invisibility) + att-4 mass-cal row recal (owner_mass
+0.35, reject_w 10). Gates: parity 0.9985/0.9990 PASS, contamination 0.065
+PASS, utilization 0.831 PASS, quality 0.439 vs 1.072 **PASS** (D1's toy
+failed this 12.6 vs 1.3; Door 3 failed it 8.1 vs 1.8), base CE Δ+0.005.
+The D1 retention bar fails as written (margin-probe solo gain −0.28 → ratio
+degenerate; CE-space analog 0.652 vs 0.70 — the delivery-contract gap:
+in-situ home mass 0.733 vs 0.35 target). Held-out caveat: the 11k-token
+calibration fit memorizes (held-out code CE 1.587 masked → 1.621 plugged) —
+cross-domain neutrality is clean (math +0.006) but "the donor's specialty"
+needs larger calibration before it is claimed. Door-3 trigger ("adapters
+can't bridge") did NOT fire. Wrap-vs-distill comparison: the wrap beats
+distillation on delivered quality under the same delivery contract; both
+share the retention/mass gap. Follow-ups: multi-slice calibration, multi-site
+pack, sign-aware prototype init (registry layer_scale can be negative).
+
 ### 10.3 Door 3 — behavioral distillation (universal fallback)
 Train a fresh format-native expert to imitate the donor's behavior on its
 home domain (donor runs, produces scores/generations; host expert distills).
