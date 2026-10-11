@@ -41,6 +41,143 @@ data first.
 
 ---
 
+## 2026-10-11 — MODULAR_MOE §10.2 **Door 2.5 first experiment (the grab): FOREIGN weights ARE hostable verbatim — quality sub-gate PASSES (code CE 1.072 masked → 0.439 plugged → 0.101 forced) — first quality pass of the line; margin-retention bar degenerate (solo gain −0.28), skill generalization NOT shown (held-out code CE +0.03)** (MI50 box, GPU 3 only, fp16)
+
+**Q (§10.2): can a FOREIGN model's expert core be hosted VERBATIM behind
+learned thin adapters?** Donor core = Phi-mini-MoE @ f620b32c **layer 13,
+expert 8** SwiGLU (chosen by home-domain fit: D2 RouteStats profiling on the
+graft_d2 slices — code-rate lift 16.5 over base, top of 32×16 candidates;
+w_gu 1920×4096 = [w1;w3], w_down 4096×960 = w2, **11,796,480 params FROZEN
+verbatim**). Harness `lab/door25_wrap_expert.py` (fork of the D1 path —
+imports `graft_d1_plugin.py`/`graft_d0_parity.py` unmodified), synthetic
+15/15. Plug-in: OLMoE-1B-7B-0924 @ 6d84c485 + `registry_olmoe_6d84c485.pt`,
+**single site at host layer 6** (depth-matched to donor L13/32), 65th passport
+row + PluginMerge forced/plugged exactly as D1.
+
+**The wrap (§10.1/§10.2 geometry, brief's naming):**
+`x(2048) --host_in--> c(64) --adapter_up--> u(4096) --CORE(frozen)--> v(4096)
+--adapter_down--> c'(64) --host_out--> delta(2048)` — adapter_down/adapter_up
+are the "(d_canon=64 ↔ their d_model=4096)" pair; host_in/host_out are the
+§4.2 d_model↔d_canon format maps the D1 host interface needs. **Trainable
+786,432** (131,072+262,144+262,144+131,072) vs 11.8M frozen; rank-64
+factorized A_in/A_out. host_out zero-init (identity at birth).
+
+**Training (task loss — NOT feature matching; the D1.5 lesson):** Phase A
+forced-dispatch code-CE + out_pen 300·mean‖e(h_base)‖², **lr 3e-3, wd 0.0,
+clip 1.0**, 250 steps (739 s) — the D1 defaults (wd 0.01/clip 1.0/lr 1e-4)
+starve a thin wrap to |y|~5e-4 (below fp16 trunk resolution; FAILURES
+`door25-wrap-training-starvation`; arm sweep 4.6e-4 vs 1.0e-1 at wd 0).
+Phase B row recal **owner_mass 0.35 / reject_w 10 / mass_w 2** (the att-4
+winner) + on-trajectory round (201 s): p_new_code 2.2e-8 → 0.544 → **0.851**,
+p_new_base 0.022. Phase A curve: ce_batch0 0.951 → **0.101**, out2 → 1.17e-4,
+mean|y| 8.3e-3. Total wall 1237 s, peak VRAM ~18 GiB (GPU 3).
+
+| gate | bar | value | verdict |
+|---|---|---|---|
+| base parity cos (stock vs plugged) | ≥0.95 | **0.99846** (min 0.601, 59,392 tok) | PASS |
+| graft parity (OLMoE graft vs plugged) | ≥0.95 | **0.99899** | PASS |
+| retention vs solo (D1 margin probes) | ≥0.70 | **0.011** — solo gain **−0.28** | FAIL-as-written (degenerate) |
+| contamination (base → row) | ≤0.30 | **0.0647** | PASS |
+| §6 utilization (code → row) | >0.50 | **0.8308** | PASS |
+| **§6 quality: code CE active vs masked** | beat | **0.439 vs 1.072** (forced 0.101) | **PASS — first in the line** |
+
+Extra reads: in-situ code routing mass **0.733** (vs 0.35 target — CE term
+still dominates, but better than D1's 0.853), base mass 0.035; base CE
+2.311→2.316 (Δ+0.005 — no-regression clean); CE-delivery retention
+(lib/solo gains in CE space) **0.652** (vs 0.70 bar) — the shortfall is the
+delivery contract (delivered composition 0.27·stock+0.73·e_new ≠ trained
+stock+e_new), the same shared blocker the GPU-4 lane is testing. Held-out
+(`door25_heldout.py`, plugin .pt reload): code_train 1.072/0.439/0.101,
+**code_heldout 1.587 masked / 1.621 plugged / 1.950 forced (+0.033/+0.363)**,
+math_cross 2.477/2.483/2.613 (+0.006 plugged — out_pen neutrality holds).
+The 11k-token home fit therefore **memorizes**: the interface-level grab is
+real (a frozen foreign core delivers a large useful delta through 786k
+adapters — exactly what D1's toy and Door 3 did NOT achieve), but the
+*skill* is not yet a generalizable grab — needs more calibration data and/or
+the delivered-mass fix before the specialty claim.
+
+**Verdict (§10.2 success criterion): GRAB WORKS at the interface — the
+Door-3 trigger ("adapters can't bridge") did NOT fire.** Exact foreign
+weights are hostable; quality beats masking (the D1 sub-gate) for the first
+time in the line. Two caveats written into the record: (1) the D1 retention
+bar as written is degenerate here (negative solo gain on held-out hard-token
+margin probes — the ratio is not meaningful; CE-space analog 0.652); (2)
+held-out home CE is neutral-to-slightly-bad, so "Phi's code specialty was
+grabbed" is NOT yet supported — follow-ups: larger/multi-slice calibration
+(the wrap-vs-distill comparison the main agent is compiling should weight
+this), multi-site (16-layer pack with the same frozen core per site), and
+the delivery-contract fix for the 0.65→0.70 retention gap.
+
+**Ops:** GPU 3 only (`HIP_VISIBLE_DEVICES=3`), detached `setsid` (survived
+session caps), incremental JSON (`phase_a/phase_b/complete`) at
+`/data/tliao/graft_door25_out/door25_wrap.json` + `door25_plugin.pt` +
+`door25_core.pt` (box) / `lab/imported/graft_door25/` (home, untracked).
+**gfx906 wall (FAILURES `door25-gfx906-backward-holes`):** trunk backward
+dies at B*T ∈ {256,768,1024,4096} tokens on this box (D1's default bs2×512
+hits 1024!); all training on the verified 2048-token shape (bs4×seq512).
+Prototype init caveat found in diagnostics: registry layer_scale for L6 is
+**negative (−1.33)**, which flips the prototype-init sign (score_new −44 vs
+stock 0.68) — 400 recal steps overcome it; a sign-aware init is a cheap
+future fix.
+
+---
+
+## 2026-10-11 — MODULAR_MOE §9 **D2 follow-up, score-margin-aware recal: CLEAN NEGATIVE (curve monotone slightly down: MoE-cos 0.864→0.854, agree 0.651→0.623 over margin_w 0/2/5/10) — but the exact-init control PASSES every gate (0.9966 / 0.9881): the aux bars are reachable, the prototype+recal fit is the gap** (MI50 box, GPU 5 only, fp16)
+
+**Named follow-up from FAILURES `d2-crossfamily-perlayer`:** weight the recal
+MSE on near-threshold expert pairs (score-margin-aware recal) to close the
+Phi-mini-MoE per-layer gap (bars: MoE cos > 0.9, top-k agree > 0.8) without
+breaking the main bars (cos ≥ 0.95, |dCE| ≤ 0.05). Harness
+`lab/graft_d2_crossfamily.py` gains `--recal-margin-w` / `--recal-margin-tau`
+(weights `1 + w·exp(−min_c |s*−cut_c|/τ)`, mean-normalized; cuts = rank-1/2
+and rank-k/k+1 midpoints + the sparsemixer mask edge `max·(1−2·jitter)`) and
+a `margin_analysis` block in the parity phase (noise-matched agreement
+baseline). Mock self-test **18/18**. Four detached GPU-5 arms on the existing
+registry recipe (slices `lab/graft_d2_slice/`, donor @f620b32c, recal 300×2,
+88,064 val tokens), results `lab/graft_d2_margin_recal.{json,md}`:
+
+| arm | MoE cos | top-k agree | Jaccard | logit cos | ΔCE | aux bars |
+|---|---|---|---|---|---|---|
+| BEFORE (uniform MSE, D2 att-1) | 0.8640 | 0.6509 | 0.761 | 0.99863 | +0.0303 | FAIL |
+| margin_w=2 | 0.8602 | 0.6412 | 0.754 | 0.99857 | +0.0308 | FAIL |
+| margin_w=5 | 0.8571 | 0.6320 | 0.748 | 0.99859 | +0.0329 | FAIL |
+| margin_w=10 | 0.8540 | 0.6233 | 0.742 | 0.99856 | +0.0344 | FAIL |
+| **exact init (algebraic control)** | **0.9966** | **0.9881** | 0.992 | **0.99996** | **+0.0001** | **PASS** |
+
+Main bars hold on every prototype arm (stretch 0.99 clears everywhere);
+**the named lever is falsified** — margin weight moves per-layer strictly the
+wrong way. Root cause (from `margin_analysis`): the residual error is
+on-trajectory score error from hidden-state drift (val-trajectory score RMS
+0.05–0.27/layer vs recal cal-fit RMSE 0.014), and `frac(gap23 < 2σ) = 0.87–
+0.99` — nearly every token is flip-prone at that error level, so re-weighting
+which pairs get fit cannot help, only smaller error can. Diagnosis correction
+to the D2 write-up: in eval, sparsemixer INDICES are pure top-2 ranking (the
+relative-threshold mask only moves the multiplier softmaxes — donor source
+`sparsemixer()`), so the flips are rank-2/3 near-ties, not threshold flips.
+
+**Metric proposal (the earlier recommendation, now measured).** Family-
+relative agreement is the right *form* for hard-selection routers, but the
+baseline must be the **measured exact-init ceiling** — `(agree − 1/C(E,k)) /
+(agree_exact − 1/C(E,k))` — not isotropic noise-matched at the graft's σ:
+that model predicts agree 0.40 where the graft scores 0.64 and the true
+ceiling is 0.99 (graft score errors are low-rank/structured). On this donor
+the fp-noise ceiling is 0.9881, so the absolute 0.8 bar was already ≈0.81-of-
+ceiling — **the OLMoE bars are NOT unfairly calibrated for Phi-mini-MoE**;
+BEFORE sits at 0.656 of ceiling. Practical consequence for §9.6: **for a
+plain-linear donor gate, ship algebraic passports (exact init — the D0 core's
+`init_passports_exact`) and the per-layer gap vanishes** (registry
+`registry_phimoe_exact.pt`, 8.4MB, same format); prototype+recal is for
+routers with no closed form. Open lever if prototype-only is ever required:
+on-trajectory cal coverage (more pairs / val-like cal text), not margin
+re-weighting.
+
+**Next for §9:** D2 attempt 1 + this follow-up together close the per-layer
+question: the interface + registry pass all five gates when the passport rows
+are algebraic. Next step is the D1-style plug-in onto the phimoe registry
+graft (now on a fully passing base), or the second-foreign-family probe.
+
+---
+
 ## 2026-10-11 — MODULAR_MOE §10 **Door 3 (behavioral distillation): formal D1 bars PASS on the mass-cal recipe, s6 quality sub-gate FAILS — but the skill IS cloned at forced dispatch (held-out KL-to-donor 5.17→2.59); delivery composition, not expressiveness, is the blocker** (MI50 box, GPU 4 only, fp16)
 
 **Door 3 = the §10.3 behavioral-distillation counterpart to Door 2.5's

@@ -18,6 +18,62 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-11 — door25-gfx906-backward-holes — OLMoE trunk BACKWARD hits `HIP error: invalid device function` at some token counts on GPU 3 (B*T ∈ {256, 768, 1024, 4096} FAIL; {128, 384, 512, 1536, 2048} OK) — same missing-kernel family as the torch.sort@8192 wall, and D1's default bs2×seq512 lands exactly on the broken 1024
+- Evidence: `door25_oneshape.py` one-process-per-shape grid on
+  `tliao@100.64.0.7` **GPU 3** (torch 2.9.1+rocm6.4, fp16, OLMoE CE
+  fwd+bwd): (2,512)=1024 and (1,1024)=1024 FAIL reproducibly; (1,512),
+  (2,256), (4,512), (2,1024) OK. Pure-trunk CE backward fails with **no
+  plug-in installed** (door25_bwprobe3.py), so this is not the wrap's ops —
+  wrap-shaped gemms fwd+bwd all pass standalone (door25_probe.py, 15/15).
+  Per-layer bisection: backward to layer-0 output already walls at (2,512).
+  `torch.sort` on 8192 device elements still fails standalone (known wall).
+- Root cause: torch 2.9.1+rocm6.4 gfx906 coverage has SIZE-SPECIFIC kernel
+  holes in the backward path (the family of the d0-gfx906-moe-kernels sort
+  hole and the d15 `bool-mask+index_add_` hole); which (B,T) shapes trip it
+  is set by the reduction/gemm tile sizes (B*T, not B or T alone). GPU 3
+  additionally reports `AMD Radeon Graphics` where GPUs 0/5 report `AMD
+  Instinct MI50/MI60` (same `gfx906:sramecc+:xnack-`); a (2,512) backward
+  probe on GPU 0 was NOT run (lane rule: GPU 3 only) so GPU-3-specificity is
+  unproven. **Correction to the d0 entry: `AMD_SERIALIZE_KERNEL=3` is
+  REJECTED by this torch build** ("Ignoring invalid value for boolean flag
+  AMD_SERIALIZE_KERNEL: 3 — valid values are 0 or 1") — use =1 or omit.
+- What it rules out: D1's default batch shape (bs2×seq512 = 1024 tokens) for
+  any training run on this box's GPU 3; any assumption that a forward that
+  passes implies its backward passes.
+- Next tried: shape dodge (trivial, keeps the lane on GPU 3): all door25
+  training runs use **bs=4 × seq=512 = 2048 tokens** (verified fwd+bwd with
+  the full Phase-A graph, wrap included). Door-2.5 Phase A/B/C completed on
+  this recipe. If a future run needs a hole'd shape: one-process-per-shape
+  probe first (`door25_oneshape.py` pattern), then pick the nearest OK B*T.
+
+## 2026-10-11 — door25-wrap-training-starvation — the D1 Phase-A defaults (weight_decay 0.01 + grad_clip 1.0 + lr 1e-4) STARVE a thin-adapter wrap: the delta stays at |y|~5e-4, below the fp16 trunk's resolution, so the wrapped expert is bitwise-invisible (pilot CE identical over 40 steps, forced CE == masked CE to 6 decimals)
+- Evidence: `door25_pilot2.json` Phase A (80 steps, lr 3e-3 **with** D1's
+  wd 0.01/clip 1.0): `out_norm2` prints 0.000000 at every step; ce_code on
+  batch 0 bitwise-identical at steps 0/40 (0.9625347256660461); s6 quality
+  forced CE 1.0720305562 == masked 1.0720305562; margins gain_solo
+  +0.0023. Arm sweep (`door25_lrsweep.py`, 12 steps each, real frozen Phi
+  core): wd0/clip0 → mean|y| 1.0e-1; wd0/clip1 → 5.0e-3; wd.01/clip0 →
+  1.2e-2; **wd.01/clip1 (D1 recipe) → 4.6e-4**; D1's lr 1e-4 → 2.7e-10.
+  All four arms do move parameters (host_out 0→0.5..3.2) — the pipeline and
+  grads are healthy; the shrink of host_in/adapter_up/adapter_down (7.25→2.5
+  L2 under wd 0.01) walks the wrap's output into the frozen core's quiet
+  zone. Same signature explains the D1 toy's tiny delta (out_norm2 4.6e-5)
+  and the open s6-quality sub-gate there.
+- Root cause: Adam weight_decay on the ADAPTER maps is not a neutral
+  regularizer here — it contracts the composition (host_in∘adapter_up before
+  the core, adapter_down∘host_out after), so the delivered delta scales down
+  multiplicatively while the CE signal through the frozen core stays weak.
+  grad_clip 1.0 compounds it (empirically 20× at fixed wd=0, mechanism
+  unproven).
+- What it rules out: porting D1's expert-fit hyper-params verbatim to a
+  frozen-core + thin-adapter plug-in; interpreting "no learning" as "grads
+  don't flow" without an arm sweep (they do — the loss surface just contracts
+  the maps).
+- Next tried: door25 Phase A at **wd 0.0, lr 3e-3, clip 1.0** (owner_mass
+  0.35 / reject_w 10 / out_pen 300 unchanged — those are the pinned
+  mass-cal recipe): out2 grows to ~1e-4, mean|y| ~5e-3, ce_batch0 0.951 →
+  0.924 by step 75 of 250. Full run `door25_wrap.json`.
+
 ## 2026-10-11 — door3-distill-quality — Door 3 behavioral distillation into a fresh plug-in expert: formal D1 bars PASS but the quality sub-gate FAILS harder than the D1 toy (held-out home CE 8.07 active vs 1.83 masked) — the donor skill IS cloned at forced dispatch (KL-to-donor 5.17→2.59) but delivery through the softmax-mass row destroys it (plugged KL 6.63)
 - Evidence: `lab/door3_distill_expert.py` on `tliao@100.64.0.7` **GPU 4**
   (fp16, HIP shims, detached `setsid`, synthetic 17/17). Teacher =
@@ -93,6 +149,61 @@ a lucky pass.
   interface is proven cross-family at logit level. If per-layer parity is
   later required, the lever is score-margin-aware recal (weight the MSE on
   near-threshold pairs) — cheap, router-only, same protocol.
+  **UPDATE (same day, `d2-margin-recal` below): that named lever RUNS and
+  FAILS — curve monotone slightly negative.** The gap closes only with
+  algebraic (exact-init) passports, which pass every gate.
+
+## 2026-10-11 — d2-margin-recal — score-margin-aware recal does NOT close the Phi-mini-MoE per-layer gap (curve monotone slightly NEGATIVE: agree 0.651→0.641/0.632/0.623 at margin_w 2/5/10); the named fix from `d2-crossfamily-perlayer` is falsified — and an algebraic-passport control (exact init) passes EVERY gate at cos 0.99996 / MoE-cos 0.9966 / agree 0.9881
+- Evidence: `lab/imported/graft_d2/phimoe_d2_{mw2,mw5,mw10,exact}.json` +
+  compact `lab/graft_d2_margin_recal.{json,md}` (MI50 box GPU 5 only, fp16,
+  88,064 val tokens, D2-attempt-1 protocol unchanged: prototype init + recal
+  300×2, `--recal-margin-tau 0.05`). Curve (means over 32 layers; BEFORE =
+  uniform-MSE D2 attempt 1):
+
+  | arm | MoE cos | top-k agree | Jaccard | logit cos | ΔCE |
+  |---|---|---|---|---|---|
+  | BEFORE (uniform) | 0.8640 | 0.6509 | 0.761 | 0.99863 | +0.0303 |
+  | margin_w=2 | 0.8602 | 0.6412 | 0.754 | 0.99857 | +0.0308 |
+  | margin_w=5 | 0.8571 | 0.6320 | 0.748 | 0.99859 | +0.0329 |
+  | margin_w=10 | 0.8540 | 0.6233 | 0.742 | 0.99856 | +0.0344 |
+  | exact init (control) | 0.9966 | 0.9881 | 0.992 | 0.99996 | +0.0001 |
+
+  Main bars hold everywhere (cos ≥ 0.95 incl. 0.99 stretch, |dCE| ≤ 0.05);
+  the aux bars (MoE cos > 0.9, agree > 0.8) never move and more margin weight
+  makes both strictly worse. Recal still converges (cal-pair MSE 3.77→0.0013,
+  on-trajectory 0.005→0.0002).
+- Root cause: the residual per-layer error is NOT fit misallocation near the
+  decision boundary — it is **on-trajectory score error from hidden-state
+  drift**. The harness's `margin_analysis` (noise-matched diagnostic, same
+  run): val-trajectory score-error RMS 0.05–0.27 per layer (recal's cal-fit
+  RMSE is 0.014 — 4–19× smaller: the 4096-pair cal fit does not transfer to
+  the val trajectory), and `frac(gap23 < 2σ) = 0.87–0.99` — essentially every
+  token is flip-prone at that error level, so re-weighting WHICH pairs are fit
+  cannot help; only smaller error can. Diagnosis correction to the entry
+  above: in **eval** sparsemixer INDEX selection is pure top-2 ranking
+  (argmax, then argmax-of-remainder — the donor source confirms the
+  relative-threshold mask is applied only to the multiplier softmaxes); the
+  index flips are rank-2/3 near-ties (mean gap23 0.04–0.20 vs σ 0.16), not
+  threshold-mask flips.
+- What it rules out: (1) score-margin-aware MSE re-weighting (this scheme,
+  this budget) as the lever for hard-selection per-layer parity; (2) "the
+  D0-runbook aux bars are unreachable for sparsemixer families" — the
+  exact-init control clears both (0.9966 / 0.9881) through the identical
+  PassportBank/registry interface, so the bars are fair here and the
+  prototype+recal fit is the gap; (3) isotropic noise-matched agreement as
+  the family-relative baseline: at the graft's σ it predicts agree 0.40 while
+  the graft scores 0.64 (ratio ~1.6) and the true ceiling is 0.99 — graft
+  score errors are low-rank/structured, not isotropic.
+- Next tried: (a) budget fairness arm (margin_w=5, 600 steps × 3 on-trajectory
+  rounds) to close out "under-budgeted rather than wrong-mechanism"; (b) the
+  metric proposal for hard-selection families (see HANDOFF): normalize
+  agreement to the **measured exact-init ceiling** `(agree − 1/C(E,k)) /
+  (agree_exact − 1/C(E,k))` (BEFORE = 0.656 of ceiling here) — family-relative
+  is the right FORM, but the baseline must be measured, not noise-modeled; (c)
+  the actual per-layer fix for a plain-linear donor gate: **ship algebraic
+  passports (exact init)** in the registry. Open lever for prototype-only
+  settings: on-trajectory cal coverage (more pairs / val-like cal text), not
+  margin re-weighting.
 
 ## 2026-10-11 — pretrain-eol-vanish (t3 470m_k + box 429M) — trainer "vanishes" at the end of the step budget with no traceback and no final checkpoint (~490 steps / ~450M tokens of weights lost on the box run)
 - Evidence: box `/home/tliao/pretrain_470m.log` ends at `[10:22:29] Step 03990`
