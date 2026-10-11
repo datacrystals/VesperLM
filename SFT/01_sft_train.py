@@ -165,6 +165,34 @@ SFT_CONFIGS = {
         "eval_interval": 50,
         "val_eval_steps": 30,
     },
+    "470m_k_sft_r2": {
+        # Round 2: same 470m_k t3 passport base, but on the full SFT mix
+        # (oasst2 + openhermes ~51M positions vs round-1's 1.4M) and LoRA r32
+        # (VESPER_SFT_LORA_RANK=32) trained to ~2000 steps / val plateau.
+        # Round-1 (r8, 300 steps, 1.4M positions) never got talkable.
+        "amp_dtype": "bfloat16",
+        "dim": 1024, "n_layers": 10, "n_heads": 8, "n_kv_heads": 2,
+        "hidden_dim": 1280, "num_experts": 8, "top_k": 2, "max_seq_len": 8192,
+        "linear_type": "kda", "full_type": "mla",
+        "kda_head_dim": 64, "kv_lora_rank": 512, "v_head_dim": 128,
+        "router_type": "passport", "passport_dim": 64,
+        "grad_checkpoint": True,
+
+        "micro_batch_size": 8,
+        "sft_seq_len": 1024,
+        "target_accumulation_steps": 32,
+
+        "beta1": 0.9, "beta2": 0.95,
+        "max_lr": 5e-5,
+        "min_lr": 5e-6,
+        "aux_weight": 0.01,
+
+        "warmup_steps": 50,
+        "total_steps": 2000,
+
+        "eval_interval": 200,
+        "val_eval_steps": 30,
+    },
 }
 
 ACTIVE_CONFIG_NAME = os.environ.get("VESPER_SFT_CONFIG", "tiny_agent_v2_sft")
