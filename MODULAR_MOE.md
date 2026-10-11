@@ -824,3 +824,46 @@ top-k sets, so measure the co-activation graph and harvest in CLUSTERS
 Graft order within a cluster follows the donor router's own activation
 margins. Singleton vs cluster fidelity is measured at D1.5 — if singletons
 hold >0.9 cosine anyway, skip the clustering complexity.
+
+---
+
+## §10 Basis-portable expert format (post-D-line design line, 2026-10-11)
+
+Motivated by the D-line outcome: D0/D2 prove the passport/registry ROUTING
+interface generalizes across families, but D1.5 proves hidden-space feature
+translators do NOT (0.55-0.69 vs 0.9 bar; feature-availability limited; even
+same-model layer-2→12 fails). Weight-level mix-and-match across existing
+models cannot rely on representation parity. Three doors, in build order:
+
+### 10.1 Door 2 — experts with a canonical bottleneck (the format)
+Each expert is not a full-width MLP in the spine's basis but:
+    adapter_down (d_model → d_canon) → core (basis-independent skill)
+    → adapter_up (d_canon → d_model)
+Train our bases (Vesper-K onward) with experts in this format. Spine changes
+are minimal (routing already standardized by the registry/passport layer).
+Benefits: (a) experts swap freely among format-adopting models with adapter
+recal only (the 0.66→0.996 recal trick, §9 sweep); (b) CROSS-SCALE plug-in —
+an expert trained at 470M plugs into a 1B/3B spine via its adapters (the
+"compile from parts as the family grows" product story). Cost: bottleneck
+expressiveness tax per FLOP vs fat native experts — measure at t1/t2 scale
+(one clean experiment before committing the Vesper-K spec to it).
+
+### 10.2 Door 2.5 — wrap FOREIGN expert cores in the format (the grab)
+Take a donor expert's core weights VERBATIM (frozen), learn only the two
+thin adapters around it (our d_canon ↔ their basis), on domain data with the
+task loss (NOT feature-matching). Much easier than D1.5's global translator:
+one narrow interface, end-to-end objective, recal-scale compute. First
+experiment (lab scale): one OLMoE/Phi-mini-MoE expert → wrap → recal →
+D1-gate it (parity/retention/contam bars from §9.4). Success = exact foreign
+weights hostable; failure mode = adapters can't bridge → Door 3.
+
+### 10.3 Door 3 — behavioral distillation (universal fallback)
+Train a fresh format-native expert to imitate the donor's behavior on its
+home domain (donor runs, produces scores/generations; host expert distills).
+No feature compatibility needed. Fidelity loss + distillation compute, but
+"any model's specialty becomes one of my plug-ins" always works.
+
+Composition: models in the format swap experts natively (10.1); out-of-format
+donors are grabbed by wrap (10.2) or distilled (10.3). Registry economics
+(§9 sweep: ~8MB spine artifact, 256B/row at d_canon=64) are unchanged — the
+format governs the EXPERT side, the passport the ROUTING side.
