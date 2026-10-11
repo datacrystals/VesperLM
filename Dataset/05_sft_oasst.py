@@ -1,4 +1,5 @@
 import os
+import re
 import numpy as np
 from tqdm import tqdm
 from transformers import PreTrainedTokenizerFast
@@ -15,6 +16,14 @@ OUT_DIR         = "data/sft"
 TARGET_TOKENS   = 50_000_000   # 50M tokens — adjust up if you want more OASST coverage
 MAX_SEQ_LEN     = 1024
 MIN_ASSISTANT_CHARS = 20       # Skip suspiciously short assistant turns
+
+# Trivially-filterable refusals/rejections: drop a conversation outright if any
+# assistant turn opens with a refusal formula (see also 07_sft_openhermes.py).
+REFUSAL_RE = re.compile(
+    r"(?i)^\s*(i('m| am) sorry|i apologize|i cannot|i can't|i won't|"
+    r"i am unable|i'm unable|i must decline|as an ai( language model)?|"
+    r"sorry,? but i|i'm afraid i)"
+)
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -98,6 +107,11 @@ def build_oasst_conversations(dataset):
 
             # Skip very short assistant turns — usually noise
             if role == "assistant" and len(text) < MIN_ASSISTANT_CHARS:
+                break
+
+            # Drop conversations containing refusals/rejections
+            if role == "assistant" and REFUSAL_RE.match(text):
+                convo = []
                 break
 
             convo.append({"role": role, "content": text})

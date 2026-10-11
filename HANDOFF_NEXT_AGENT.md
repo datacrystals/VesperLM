@@ -256,6 +256,142 @@ prompts T=0.7/top-p 0.9. Baseline to beat: LoRA r8 val 2.304.
 
 ---
 
+## 2026-10-11 — SFT r2 (LoRA r32 + OASST/OpenHermes 51M): val 2.304→1.4999, STILL NOT talkable (laptop 3070)
+
+**What ran:** config `470m_k_sft_r2` (`SFT/01_sft_train.py`, committed here) —
+same t3 passport base `lab/imported/t3_ckpts/step_best`, **LoRA r32** profile
+`kda_mla` (42 modules, **2.72M trainable of 429.5M**, α default 16 via
+`VESPER_SFT_LORA_ALPHA`), bf16 + `VESPER_FUSED_CE=1`, micro_batch 8 × seq
+1024, `target_accumulation_steps=32` (sequences ⇒ accum 4 micro-steps =
+32,768 tok/optimizer-step; 2000 steps ≈ 65.5M positions ≈ 1.3 epochs over the
+mix), lr 5e-5 cosine→5e-6 (warmup 50), 2000 steps, eval every 200. Data:
+`oasst2_sft.bin` 1,332,224 + `openhermes_sft.bin` 50,000,896 token positions
+(built by the `Dataset/05_sft_oasst.py` / `07_sft_openhermes.py` changes in
+this commit: refusal-formula conversation drop + fixed `target_tokens`
+accounting). Wall 5.5h (00:55–06:25 local), 1.8GB torch alloc, no OOM.
+Log: `lab/logs/sft_470m_k_r2_lora32.log`.
+
+**Val curve (masked CE, 30 eval steps):** 1.7136@200 → 1.6420@400 →
+1.5457@600 → 1.6039@800 → **1.4999@1000 (BEST)** → 1.6205@1200 → 1.6342@1400
+→ 1.6208@1600 → 1.7321@1800. Late single-step train CE is noisy (per-10-step
+values 0.82–2.2 throughout; window means ≈1.25 @600–1200, 1.66–1.86
+@1400–1999) — the val curve is the selection signal. **`step_best` = step
+1000** (md5 `615b5c35aab96c870fdb608cdf7d00e3` == `step_1000/checkpoint.pt`,
+verified).
+
+**r2 vs r1:** r1 (LoRA r8, 299 steps, 1.4M OASST-only positions) flatlined
+2.3244@50 → **2.3044@150 (best)** → 2.3067@250. r2 = 37× data positions, r32,
+2000 steps → **1.4999** best (Δ −0.80 CE). Train CE: r1 ≈2.38 flat; r2 window
+means 1.96→1.25 with mid-run dips to 0.82.
+
+**Eval (`SFT/eval_chat.py`, 12 ChatML prompts, T=0.7 / top-p 0.9):**
+`python3 SFT/eval_chat.py --ckpt lab/imported/sft_470m_r2/step_1000/chat_model
+--out lab/imported/sft_470m_r2/eval_chat_step1000.json` (CUDA 3070; log
+`lab/logs/eval_chat_r2_step1000.log`). **Layout gotcha:** `step_best/` holds
+only `checkpoint.pt` + snapshots — no tokenizer, no `chat_model/` (evaling it
+crashes in `PreTrainedTokenizerFast.from_pretrained`, see
+`lab/logs/eval_chat_r2_best.log`). r2 keeps the r1 `step_N/chat_model/`
+convention (tokenizer + merged `vesper_chat.pt`); point eval at the best
+step's `chat_model`. All 12 samples verbatim in the JSON path above.
+
+**QUALITY VERDICT — honest: STILL NOT talkable.** 0/12 usable. Failure modes
+across the 12 held-out prompts: prompt-ignoring/corpus drift, hard repetition
+loops (11/12), format debris (forum transcripts / code dumps), and one EMPTY
+reply. Only 2/12 even touch the topic (ocean poem, photosynthesis) and both
+then loop. Verbatim samples (pure repetition elided with ×N markers; full
+text in the JSON):
+
+(1) "Hello! How are you today?" → "* This is a test case to check if the
+`get_user` function is working correctly.
+* The test case uses the `get_user` function with the `get_user` function to
+return `"User".
+* The test case is included in the expected output.
+* The expected output is: "User user"."
+[then "User user". ×12 — code-review debris, not a greeting]
+
+(2) "What is the capital of France?" → "" [EMPTY — immediate stop]
+
+(3) "What is 17 * 23?" → "This function retrieves the number of digits in a
+number.
+
+The function takes two arguments:
+1. A number.
+2. The number to be returned.
+…
+Here is the solution in JavaScript:
+
+```javascript
+function getDigit(number) {"
+[arithmetic → JS code dump; no answer]
+
+(4) "How do I boil an egg?" → "How do I boil an egg?.(36:13)
+How do I boil an egg?.(36:19)
+How do I boil an egg?.(36:23)
+How do I boil an egg?.(36:25)
+…"
+[prompt-echo + timestamp loop ×12]
+
+(5) "I feel really stressed about work lately. Any advice?" → "...thanks!
+
+**Reply #1 on: May 11, 2014, 09:42:12 AM**
+
+I really appreciate it. I was just wondering how to make my Google search for
+"what is the meaning of the word 'product'?" and I'm not sure if this is the
+right place to start.
+
+**Reply #2 on: May 11, 2014, 10:43:18 AM**
+…"
+[forum-thread corpus debris, no advice]
+
+(6) "Why do we dream?" → "I am a software engineer who has spent the last 10
+years working as a software engineer at a software company. In the past, I
+worked as a software engineer at a small software company. In the past, I
+worked at a software company, but now I am a software engineer at a large
+software company.
+
+I have a passion for software engineering and I have worked with many
+different software companies over the years. In the past, I worked as a
+software engineer at a software company. In the past, I worked as a software
+company. …"
+["In the past, I worked…" loop ×6 — prompt ignored]
+
+(7) "Can you explain what a black hole is in simple terms?" → "Hello. I'm
+Rakuten. I'm a student at a Chinese university. I'm a student in the
+classroom. I'm in the middle of a class. I can do some math. I can draw
+pictures. I can draw pictures. …"
+[identity drift + "I can draw pictures" ×20 loop]
+
+Training-time probes at step 1000 (`step_1000/eval_samples.json`, same T=0.7
+/ top-p 0.9 — so this is not a decode-setting artifact) collapse the same
+way with partial fact recall: "The capital of Japan is Tokyo, a city that is
+famous for its historical landmarks and cultural heritage. The capital of
+Japan is Tokyo, which is located in Tokyo. …" [loop]; "91 * 7 is a multiple
+of 7, which means it is a multiple of 7. … 91 * 7 = 91 * 7 = 91 * 7 = …"
+[nonsense loop].
+
+**Binding limit: the base pretrain, not the SFT.** t3 is 427M total / 194M
+active on only **3.77B tokens** (~2× under Chinchilla for this size), and its
+own pretrain val plateaued at 2.2678 (a phase-switch-mismatched metric — see
+t3 postmortem below). Repetition collapse within 30–60 tokens, prompt-echo
+decodes, and an empty reply are LM-prior failures. r1→r2 moved CE hard
+(2.30→1.50, +37× data, 4× adapter rank) and bought sentence-level structure +
+occasional topicality, but every failure mode survived — the SFT axis is near
+exhausted on this base. **Specific fix: bigger pretrain first** — push ≥10–20B
+tokens through the same 470m_k (or scale params), MI300X lane, then re-run
+this exact SFT recipe (reproducible: config `470m_k_sft_r2`). **MI300X
+full-FT is the second lever, not the first:** LoRA r32 touches 0.63% of
+params and val 1.50 is still far from talkable territory (<1.0), so full-FT
+would lower CE — but it cannot install a generation prior the pretrain never
+learned, so full-FT of *this* base will still loop. If only one MI300X
+affordable run: spend it on pretrain tokens; full-FT SFT rides along after.
+
+**Housekeeping:** eval JSON + logs live in `lab/imported/sft_470m_r2/` +
+`lab/logs/` (untracked by design — never commit `lab/imported/`). Resume r2:
+`VESPER_SFT_OUT=lab/imported/sft_470m_r2` picks up the highest `step_N`
+(wrapped LoRA keys auto-handled).
+
+---
+
 ## 2026-10-11 — SFT 470m_k CHAT: pipeline green, model NOT talkable yet (300 LoRA steps, laptop 3070)
 
 **What ran:** SFT of `lab/imported/t3_ckpts/step_best` (t3 470m_k passport,

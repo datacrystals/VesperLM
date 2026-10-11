@@ -9,6 +9,7 @@ so it can be mixed via data/sft/index.txt with any desired weight.
 """
 
 import os
+import re
 import numpy as np
 from tqdm import tqdm
 from transformers import PreTrainedTokenizerFast
@@ -25,6 +26,15 @@ OUT_DIR         = "data/sft"
 TARGET_TOKENS   = 50_000_000   # 50M token positions — increase if you have the VRAM/time
 MAX_SEQ_LEN     = 1024
 MIN_ASSISTANT_CHARS = 20       # skip suspiciously short assistant turns
+
+# Trivially-filterable refusals/rejections: drop a conversation outright if any
+# assistant turn opens with a refusal formula. Only the obvious openers —
+# anything subtler needs an NLP filter and is out of scope here.
+REFUSAL_RE = re.compile(
+    r"(?i)^\s*(i('m| am) sorry|i apologize|i cannot|i can't|i won't|"
+    r"i am unable|i'm unable|i must decline|as an ai( language model)?|"
+    r"sorry,? but i|i'm afraid i)"
+)
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -151,6 +161,11 @@ def load_openhermes_conversations(tokenizer):
                 conv = []  # discard this entire conversation
                 break
 
+            # Drop conversations containing refusals/rejections
+            if role == "assistant" and REFUSAL_RE.match(text):
+                conv = []
+                break
+
             conv.append({"role": role, "content": text})
 
         # Only keep if we have at least one user/assistant exchange and ends with assistant
@@ -214,12 +229,13 @@ if __name__ == "__main__":
         print("❌ No valid conversations extracted. Exiting.")
         exit(1)
 
-    # Target token count is in interleaved pairs, so multiply by 2
+    # target_tokens is measured in token positions (each position = one
+    # interleaved [token, mask] pair)
     output_file = os.path.join(OUT_DIR, "openhermes_sft.bin")
     write_tokens_to_bin(
         token_generator(conversations, tokenizer, im_start_id, im_end_id, eos_id),
         output_file,
-        target_tokens=TARGET_TOKENS * 2   # *2 because each position is token+mask
+        target_tokens=TARGET_TOKENS
     )
 
     print(f"\n✅ OpenHermes SFT data written to {output_file}")
