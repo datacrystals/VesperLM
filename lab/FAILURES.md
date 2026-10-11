@@ -18,6 +18,27 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-11 — mi50-fullft-sft-gate — fla/Triton kernels cannot compile on gfx906 (MI50 box)
+- Evidence: `lab/smi50_smoke_gate.py` on `tliao@100.64.0.7` GPU 0 (torch
+  2.9.1+rocm6.4, pytorch-triton-rocm 3.5.1, fla 0.6.0@37a6b1c+patches): all 4
+  gate tests FAIL — tiny GLA fwd+bwd bf16, tiny GLA fp32/grad-ckpt, tiny
+  470m_k KDA+MLA+passport, fla FLCE. Hello-world `@triton.jit` elementwise
+  kernel fails the same way: `error: unsupported target: 'gfx906'` in
+  `triton/backends/amd/compiler.py:make_llir` → `PassManager::run failed`.
+- Root cause: the Triton AMD backend in pytorch-triton-rocm 3.5.1 no longer
+  supports gfx906 (its compiler.py mentions gfx942/gfx950 only). Platform
+  reject at LLVM lowering, before any fla code runs; not a fla bug, no fla
+  env-flag fallback exists (chunk kernels are Triton-only).
+- What it rules out: any fla-linear-attention training on the MI50 box with a
+  torch 2.9.1+rocm6.4-era Triton. Full-FT SFT of 470m_k on gfx906 with this
+  stack is closed until the Triton is swapped.
+- Next tried: parked for retry with an older Triton (torch 2.6/2.7 + rocm6.2
+  wheel era, matching /opt/rocm-6.2.4 which still ships gfx906 tensile
+  kernels) or move the recipe to the MI300X lane. Extra gotcha recorded:
+  ROCBLAS_TENSILE_LIBPATH=/opt/rocm-6.2.4/lib/rocblas/library is required even
+  for plain matmul on gfx906 (wheel Tensile lib lacks gfx906; this is what the
+  box's hackathon processes export).
+
 ## 2026-10-10 — swarm5-oneclick-canary — free OneClick lane starved again (40-min attach poll, zero scheduling windows)
 - Evidence: `gh-ca7ead92` status polled 02:28:51–03:08:48 UTC (240×10s) via
   `GET /api/github/notebook/status?instance_id=gh-ca7ead92`: `pending` /

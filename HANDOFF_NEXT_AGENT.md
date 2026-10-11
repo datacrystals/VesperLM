@@ -41,6 +41,48 @@ data first.
 
 ---
 
+## 2026-10-11 — MI50 full-FT SFT: STOPPED at GPU smoke gate — Triton rejects gfx906
+
+**Gate FAIL, no training started.** Env built on `tliao@100.64.0.7` (8× MI50/MI60
+gfx906): venv `/data/tliao/vesper_sft/venv` (16G, torch 2.9.1+rocm6.4 +
+pytorch-triton-rocm 3.5.1, fla 0.6.0@37a6b1c + `tools/patch_fla.py` all 6
+patches), repo `/data/tliao/vesper_sft/VesperLM`, t3 base staged at
+`lab/imported/t3_ckpts/step_best/checkpoint.pt` (3.5G). All scratch on the 7T
+`/data` (421G free) — root's 24G untouched.
+
+**Smoke gate (`lab/smi50_smoke_gate.py`, GPU 0 only):** tiny VesperLinearLM
+GLA fwd+bwd (bf16 autocast and fp32/grad-ckpt), tiny 470m_k path (KDA+MLA+
+passport), and `VESPER_FUSED_CE` fla FLCE — **all 4 FAIL identically**, and so
+does a hello-world `@triton.jit` elementwise kernel:
+`triton/backends/amd/.../compiler.py make_llir → "error: unsupported target:
+'gfx906'" → PassManager::run failed`. `gfx906` never appears in the wheel's AMD
+backend (gfx942/gfx950-era code). **Platform-level: fla never runs; not a fla
+bug and not patchable via fla env flags** (fla 0.6.0 has no CPU/torch fallback
+for chunk kernels — only `FLA_CACHE_MODE`/`FLA_CONFIG_DIR` config caching).
+
+**rocBLAS gotcha (needed even for plain matmul on gfx906):** the wheel's Tensile
+library has no gfx906 kernels → `ROCBLAS_TENSILE_LIBPATH=/opt/rocm-6.2.4/lib/
+rocblas/library` (that's what the box's hackathon processes export; ROCm 6.2.4
+is the last install with gfx906 tensile kernels). Get this right before any
+retry.
+
+**Next branches (untried, cheapest first):** (a) older Triton with a gfx906-era
+AMD backend — pair a torch whose bundled `pytorch-triton-rocm` predates the
+gfx906 drop (the box also has /opt/rocm-6.2.4; revisit torch 2.6/2.7+rocm6.2
+wheels) and re-run `lab/smi50_smoke_gate.py`; (b) upstream fla universal/torch
+kernels if any appear; (c) run the full-FT recipe on a CDNA box (MI300X lane,
+same recipe as the DDP plan below). **Do not start training until the gate
+passes** — GLA/KDA forward is Triton-only.
+
+**Recipe parked for the retry** (4-GPU DDP, GPUs 0,3,4,5 — never 1,2): full-FT
+427M, fp32 AdamW (fits 32GB: ~2.6G params+grads + ~5.2G AdamW states), bf16 AMP
++ `VESPER_FUSED_CE=1`, seq 1024, micro-batch to fill 32G (measure first),
+32–64k tok/step effective (4×mb×1024×accum), lr 2e-5→2e-6 cosine warmup 100,
+wd 0.01, ≤3 ckpts on box, out `lab/imported/sft_470m_mi50/`, eval_chat 12
+prompts T=0.7/top-p 0.9. Baseline to beat: LoRA r8 val 2.304.
+
+---
+
 ## 2026-10-11 — SFT 470m_k CHAT: pipeline green, model NOT talkable yet (300 LoRA steps, laptop 3070)
 
 **What ran:** SFT of `lab/imported/t3_ckpts/step_best` (t3 470m_k passport,
