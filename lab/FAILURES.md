@@ -163,12 +163,26 @@ a lucky pass.
   a metric artifact, not delivery. Lesson: for D1 the §6 utilization gate is
   top-k MEMBERSHIP, not mass — the operating point is high membership with
   modest mass (~0.3), not the memory line's 0.85 dominance.
-- Next tried (attempt 4, queued detached `setsid nohup` per ops rule): the
-  untried middle of the Pareto frontier — **owner-mass 0.35 + mass_w 2 + 
-  reject_w 10** (membership up via CE+mass targets, contamination down hard
-  for parity, stock experts keep ~65% of merge scale) + out_pen 300 (delta
-  may grow enough to be net-useful). Archived attempt-3 JSON:
-  `olmoe_d1_attempt3_mass085.json` on the box.
+- **Final outcome (attempt 4, 2026-10-11 14:43 UTC, detached `setsid`):
+  D1 PASS on all formal bars** with the mass-calibration recipe **owner_mass
+  0.35, reject_w 10.0, out_pen 300** (`lab/graft_d1_plugin.py`, ~31 min GPU
+  0): base parity **0.9667** (≥0.95), retention vs solo **0.934** (≥0.70;
+  margins pre −3.39 → solo −0.83 → lib −1.00, gains +2.57/+2.40 — a clean
+  delivery ratio, unlike att-3's 3.6 artifact), contamination **0.105**
+  (≤0.30; gate p_new_base 0.008 after the on-trajectory round), §6
+  utilization **0.911** (>0.50). **s6_quality remains the one open sub-gate**
+  (code CE active 12.58 vs masked 1.26): the plugged row still takes ~0.85
+  in-situ code mass (the CE router term dominates the 0.35 mass target) while
+  carrying a tiny delta (out_norm2 ~5e-6), so stock experts are starved on
+  code tokens and average code CE cannot improve. Named next branch:
+  **expert-fit at delivered-mass** — train the delta to compensate at the
+  routing mass it will actually receive (or deliver additively at fixed small
+  weight instead of competing for softmax mass), so the plug-in adds value
+  rather than replacing stock contributions. Pareto map (owner_mass /
+  reject_w / out_pen → parity, retention, contam, util): att2 none/10/10 →
+  0.977, 0.487, 0.091, 0.286; att3 0.85/5/3000 → 0.927, 3.622, 0.213, 0.940;
+  att4 0.35/10/300 → **0.967, 0.934, 0.105, 0.911**. Archived JSONs on the
+  box: `olmoe_d1_attempt3_mass085.json` + final `olmoe_d1.json`.
 
 ## 2026-10-11 — d15-translator-fidelity — telemetry-trained translators MISS the 0.9 held-out-cosine bar for every non-trivial basis pair (variant B deprioritized per §9.5)
 - Evidence: `lab/graft_d15_translator.py` on the MI50 box GPU 3 (fp16, OLMoE
