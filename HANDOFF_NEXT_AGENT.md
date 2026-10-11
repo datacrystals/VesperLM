@@ -260,7 +260,7 @@ prompts T=0.7/top-p 0.9. Baseline to beat: LoRA r8 val 2.304.
 
 **What ran:** config `470m_k_sft_r2` (`SFT/01_sft_train.py`, committed here) —
 same t3 passport base `lab/imported/t3_ckpts/step_best`, **LoRA r32** profile
-`kda_mla` (42 modules, **2.72M trainable of 429.5M**, α default 16 via
+`kda_mla` (42 modules, **2.72M trainable of 429.5M**, α=64 via
 `VESPER_SFT_LORA_ALPHA`), bf16 + `VESPER_FUSED_CE=1`, micro_batch 8 × seq
 1024, `target_accumulation_steps=32` (sequences ⇒ accum 4 micro-steps =
 32,768 tok/optimizer-step; 2000 steps ≈ 65.5M positions ≈ 1.3 epochs over the
@@ -295,71 +295,45 @@ convention (tokenizer + merged `vesper_chat.pt`); point eval at the best
 step's `chat_model`. All 12 samples verbatim in the JSON path above.
 
 **QUALITY VERDICT — honest: STILL NOT talkable.** 0/12 usable. Failure modes
-across the 12 held-out prompts: prompt-ignoring/corpus drift, hard repetition
-loops (11/12), format debris (forum transcripts / code dumps), and one EMPTY
-reply. Only 2/12 even touch the topic (ocean poem, photosynthesis) and both
-then loop. Verbatim samples (pure repetition elided with ×N markers; full
-text in the JSON):
+across the 12 held-out prompts (eval_chat decode is unseeded — samples below
+are verbatim from the committed
+`lab/imported/sft_470m_r2/eval_chat_step1000.json`): prompt-ignoring/corpus
+drift, hard repetition loops (8/12), format debris (forum transcripts / code
+dumps), and 3 EMPTY replies. Only 2/12 even touch the topic (boil an egg,
+list-vs-tuple) and both then loop. Verbatim samples (pure repetition elided
+with ×N markers; full text in the JSON):
 
-(1) "Hello! How are you today?" → "* This is a test case to check if the
-`get_user` function is working correctly.
-* The test case uses the `get_user` function with the `get_user` function to
-return `"User".
-* The test case is included in the expected output.
-* The expected output is: "User user"."
-[then "User user". ×12 — code-review debris, not a greeting]
+(1) "Hello! How are you today?" → "I am using a smartwatch, but I can't
+remember where to start. I need to open the smartwatch app, click the green
+button, and then select the blue button. It's my first time using the app,
+and it works fine. I can't remember the starting point of the smartwatch
+app. Here's my code: ```java public class MySmartwatch {"
+[unprompted tech-support monologue, not a greeting]
 
 (2) "What is the capital of France?" → "" [EMPTY — immediate stop]
 
-(3) "What is 17 * 23?" → "This function retrieves the number of digits in a
-number.
+(3) "What is 17 * 23?" → "I am trying to figure out what is the most common
+way of naming things in a language. The most common way of naming is as
+follows: - 《公男》》》》…"
+[arithmetic → CJK bracket-garbage loop]
 
-The function takes two arguments:
-1. A number.
-2. The number to be returned.
-…
-Here is the solution in JavaScript:
+(4) "How do I boil an egg?" → "This is a very basic way to boil an egg.
+1. Fill an egg jar with the water, or use a garden jar or a large glass jar.
+2. Add a little water to the egg. 3. Pour the water into the egg. 4. Add a
+little water to the egg. 5. Pour the water into the egg. …"
+[the only topical opener in the set, then a step loop ×N]
 
-```javascript
-function getDigit(number) {"
-[arithmetic → JS code dump; no answer]
+(5) "Why do we dream?" → "The dreamer was a cat, and the dreamer was a cat.
 
-(4) "How do I boil an egg?" → "How do I boil an egg?.(36:13)
-How do I boil an egg?.(36:19)
-How do I boil an egg?.(36:23)
-How do I boil an egg?.(36:25)
-…"
-[prompt-echo + timestamp loop ×12]
+If you are a cat, you dream. If you are a cat, you dream. …"
+[sentence loop, prompt ignored]
 
-(5) "I feel really stressed about work lately. Any advice?" → "...thanks!
+(6) "Can you explain what a black hole is in simple terms?" → "on Oct 18,
+2010 at 9:25 am What's the difference between a black hole and a neutron
+star? communicators on Oct 18, 2010 at 10:27 am …"
+[forum-transcript corpus debris]
 
-**Reply #1 on: May 11, 2014, 09:42:12 AM**
-
-I really appreciate it. I was just wondering how to make my Google search for
-"what is the meaning of the word 'product'?" and I'm not sure if this is the
-right place to start.
-
-**Reply #2 on: May 11, 2014, 10:43:18 AM**
-…"
-[forum-thread corpus debris, no advice]
-
-(6) "Why do we dream?" → "I am a software engineer who has spent the last 10
-years working as a software engineer at a software company. In the past, I
-worked as a software engineer at a small software company. In the past, I
-worked at a software company, but now I am a software engineer at a large
-software company.
-
-I have a passion for software engineering and I have worked with many
-different software companies over the years. In the past, I worked as a
-software engineer at a software company. In the past, I worked as a software
-company. …"
-["In the past, I worked…" loop ×6 — prompt ignored]
-
-(7) "Can you explain what a black hole is in simple terms?" → "Hello. I'm
-Rakuten. I'm a student at a Chinese university. I'm a student in the
-classroom. I'm in the middle of a class. I can do some math. I can draw
-pictures. I can draw pictures. …"
-[identity drift + "I can draw pictures" ×20 loop]
+(7) "I feel really stressed about work lately. Any advice?" → "" [EMPTY]
 
 Training-time probes at step 1000 (`step_1000/eval_samples.json`, same T=0.7
 / top-p 0.9 — so this is not a decode-setting artifact) collapse the same
