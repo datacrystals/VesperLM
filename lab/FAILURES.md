@@ -18,6 +18,76 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-11 — d2-crossfamily-perlayer — foreign-family graft (Phi-mini-MoE sparsemixer): logit parity PASSES (cos 0.9986, dCE +0.030) but per-layer MoE gates MISS (cos 0.864 < 0.9, top-k agree 0.651 < 0.8)
+- Evidence: `lab/imported/graft_d2/phimoe_d2.json` + `phimoe_d2_reparity.json`
+  (88,064 val tokens, MI50 box GPU 5, fp16, prototype+recal 300×2,
+  `registry_phimoe_f620b32c.pt`). Final-logit cos 0.99863 (min −0.479,
+  std 0.024), ΔCE +0.0303 (stock 1.9054 → graft 1.9357) — both user bars
+  clear, including the 0.99 stretch. Per-layer MoE-output cos 0.864 mean
+  (0.80–0.97), top-k set agreement 0.651 (Jaccard 0.761). Recal converged
+  fine (score MSE 3.76→0.0012, on-trajectory 0.005→0.0002), so this is NOT
+  under-fitting of the passport rows.
+- Root cause: the foreign router's *selection* is discrete in a way OLMoE's
+  is not. Phi's sparsemixer picks top-1 = argmax after a relative-threshold
+  mask (`(max−s)/|s| > 2·jitter_eps` → −inf), top-2 = argmax of the remainder,
+  and draws each multiplier from a *different* masked softmax. A small score
+  error near the threshold or near a top-2 tie flips a hard choice; OLMoE's
+  softmax-top-8 ranking is Lipschitz in comparison (D0: agree 0.837, layer
+  cos 0.995 on the same recipe). Per-layer error is U-shaped over depth (edge
+  layers 0/1/31: 0.96–0.97 cos / 0.79–0.85 agree; trough layers 13–21:
+  0.80–0.85 / 0.53–0.65) — signature of small score errors compounding
+  through depth while the final layers partially reconverge the residual.
+- What it rules out: "one numeric parity bar set fits every router family".
+  Logit-level parity (the user's D2 bar) generalizes; the D0-runbook
+  per-layer gates (cos>0.9, agree>0.8) are OLMoE-calibrated and unfair to
+  threshold/argmax routers. Any future family with hard-selection routing
+  (sparsemixer, top-1 gating, expert choice) should be gated on logit cos +
+  ΔCE + a *family-relative* agreement baseline (e.g. agree vs the
+  best-achievable under exact-init fp noise), not the OLMoE absolute.
+- Next tried: none needed for the D2 question itself (user bars PASS); the
+  interface is proven cross-family at logit level. If per-layer parity is
+  later required, the lever is score-margin-aware recal (weight the MSE on
+  near-threshold pairs) — cheap, router-only, same protocol.
+
+## 2026-10-11 — pretrain-eol-vanish (t3 470m_k + box 429M) — trainer "vanishes" at the end of the step budget with no traceback and no final checkpoint (~490 steps / ~450M tokens of weights lost on the box run)
+- Evidence: box `/home/tliao/pretrain_470m.log` ends at `[10:22:29] Step 03990`
+  (of total_steps=4000) with no traceback / Killed / COMPLETE line; stderr is
+  in the SAME log (torchrun banners, `[rank*]` warnings) so a crash traceback
+  would have been captured — there is none, and "Starting fresh" appears once
+  (single process lifetime, no wrapper relaunch). Latest save
+  `Pretrain/vesper_linear_checkpoints_470m/step_3500` (saves every 500);
+  val evals ran through step 3900 (`eval_samples_step3900.json`), never 4000;
+  VRAM stable 9.4GB and disk fine (the known silent-killer traps ruled out).
+  t3 is an identical signature (HANDOFF 2026-10-10: vanished at 3990/4000;
+  `lab/imported/t3_ckpts/` last save step_3500, eval samples through 3900,
+  loss_curve.png written at the step-3900 eval and nothing after). Tiny
+  repro `Pretrain/tests_end_of_loop.py` (20 steps, free box P40) confirms the
+  mechanism: pre-fix the end-of-budget run exits 0 with no banner and no
+  terminal checkpoint.
+- Root cause: `Pretrain/02_pretrain_linear.py` — `for step in range(start_step,
+  total_steps)` is exclusive of `total_steps`, while eval only fires on
+  `step % eval_interval == 0` and the disk save only on `step % 500 == 0`
+  inside it. The scheduled end-of-run eval+save (step 4000 = a %500 checkpoint
+  AND the next eval interval) is unreachable; steps 3991..3999 run without
+  logging (the step log is every 10) and the loop falls through to
+  `destroy_process_group()` + exit 0 with zero epilogue. The "vanish" is a
+  clean exit with no completion marker, not a crash — which is also why no
+  final checkpoint exists: there is no end-of-loop save path at all.
+- What it rules out: OOM/SIGKILL, disk-full, wrapper/torchrun reap, t3
+  tripwire kill, swallowed exceptions, and "OOM in a final-eval allocation"
+  (the final eval never ran). Same bug class also explains the older note
+  "Trainer never writes step_6000; exits after final eval" (v2 pretrain) —
+  that observation was misread as normal end behavior.
+- Next tried: fix in `02_pretrain_linear.py` — (1) terminal-step trigger
+  `step == total_steps - 1` on both the eval block and the `%500` save so the
+  final step is evaluated and saved through the existing path; (2) explicit
+  flushed `[TRAINING COMPLETE]` banner after the loop so a clean exit is
+  distinguishable from a vanish; (3) `sys.excepthook` emergency path: any
+  uncaught failure prints + flushes the traceback and saves
+  `step_{last_completed}` (rank0) before exit. Sibling `01_pretrain.py` has
+  the same exclusive bound + no epilogue (its loss window is smaller — it
+  saves at every eval_interval) and should get the same terminal trigger.
+
 ## 2026-10-11 — graft-registry-sweep — OPS INCIDENT: agent session reaped at the 2h cap mid-sweep; remote job SURVIVED but results existed only in the log + per-cell .pt files until process exit — salvage/checkpoint machinery added
 - Evidence: registry/passport scaling sweep (`lab/graft_registry_sweep.py`,
   MI50 box GPU 4, PID 1836484) was mid-`grid_dim64_r2` when the agent session

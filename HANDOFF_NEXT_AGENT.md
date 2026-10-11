@@ -41,6 +41,79 @@ data first.
 
 ---
 
+## 2026-10-11 — MODULAR_MOE §9 **D2 attempt 1 (cross-family graft): PASS on the user bars — passport interface generalizes to Phi-mini-MoE (sparsemixer router)** (MI50 box, GPU 5 only, fp16)
+
+**D2 = graft a FOREIGN-FAMILY open MoE through the same passport/registry
+interface.** Donor: **`microsoft/Phi-mini-MoE-instruct`** @ pinned rev
+**`f620b32c0d3e8f7e76f57ccdaa88e0df8bc8bfcd`** (7.65B params, 32 layers,
+hidden 4096, E=16, top-2; Phi family / Microsoft "slimmoe"). Chosen over the
+lane's listed candidates on the 1-card constraint: Qwen1.5-MoE-A2.7B (14.3B),
+DeepSeek-V2-Lite (16B), MiniCPM-MoE-8x2B (27.7GB bin) all need ~29–32GB of
+fp16 weights alone (2-card device_map is forbidden in this lane). Phi-mini is
+the largest native-transformers MoE that fits one 32GB card at fp16.
+
+**Why this is a real cross-family test:** the router math differs —
+**sparsemixer** (relative-threshold-masked sequential top-2; the two
+multipliers come from *different* masked softmaxes and do not renormalize
+together) vs OLMoE's plain softmax-top-8-no-renorm; expert block is a
+ModuleList of SwiGLU MLPs (w1/w3/w2) vs OLMoE's grouped 3D bank; router lives
+at `block.router` vs `block.gate`. Harness `lab/graft_d2_crossfamily.py`
+imports the passport/metrics/registry core from `lab/graft_d0_parity.py` and
+adds the family-adapter layer (block discovery, graft-gate contract, taps,
+selection semantics — donor's own `sparsemixer` is imported so semantics can
+not drift). Mock self-test **14/14** (sparsemixer mock + OLMoE-adapter
+regression). Checkpoint loads via native transformers `phimoe` after a
+mechanical key remap (`w1;w3 -> gate_up_proj` (E,2I,H), `w2 -> down_proj`
+(E,H,I), `block_sparse_moe.gate -> mlp.router`) — the shipped custom modeling
+code hard-imports `flash_attn` (unavailable on gfx906); remap verified by
+sample-text CE 3.69 nats + exact-init 1-batch parity cos 0.999999. gfx906: the
+two D0 shims cover native PhimoeExperts via the same duck-type; no new walls.
+
+**Verdict on 88,064 val tokens** (gate-scale slice from the D0 builder recipe
+re-run with the Phi tokenizer: 105k domain + 88.9k val tokens — codeparrot /
+open-web-math / wikitext-2 / ag_news-sci / oasst1-en), prototype init +
+router-only recal 300×2:
+
+| gate | bar | D0 (OLMoE) | **D2 (Phi-mini-MoE)** | verdict |
+|---|---|---|---|---|
+| final-logit cosine | >0.9 (stretch 0.99) | 0.99913 | **0.99863** | **PASS (stretch)** |
+| \|ΔCE\| nats | <0.05 | +0.00075 | **+0.0303** (1.9054→1.9357) | **PASS** |
+| per-layer MoE cos (mean) | >0.9 | 0.9952 | 0.8640 | FAIL |
+| top-k set agree (mean) | >0.8 | 0.8366 | 0.6509 (Jaccard 0.761) | FAIL |
+| purity ≥ stock−0.02 | every domain | pass | pass (margins −0.0001…−0.0005) | PASS |
+
+**Answer to "does the passport interface generalize across families?": YES on
+the user-stated bars** (cos 0.9986 > 0.9, clears the 0.99 stretch; |ΔCE| 0.030
+< 0.05) — prototype+recal passports reproduce a foreign family's router to
+logit level through the identical PassportBank/registry interface. The
+D0-runbook *auxiliary* per-layer gates miss (0.864 / 0.651): sparsemixer's
+threshold+argmax selection is harder to mirror bit-for-bit than OLMoE's smooth
+softmax-top-k (score perturbations near the threshold flip discrete choices),
+and per-layer error is U-shaped (edges 0.96/0.81, middle layers 13–21
+0.80–0.85 / 0.53–0.65 — small score errors compound through depth then the
+last layers reconverge). Recal did its job (MSE 3.76→0.0012 round 0,
+0.005→0.0002 on-trajectory round 1); profile mushiness 0.923 (maximally
+permissive purity baseline, same caveat as D0). Registry artifact
+`registry_phimoe_f620b32c.pt` (8.4MB) + JSONs on box `/data/tliao/graft_d2_out/`
+and copied home to `lab/imported/graft_d2/` (untracked).
+
+**Registry reuse confirmed (OPS):** a detached `setsid` re-parity from the
+surviving `.pt` (no recompute) reproduced the run exactly — cos 0.99861,
+dCE +0.0294, layer 0.8638 / agree 0.6507, wall 613s. Peak VRAM 16.5GiB on
+GPU 5; full pipeline wall 1310s. Harness now encodes fixtures in ≤8000-char
+chunks (kills the donor tokenizer's "20717 > 4096" whole-file-encode warning)
+and writes JSON incrementally (precompute → parity → complete) so a killed run
+leaves usable results. `lab/graft_d2_runbook.md` has the full recipe + donor
+pin + remap spec.
+
+**Next for §9:** D2 attempt 1 closes the "interface generalizes?" question at
+logit level; the per-layer gap (sparsemixer discreteness) is the honest caveat
+— a fair follow-up is the same protocol with a *second* foreign family (e.g.
+Qwen1.5-MoE layer-subset if the one-card fit can be proven) or D1-style plug-in
+onto the phimoe registry graft to reuse the now-family-portable interface.
+
+---
+
 ## 2026-10-11 — MODULAR_MOE §9 **D1 plug-in onto graft: 3/5 gates PASS after owner-mass fix; verdict still FAIL (parity 0.927, s6 CE-quality) — attempt 4 (middle mass) detached**
 
 **D1 = one foreign expert (code-domain SwiGLU delta pack, 16 layers) plugged
@@ -1195,3 +1268,39 @@ postmortem-repro.
 checks LAPTOP PIDs — remote PIDs must be checked ON the remote box (or watch
 result files). False "process exited" reports caused brief double-launch risk
 on D1/sweep.**
+
+## 2026-10-11 — PRETRAIN END-OF-LOOP VANISH: ROOT-CAUSED + FIXED (t3 + box 429M 3990/4000)
+
+**Cause:** `Pretrain/02_pretrain_linear.py` — `for step in range(start_step,
+total_steps)` is exclusive of `total_steps`, while eval fires only on
+`step % eval_interval == 0` and the disk save only on `step % 500 == 0` inside
+it. The scheduled end-of-run eval+save (step 4000 = a %500 checkpoint AND the
+next eval interval) is unreachable; steps 3991..3999 run unlogged (step log
+is %10) and the loop falls out to `destroy_process_group()` + exit 0 with **no
+epilogue and no final save**. The "vanish" is a clean exit with no completion
+marker — not a crash/OOM/wrapper-kill (stderr is in the same log and holds no
+traceback; "Starting fresh" appears once; VRAM/disk fine). Full evidence chain
+in `lab/FAILURES.md` entry `pretrain-eol-vanish`. This also explains the old
+v2 note "Trainer never writes step_6000; exits after final eval".
+
+**Fix (committed):** terminal-step trigger `step == total_steps - 1` on BOTH
+the eval block and the %500 save (final step is now evaluated and saved to
+`step_{total_steps-1}` — e.g. `step_3999`, never `step_4000` — through the
+existing path); flushed `[TRAINING COMPLETE]` banner after the loop so clean
+exit is distinguishable from a vanish; `sys.excepthook` emergency path prints
++ flushes the traceback and saves `step_{last_completed}` (rank0) on any
+uncaught failure (crash step is named at the last COMPLETED step so resume
+re-runs the failed one). Checkpoint build/write factored into
+`_build_checkpoint`/`_write_checkpoint` (still only creates `step_N` dirs that
+contain checkpoint.pt).
+
+**Repro proof:** `Pretrain/tests_end_of_loop.py` (20 steps, `tiny_agent` GLA —
+lab_tiny is kda/mla and can't run unpatched on the box fla; KDA unproven on
+sm_61 — free P40s, detached). Pre-fix: exit 0, no banner, no terminal ckpt =
+the vanish. Post-fix: ALL PASS incl. final save at step_19 and the injected
+crash at step 15 leaving step_14/checkpoint.pt + traceback.
+
+**Still open:** `Pretrain/01_pretrain.py` has the same exclusive bound and no
+epilogue (it saves at every eval_interval, so its loss window is only
+eval_interval steps) — port the terminal trigger before the next dense run.
+Vesper-K pretrain unblocked on this bug.
