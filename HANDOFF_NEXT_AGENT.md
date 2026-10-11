@@ -41,6 +41,64 @@ data first.
 
 ---
 
+## 2026-10-11 — MODULAR_MOE §9 **D1 plug-in onto graft: 3/5 gates PASS after owner-mass fix; verdict still FAIL (parity 0.927, s6 CE-quality) — attempt 4 (middle mass) detached**
+
+**D1 = one foreign expert (code-domain SwiGLU delta pack, 16 layers) plugged
+into the D0 registry graft** (`registry_olmoe_6d84c485.pt`, OLMoE-1B-7B-0924
+@6d84c485, MI50 box GPU 0 only, fp16, HIP shims reused). Harness
+`lab/graft_d1_plugin.py` (Phases: forced-dispatch expert fit + contrastive
+router recal with owner-mass target + on-trajectory closing round → measure
+task bars (a) base parity (b) margin retention vs solo (§8 memory_shaping
+convention) (c) contamination, plus §6 gates). Mock self-test 7/7.
+
+**Gate table (attempt 2 → attempt 3 with §8.4 owner-mass fix):**
+
+| gate | bar | att.1 | att.2 | **att.3 (owner_mass 0.85)** | verdict |
+|---|---|---|---|---|---|
+| base parity cos (stock vs plugged) | ≥0.95 | 0.782 | 0.977 | **0.927** | FAIL (marginal) |
+| retention vs solo (delta_margin conv.) | ≥0.70 | 0.989 | 0.487 | **3.622** | PASS |
+| contamination (base tokens → plug-in) | ≤0.30 | 0.277 | 0.091 | **0.213** | PASS |
+| §6 utilization (code tokens top-k ∋ plug) | >0.50 | 0.514 | 0.286 | **0.940** | PASS |
+| §6 quality (CE_code active < masked) | — | FAIL | FAIL | **FAIL (14.28 vs 1.26!)** | FAIL |
+
+s6-gate semantics (what the harness measures): **utilization** = fraction of
+home-domain tokens whose top-8 includes the plug-in row (membership, not
+mass); **quality** = next-token CE on home-domain batches with the plug-in
+routed vs the same expert masked (present, not a candidate). Owner-mass fix
+moved utilization 0.286→0.940 as predicted (in-situ code mass 0.897 = the
+0.85 target; on-trajectory recal round 2 closed the teacher-forced gap —
+gate p_new_base 0.066→0.020).
+
+**Why it is still FAIL (new root cause, FAILURES.md d1-plugin-pass-1):**
+owner-mass 0.85 is the right §8 number for memory episodes whose owner
+DELIVERS a big effect — wrong for an augmenting expert with a small delta.
+With `norm_topk_prob=false` softmax mass IS the merge scale: a 0.90-mass row
+holding a near-zero delta (out_norm2 ~1e-6) starves the 8 stock experts to
+0.10 total → code CE 1.26→14.28 and base CE +2.05 → parity 0.927. The
+retention 3.62 is partly a metric artifact (margin probes reward suppressing
+stock experts on adversarial positions). Pareto frontier mapped across 3
+attempts: reject_w trades contamination↔utilization; owner_mass trades
+delivery↔starvation; trunk text-KL destabilizes (KL 300-1500), direct
+off-domain L2 is the stable neutrality knob.
+
+**Attempt 4 running DETACHED** (`setsid nohup`, PID 1947466, 14:10 UTC, box
+`/data/tliao/graft_d0_out/d1_run.log`): the untried middle — owner-mass
+**0.35** + reject_w **10** + out_pen **300** (high membership, modest mass,
+stock experts keep ~65% of merge scale, contamination hard down for parity).
+Attempt-3 JSON archived at `olmoe_d1_attempt3_mass085.json`. If attempt 4
+clears parity + quality: D1 PASS and D1 plug-in economics are settled; if
+quality still fails, the open question is whether the trained delta is
+net-useful at all (phase-A CE wanders 0.46→1.7 on its own batches — needs a
+better expert-fit objective, e.g. train at delivered-mass instead of forced
+1.0). **D1.5 (translator)**: mechanically unblocked — graft + registry +
+measurement stack is proven (D0 PASS; plug-in inserts+recal work end-to-end),
+and the sibling translator lane is already exercising it; full D1 gate
+closure is only about the two open bars above. Box note: GPUs 1-2 user
+hackathon, 3-7 other lanes (registry sweep + D2 running) — all our work on
+GPU 0 only, peak 17GB, ~29 min/run.
+
+---
+
 ## 2026-10-11 — MODULAR_MOE §9 D1.5 TRANSLATOR FIDELITY: FAIL vs 0.9 bar — variant B deprioritized (MI50 box, GPU 3 only)
 
 **Gate D1.5 (§9.3a/§9.4) measured: telemetry-trained route-conditioned
