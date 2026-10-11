@@ -1,4 +1,4 @@
-# VesperLM — Handoff for the Next Agent (updated 2026-10-10 ~03:35 UTC)
+# VesperLM — Handoff for the Next Agent (updated 2026-10-11)
 
 **ONECLICK FREE LANE (2026-10-10):** launch = `python3 pod/oneclick_run.py --notebook pod/oneclick_boot.ipynb --job-url https://raw.githubusercontent.com/datacrystals/VesperLM/main/lab/oneclick_jobs/smoke.json --minutes 50` (free AMD OneClick GPU box, 6h max / 10min idle-reap, keepalive + RESULT_JSON exfil via cell stdout; job JSONs in `lab/oneclick_jobs/`, see `pod/ONECLICK.md` §9–10).
 **STATUS:** orchestrator + boot notebook built, local end-to-end dry-run green; live smoke **BLOCKED** — create works but the free tier never schedules (~5.5h cumulative `pending`, 1 brief ready window ever): `gh-ca7ead92` (2026-10-09 22:58 UTC) starved ~4.5h then went `not_found` (expired/reaped); create #2 `gh-10694136` (2026-10-10 05:38 UTC) sat `pending` 50min → FATAL at boot timeout. **GOTCHA: `create()`'s wall deadline derives from `--minutes`, so `--boot-timeout-min 85 --minutes 50` still dies at T+50m — next retry: `--minutes 150 --boot-timeout-min 120`.** GPU count / box egress / trainer-on-box UNVERIFIED. 2026-10-10 15:00 UTC: **all 3 queued instances REAPED after 8.5h/4.5h/3.5h pending** (gh-10694136, gh-9f9f8703, gh-dff85cad — incl. the official ppocr demo notebook, which pends identically: browser-parity verified from launcher JS, same POST body, no cookies — user "instant" browser access = capacity-window luck or per-IP slot). Cumulative ~12h queue starvation, 1 window ever. Pending instances ARE eventually reaped (~8h). Lane verdict: heartbeat-cadence lottery only, 1 fresh creation/day at a different hour, zero reliance. Retry cadence in `pod/ONECLICK.md` §10. Treat the lane as heartbeat-cadence only, never merge-gating.
@@ -38,6 +38,69 @@ or an explicit bar re-scope; on the real spine with the fix the cost is only
 (natural G3-confirmation), then G4.** SUBSYSTEMS: **E0 DONE** (9aae150,
 Common/telemetry.py, off-by-default VESPER_TELEMETRY=1). Next: E1 needs E0
 data first.
+
+---
+
+## 2026-10-11 — SFT 470m_k CHAT: pipeline green, model NOT talkable yet (300 LoRA steps, laptop 3070)
+
+**What ran:** SFT of `lab/imported/t3_ckpts/step_best` (t3 470m_k passport,
+val-best@3100) into chat form on the RTX 3070 8GB via the modified
+`SFT/01_sft_train.py` (config `470m_k_sft`) + `SFT/eval_chat.py`. Data:
+`Dataset/data/sft/oasst2_sft.bin` (1.39M token positions, ChatML,
+assistant-only loss mask — interleaved [token,mask] uint16 verified;
+pad_id=12 never occurs in the bin, so the fused-CE ignore-masking is exact).
+
+**Recipe:** bf16 AMP + `VESPER_FUSED_CE=1`, **LoRA r8 α16 profile `kda_mla`**
+(42 modules, 0.68M trainable of 427M), micro_batch 8 × seq 1024, accum 4,
+lr 5e-5→5e-6 (warmup 20), `total_steps=300` (loop bound is exclusive → 299
+optimizer steps: 50 pre-pause + 249 resumed from `step_50`). Full-FT is a
+hard OOM on this card — confirmed live: fp32 AdamW state init dies at
+7.51/7.67 GiB on the first `optimizer.step()` (no bitsandbytes here).
+Command:
+`VESPER_SFT_CONFIG=470m_k_sft VESPER_SFT_CKPT=lab/imported/t3_ckpts/step_best VESPER_SFT_OUT=lab/imported/sft_470m VESPER_SFT_LORA=1 VESPER_FUSED_CE=1 python3 SFT/01_sft_train.py`
+
+**VRAM:** torch allocated peak 1.7 GB (dummy-pass + per-10-step logs);
+nvidia-smi process footprint ~4.35 GB during training (ctx/reserved included).
+
+**Loss:** train CE 2.385 @0 → ~2.377 @250 (10-step means ~2.28 → 2.22 → 2.38,
+noisy — LoRA r8 at 300 steps barely moves it). Val CE: 2.3244 @50 → 2.3107
+@100 → **2.3044 @150 (best)** → 2.3051 @200 → 2.3067 @250. `step_best` = step
+150; last ckpt = `step_250`.
+
+**Bugfix committed here:** `best_val_loss` was serialized into
+`step_N/checkpoint.pt` *before* the best-update, so a resume reset the tracker
+to `inf` and every later eval claimed "NEW BEST" (clobbering `step_best` even
+when worse). Now updated before save. (The pre-pause `step_50/checkpoint.pt`
+was hand-patched with its true val 2.3244 before resuming.)
+
+**Eval (`SFT/eval_chat.py`, 12 ChatML prompts, T=0.7 / top-p 0.9):** sampled
+both `step_150` (best) and `step_250` (last) → `lab/imported/sft_470m/eval_chat_step{150,250}.json`.
+Prompt encoding verified exact (im_start/im_end encode atomically to ids 1/2,
+matching the bin). Step_250 is no better than step_150.
+
+**QUALITY VERDICT — honest: NOT talkable.** Replies ignore the prompt and
+drift into pretrain-ish corpus text (programming Q&A, forum boilerplate),
+often loop (`Never: Cannot be used to make a claim` ×15) or emit format debris
+(`{"name":"Balancing the Balance"`). Representative samples (step_150):
+(1) "What is the capital of France?" → "How many workers are required to
+carry out the duties of a supervisor? Never: Cannot be used to make a claim
+Never: …" [loop]; (2) "What is 17 * 23?" → ">>> # >>> # >>> # …" [degenerate];
+(3) "Why do we dream?" → "I can't believe that you're not the one who knows
+how to do it. I can't even see your face. You have no idea how to do it. It's
+so hard. …" [loop]; (4) "Hello! How are you today?" →
+`{"name":"Balancing the Balance", message":"This is a test to determine if
+it's time to take a break…` [format debris]; (5) "black hole in simple terms?"
+→ "In this video, I'm going to explain what a black hole is in simple terms…"
+[topical but rambling, wrong medium]; (6) "list vs tuple in Python?" → "The
+list is a list and the tuple is a tuple. The list can contain multiple
+elements…" [closest to an answer; still filler]. This is a plumbing
+checkpoint proving the pipeline end-to-end, not a chat model.
+
+**To make it talkable:** more data (5.5 MB = one OASST shard; rebuild/expand
+via `Dataset/05_sft_oasst.py`) and more capacity/steps — LoRA r32 or full-FT
+with 8-bit Adam on a bigger card, and well past 300 steps. Resume is solid:
+point `VESPER_SFT_OUT` at `lab/imported/sft_470m` and the trainer picks up the
+highest `step_N` (wrapped LoRA keys auto-handled).
 
 ---
 
