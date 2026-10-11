@@ -1,9 +1,10 @@
-# D0 graft-parity — GPU runbook (prepare 2026-10-11; run when a ≥16GB GPU frees)
+# D0 graft-parity — GPU runbook (RAN and PASSED 2026-10-11 on the MI50 box)
 
 For the D0 gate of `MODULAR_MOE.md` §9.4 (Variant A passport graft, §9.2).
-Everything except the GPU run itself is ready: donor downloaded + hashed,
-harness built and self-tested, and the **exact-init arm already passed D0 on
-CPU** against the real donor (see "Evidence so far").
+**Status: DONE — prototype+recal PASSES all five gates on OLMoE-1B-7B-0924**
+(see "Evidence" below; verdict JSON in `lab/imported/graft_d0/olmoe_d0.json`,
+untracked, and on the box at `/data/tliao/graft_d0_out/`). This runbook is kept
+as the reproduction recipe + platform notes.
 
 ## 1. Donor model (already downloaded on the laptop)
 
@@ -83,38 +84,60 @@ use `--dtype bfloat16`. fp32 (27.6GB weights) fits neither card — don't.
 ## 3. Eval data
 
 `lab/graft_d0_texts/` ships tiny fixtures (5 labeled domains + `val_mixed.txt`,
-~14KB total) — enough for plumbing, NOT for the gate. For the real gate build
-a ≥50k-token mixed slice and point `--domains-dir` / `--val-file` at it, e.g.:
+~14KB total) — enough for plumbing, NOT for the gate. The gate-scale slice is
+built by **`lab/graft_d0_build_slice.py`** (HF streaming sources, OLMoE-token
+accounting, per-domain fallback with a loud warning):
 
 ```bash
-python3 - <<'EOF'
-from datasets import load_dataset
-import os
-os.makedirs('/data/tliao/graft_d0_slice', exist_ok=True)
-wt = load_dataset('wikitext', 'wikitext-2-raw-v1', split='train')
-web = '\n'.join(wt['text'][:8000])
-open('/data/tliao/graft_d0_slice/web.txt','w').write(web)
-open('/data/tliao/graft_d0_slice/val_mixed.txt','w').write('\n'.join(wt['text'][8000:12000]))
-# repeat with code/math/science/chat sources into code.txt, math.txt, ...
-EOF
+python3 lab/graft_d0_build_slice.py \
+    --tokenizer /home/tliao/.cache/vesper_d0/OLMoE-1B-7B-0924 \
+    --out-dir /home/tliao/graft_d0_slice --domain-tokens 20000 --val-tokens 80000
 ```
 
+Sources used 2026-10-11: code=`codeparrot/codeparrot-clean-valid`,
+math=`open-web-math/open-web-math`, web=`Salesforce/wikitext` (wikitext-2-raw),
+science=`fancyzhx/ag_news` (sci/tech label), chat=`OpenAssistant/oasst1` (en);
+val_mixed = fresh rows from all five. Output: **102k domain + 86k val OLMoE
+tokens** (the run used `--max-tokens 100000` → 97,280 domain + 86,016 val).
+Note: legacy un-namespaced dataset ids (`wikitext`, `ag_news`) fail on current
+`huggingface_hub` — use the namespaced ones above. The `datasets`/pyarrow
+teardown can abort the interpreter at exit after files are written (script
+exits via `os._exit` for that reason); verify token counts if in doubt.
 Domain-labeled corpora drive the expert-profile step (§9.2 step 1) and the
-purity gate; `val_mixed.txt` drives the headline parity metric. More tokens =
-tighter noise on the CE bar; 100k mixed tokens is the default budget.
+purity gate; `val_mixed.txt` drives the headline parity metric.
 
-## 4. Resources
+## 4. Resources (measured 2026-10-11 on the MI50 box)
 
-- **VRAM:** 13.8GB weights (fp16/bf16) + ~1-2GB activations at seq 512 ×
-  batch 2 + ~0.1GB logits ⇒ **~16GB peak**. Fits a 16GB card at bs2×512; a
-  24GB P40 can go bs2×1024 or bs4×512. The two passes run sequentially, so
-  parity does not double activations.
-- **Runtime:** the pipeline touches each token ~4-5× (profile, recal pairs,
-  2× parity, 2× purity). At the default 100k-token budget expect **~15-45 min
-  on one P40** (fp16 gather-bound MoE), **~5-10 min on MI300X** (bf16). CPU
-  smoke (320+320 tokens) took ~130s on the laptop — linear in tokens.
+- **VRAM (measured):** peak **15.2 GiB** on the MI50's 32GB GPU 0 (fp16
+  weights ~13.8GB + activations at seq 512 × batch 2 + logits; the two passes
+  run sequentially so parity does not double activations). Fits a 16GB card
+  only at bs2×512 with nothing else resident; 24GB P40 has headroom for
+  bs2×1024 or bs4×512.
+- **Runtime (measured):** **615s wall (10.3 min)** for the full `--phase all`
+  pipeline at 97,280 domain + 86,016 val tokens on one MI50 GPU 0 (incl.
+  model load 10s and the CPU-side recal fits). Linear in tokens.
 - **CPU fallback:** the whole thing runs on CPU (`--device cpu --dtype bfloat16`,
   shrink `--max-tokens`) — slow but valid for a final plumbing re-check.
+
+## 4a. MI50 / gfx906 platform notes (the box that actually ran it)
+
+- Host `tliao@100.64.0.7` (Tailscale), **GPU 0 ONLY** (`HIP_VISIBLE_DEVICES=0
+  CUDA_VISIBLE_DEVICES=0`); GPUs 1-2 are the user's hackathon jobs, 3-7 free.
+- Env: `/data/tliao/vesper_sft/venv/bin/python` (torch 2.9.1+rocm6.4,
+  transformers 5.19) + **`ROCBLAS_TENSILE_LIBPATH=/opt/rocm-6.2.4/lib/rocblas/library`**
+  (mandatory — the wheel Tensile lib has no gfx906 kernels).
+- **`--dtype float16`** — gfx906 has no bf16, and fp32 weights (27.6GB) do not
+  fit. Scratch under `/data` (never the 24G root lv): weights
+  `/data/tliao/OLMoE-1B-7B-0924`, slice `/data/tliao/graft_d0_slice`, outputs
+  `/data/tliao/graft_d0_out/`.
+- Two gfx906 kernel gaps hit this run and are now **auto-shimmed by the
+  harness on any HIP host** (no-op on CUDA; details in `lab/FAILURES.md`):
+  (1) `torch._grouped_mm` unsupported on ROCm but transformers enables it →
+  forced their per-expert `torch.mm` fallback; (2) `torch.sort` device kernel
+  broken at S=8192 (async-misattributed — debug with `AMD_SERIALIZE_KERNEL=3`)
+  → experts merge sorts on CPU, identical math.
+- Measured equivalent: GPU exact-arm mini (2×512 tokens) cos 0.9998 matches
+  the laptop CPU exact arm (0.9999), so the shims cost nothing in fidelity.
 
 ## 5. What "parity PASS" means numerically
 
@@ -135,7 +158,27 @@ D0 PASS = all five. The exact arm is a ceiling check (should hit the stretch
 bar); the prototype arm with recal is the actual registry recipe — its number
 is the headline result.
 
-## 6. Evidence so far (2026-10-11 prep, laptop CPU)
+## 6. Evidence
+
+**Gate run (2026-10-11, MI50 box GPU 0, fp16) — D0 PASS, all five gates:**
+
+| metric | value | bar | verdict |
+|---|---|---|---|
+| logit cosine mean (86,016 val tok) | **0.99913** (std 0.0025, min 0.7831) | >0.9 / stretch >0.99 | PASS incl. stretch |
+| CE stock → graft (delta) | 2.0082 → 2.0089 (**+0.00075**) | |ΔCE| < 0.05 | PASS |
+| per-layer MoE-output cosine | **0.9952 mean** (min 0.9932, max 0.9966) | >0.9 | PASS |
+| per-layer top-k set agreement | **0.8366 mean** (min 0.7812; Jaccard 0.963) | >0.8 | PASS |
+| per-domain purity margins | ~0.0 (JS ~0) all 5 domains | ≥ stock − 0.02 | PASS (weakly — see below) |
+
+Recal: round 0 (teacher-forced) layer-0 MSE 0.7275 → 0.0005 over 300 steps;
+round 1 (on-trajectory) 0.0005 → ~0. Profile mushiness 0.92 — OLMoE experts
+are near-domain-generalist (routing entropy 4.15/4.16 nats), so the purity
+gate is satisfied but not discriminating on this donor; the load-bearing
+parity evidence is the cosine/CE/top-k rows. CPU exact-arm reference (prep):
+cos 0.9999 / ΔCE +0.0013 — statistically indistinguishable from the GPU
+prototype+recal result, and the GPU exact-arm mini gave 0.9998.
+
+Prep-phase evidence (same day, laptop):
 
 - `--synthetic`: **14/14 checks PASS** (mock MoE with OLMoE-identical gate /
   experts contract): exact-init scores = stock logits (max err 5e-6) and full
@@ -153,13 +196,14 @@ is the headline result.
   §9.2's "donor experts are not cleanly semantic"). Not a gate result; the
   real prototype arm is exactly what the GPU run measures.
 
-## 7. After the run
+## 7. Status and next
 
-1. Copy the two JSONs' headline numbers + the registry path into
-   `HANDOFF_NEXT_AGENT.md` (and `lab/FAILURES.md` if any gate fails).
-2. Keep `lab/imported/graft_d0/` untracked (registry + results; never commit).
-3. If prototype+recal passes: D1 (plug-in onto the graft) can start — the
-   registry .pt is the §9.6 artifact D1 installs into. If only exact passes:
-   registry can ship exact-equivalence passports for linear-gate donors and D0
-   still counts as PASS (parity proven), but the prototype recipe needs more
-   recal budget before D1.
+1. ~~Run the gate~~ **DONE 2026-10-11, PASS.** Numbers in HANDOFF ("D0 GATE
+   RUN: PASS") and `lab/imported/graft_d0/olmoe_d0.json` (untracked; also on
+   the box at `/data/tliao/graft_d0_out/` alongside the registry .pt).
+2. `lab/imported/graft_d0/` stays untracked (registry + results; never commit).
+3. **D1 (plug-in onto the graft) is unblocked** — `registry_olmoe_6d84c485.pt`
+   is the §9.6 artifact D1 installs into. D1's router recal is router-only and
+   can run on the MI50 box too; training VesperLM experts still belongs on the
+   MI300X lane (fla/Triton gfx906 wall — `lab/FAILURES.md`). P40s are not
+   needed for anything D0-related.
