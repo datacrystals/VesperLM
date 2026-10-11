@@ -1122,3 +1122,18 @@ detached (`setsid`/`nohup ... &`) — agent-session timeout/reap kills the ssh
 connection and SIGHUPs every remote child (killed D1/sweep/D2 mid-run on the
 MI50 box; three runs lost to this in one evening). Watchers should poll
 result files, not PIDs over ssh.**
+
+**BOX 429M RUN ENDED (2026-10-11 10:22 UTC) — end-of-run vanish REPRODUCED.**
+Trainer's last log line: step 3990 (of 4000, exclusive-bound loop), then gone,
+no traceback — identical signature to t3's 3990/4000 vanish (2nd reproduction:
+this is a real end-of-loop bug, not a crash; MUST fix before Vesper-K). Saves
+are every 500 steps: latest is step_3500 (3.7GB) — the final ~490 steps /
+~450M tokens of weights are LOST. Val samples through 3900: post-switch val
+"rise" (2.55→2.73) is the known frozen-mix artifact (t3 postmortem), not
+regression. For SFT/base work prefer the PRE-switch checkpoint (step_3000,
+like t3's step_best@3100). Box's 3xP40 are now FREE for D0-style work or the
+postmortem-repro.
+**WATCHER BUG (mine, same evening): `kill -0 <pid>` in a laptop-side watcher
+checks LAPTOP PIDs — remote PIDs must be checked ON the remote box (or watch
+result files). False "process exited" reports caused brief double-launch risk
+on D1/sweep.**
