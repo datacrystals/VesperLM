@@ -1,0 +1,51 @@
+Photosynthesis converts light energy into chemical energy stored in sugars. In
+the light-dependent reactions, water molecules are split, releasing oxygen and
+producing ATP and NADPH, which then power the Calvin cycle to fix carbon
+dioxide into carbohydrate in the chloroplast stroma.
+
+The CRISPR-Cas9 system acts as adaptive immunity in bacteria: fragments of
+viral DNA are stored between repeated sequences and transcribed into guide
+RNAs that direct the nuclease to matching invader DNA. As a laboratory tool,
+the same mechanism enables targeted double-strand breaks and precise genome
+editing.
+
+Plate tectonics explains earthquakes, volcanoes, and mountain building as
+consequences of rigid plates moving over the ductile asthenosphere. Where
+plates diverge new ocean floor forms; where they converge one plate subducts,
+recycling crust into the mantle and building volcanic arcs above.
+
+Antibiotics that target bacterial ribosomes exploit structural differences
+between prokaryotic 70S and eukaryotic 80S ribosomes. Resistance spreads
+through plasmids carrying beta-lactamases and efflux pumps, which is why
+stewardship programs that limit unnecessary prescriptions matter clinically.
+
+Neurons communicate at synapses where an action potential triggers calcium
+influx, vesicle fusion, and neurotransmitter release into the cleft. The
+postsynaptic response depends on receptor types: ionotropic receptors act in
+milliseconds, while metabotropic receptors trigger slower second-messenger
+cascades.
+
+Climate records from ice cores and ocean sediments show that atmospheric
+carbon dioxide and global temperature have co-varied for hundreds of
+thousands of years. The current rise in carbon dioxide, driven by fossil fuel
+combustion, is occurring far faster than natural glacial-interglacial swings.
+
+Vaccines present antigens so the adaptive immune system builds memory B and T
+cells without causing disease. mRNA vaccines deliver the genetic instructions
+for a viral surface protein, letting host cells briefly produce the antigen and
+train the response; the mRNA is degraded within days.
+
+Enzymes lower activation energy by stabilizing the transition state, not by
+changing the overall free energy of the reaction. Michaelis-Menten kinetics
+describes how the rate saturates as substrate concentration rises, with the
+constant Km reporting the substrate concentration at half-maximal velocity.
+
+The James Webb Space Telescope observes primarily in infrared, letting it see
+through dust clouds and detect light from the earliest galaxies stretched by
+cosmic expansion. Its segmented mirror unfolds in space and is aligned to a
+fraction of a wavelength for diffraction-limited imaging.
+
+CRISPR screens now knock out every gene in a cell population in parallel and
+read out fitness effects by sequencing guide abundance before and after
+selection. The approach maps genetic dependencies in cancer cell lines and
+identifies synthetic-lethal pairs that single-gene studies would miss.
