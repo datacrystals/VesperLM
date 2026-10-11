@@ -149,9 +149,11 @@ purity_graft(d) ≥ purity_stock(d) − 0.02 every domain.
 
 D2 question ("does the passport interface generalize across families?"):
 **YES on the user-stated bars** (cos > 0.9 incl. stretch, |ΔCE| < 0.05). The
-D0-runbook per-layer auxiliary gates miss — sparsemixer's threshold+argmax
-selection is discrete in a way OLMoE's softmax-top-k is not; see FAILURES.md
-`d2-crossfamily-perlayer`. Wall 1310s full pipeline / 613s re-parity; peak
+D0-runbook per-layer auxiliary gates miss — sparsemixer's selection is
+discrete in a way OLMoE's softmax-top-k is not (post-hoc correction, §7: in
+eval the INDICES are pure top-2 ranking and the relative-threshold mask only
+moves the multiplier softmaxes; the flips are rank-2/3 near-ties); see
+FAILURES.md `d2-crossfamily-perlayer`. Wall 1310s full pipeline / 613s re-parity; peak
 VRAM **16.5 GiB** (7.65B fp16 weights + bs2×512 activations). Registry
 `registry_phimoe_f620b32c.pt` (8.4MB) on box
 `/data/tliao/graft_d2_out/`; JSONs copied home to `lab/imported/graft_d2/`
@@ -161,3 +163,45 @@ re-run from the `.pt` reproduced the numbers exactly (cos 0.99861, dCE
 encode (≤8000 chars per `encode()` call — kills the donor tokenizer's
 "20717 > 4096" whole-file warning) + incremental JSON writes at
 precompute/parity/complete.
+
+## 7. Follow-up: score-margin-aware recal (RAN 2026-10-11, GPU 5) — CLEAN NEGATIVE; exact-init control passes every gate
+
+The per-layer lever named in FAILURES `d2-crossfamily-perlayer` — weight the
+recal MSE on near-threshold expert pairs — was run as four detached arms
+(`setsid nohup`, sequential, GPU 5 only; runner
+`/data/tliao/graft_d2_out/run_margin_sweep.sh`, log `mw_sweep.log`):
+
+```bash
+# same Gate-1 command plus one of:
+--recal-margin-w 2 --recal-margin-tau 0.05   # arms mw2 / mw5 / mw10
+--init exact --recal-steps 0 --recal-rounds 1 # algebraic control (ceiling)
+```
+
+Weights: `w_te = 1 + margin_w · exp(−min_c |s*_te − cut_tc| / τ_t)`,
+mean-normalized (loss scale preserved); cuts = rank-1/2 and rank-k/k+1
+midpoints + the sparsemixer mask edge `max·(1−2·jitter)`; `τ_t = 0.05 ·
+per-token score range`. `margin_analysis` (parity phase) reports the
+noise-matched agreement baseline at the graft's own score-error RMS.
+
+**Verdict (88,064 val tokens):** margin_w 0/2/5/10 at 300×2 gives MoE-cos
+0.8640/0.8602/0.8571/0.8540 and top-k agree 0.6509/0.6412/0.6320/0.6233 —
+monotone slightly NEGATIVE. A 600-step × 3-round pair attributes the only
+positive move: uniform 600×3 (0.8858/0.7017) vs margin_w=5 600×3
+(0.8822/0.6902) — the +0.022 cos / +0.051 agree gain over BEFORE is fit
+budget / on-trajectory coverage, and margin weighting contributes ≤ 0 at both
+budgets. Main bars hold throughout (cos ≥ 0.9985, |dCE| ≤ 0.035); the best
+prototype arm still misses the aux bars (0.886 < 0.9, 0.702 < 0.8). The
+exact-init control (`registry_phimoe_exact.pt`) reaches **cos 0.99996 / dCE
++0.0001 / MoE-cos 0.9966 / agree 0.9881** — every gate PASS, so the aux bars
+are reachable through the identical registry format and the prototype+recal
+fit is the gap (val-trajectory score RMS 0.05–0.27 vs cal-fit RMSE 0.014;
+`frac(gap23 < 2σ) ≈ 0.87–0.99`). Full table + per-layer before/after:
+`lab/graft_d2_margin_recal.md`, compact JSON `lab/graft_d2_margin_recal.json`
+(built by `lab/graft_d2_margin_report.py` from
+`lab/imported/graft_d2/phimoe_d2_{exact,mw2,mw5,mw10,mw0b600,mw5b600}.json`).
+
+**Metric note:** for hard-selection families, report agreement normalized to
+the measured exact-init ceiling `(agree − 1/C(E,k)) / (agree_exact −
+1/C(E,k))` (BEFORE = 0.656 of ceiling here) — noise-matched-at-σ is the wrong
+baseline (predicts 0.40 vs actual 0.64). On this donor the ceiling is 0.988,
+so the absolute 0.8 bar was already ~0.81-of-ceiling: not unfairly calibrated.

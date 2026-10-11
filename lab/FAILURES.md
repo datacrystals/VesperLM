@@ -18,6 +18,53 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-11 — door4-delivery-contract — delivery-contract head-to-head: additive λ wins, but NEITHER contract passes quality — blocker is the expert fit, in-sample
+- Evidence: `lab/door4_delivery_contract.py` on the MI50 box GPU 4 (fp16,
+  OLMoE-1B-7B-0924 + D0 registry graft, D1 code-domain plug-in; same bars:
+  parity ≥0.95 / retention ≥0.70 / contam ≤0.30 / §6 quality = held-out home
+  CE with plug-in delivered < masked). Box `/data/tliao/graft_d0_out/door4.json`
+  (incremental; run-1 partial archived `door4_run1_branchA.json`). Two
+  contracts, identical rows/fit budget (200 steps, lr 3e-4, out_pen 300):
+  (a) **delivered-mass fit** — train the delta under the plugged composition
+  (softmax mass = merge scale); (b) **additive fixed-weight** —
+  `y = y_stock(64-way full scale) + λ·m·e_new(h)`, λ learned (mean 0.472),
+  m = plug-in top-8 membership. Numbers (held-out quality; train-slice in
+  parens): **(a)** parity 0.9467, retention 1.055, contam 0.048, util 0.195,
+  quality 11.90 vs 1.74 masked (train 16.50 vs 1.26) — FAIL. **(b)** parity
+  0.8870, retention 1.070, contam 0.057, util 0.593, quality 7.46 vs 1.74
+  (train 4.48 vs 1.26) — FAIL, but strictly better than (a) on quality
+  (held-out AND train) and utilization, with the structurally correct
+  contract (stock merge bit-identical to the masked control — the mass
+  confound is gone by construction).
+- Root cause (evidence-ranked): (1) **the expert fit never produces a
+  net-useful delta, even in-sample** — train-slice delivered CE is WORSE than
+  the masked control under both contracts (16.5 / 4.48 vs 1.26), so this is
+  not generalization and not delivery arithmetic: a 16-layer frozen-trunk
+  SwiGLU delta trained ~4 epochs on 12k tokens with out_pen 300 and
+  grad-clip 1.0 oscillates (ce traj swings 2.6↔8.9) and the L2-neutrality
+  term keeps it near-zero (out_norm2 ~3e-4) while it must ADD code value.
+  (2) Parity damage under (b) is concentrated on the 5.7% of base tokens where
+  the plug-in fires (logit-cos min −0.90) — a helpful, input-selective delta
+  would move quality and parity together. (3) Deep-layer rows still go stale
+  from a trained delta (util 0.195 in (a)) — mitigated but not solved by the
+  post-training on-trajectory recal round.
+- What it rules out: the mass-competition explanation alone does NOT account
+  for the quality failure — removing it (branch b) shrinks the gap (11.9→7.5
+  held-out, 16.5→4.5 train) but does not close it. Plug-in quality is an
+  EXPERT-FIT problem (adapter-training recipe: data volume, penalty balance,
+  schedule), not a router-contract problem. Delivery contract verdict:
+  **(b) additive fixed-weight is the winner** and the one to carry forward
+  (3/5 gates better; stock scale preserved by construction).
+- Next tried (untried, queued): expert-fit recipe v2 under contract (b) —
+  LoRA-style budget (more than 12k tokens, 1-2k steps, LR warmup/cosine),
+  out_pen applied to base-h only at lower weight (or contrastive: help-code
+  AND ~zero-on-base as separate terms with independent weights), and λ
+  swept {0.25, 0.5, 1.0} per layer rather than globally learned. Door-3
+  distilled expert was NOT re-run in this cycle (same fit bottleneck
+  expected); its numbers remain the second evidence point
+  (`lab/imported/graft_d3/door3_distill.json`: forced KL 5.17→2.59 skill-real,
+  held-out CE 8.07 routed vs 1.83 masked).
+
 ## 2026-10-11 — door25-gfx906-backward-holes — OLMoE trunk BACKWARD hits `HIP error: invalid device function` at some token counts on GPU 3 (B*T ∈ {256, 768, 1024, 4096} FAIL; {128, 384, 512, 1536, 2048} OK) — same missing-kernel family as the torch.sort@8192 wall, and D1's default bs2×seq512 lands exactly on the broken 1024
 - Evidence: `door25_oneshape.py` one-process-per-shape grid on
   `tliao@100.64.0.7` **GPU 3** (torch 2.9.1+rocm6.4, fp16, OLMoE CE
@@ -162,15 +209,20 @@ a lucky pass.
 
   | arm | MoE cos | top-k agree | Jaccard | logit cos | ΔCE |
   |---|---|---|---|---|---|
-  | BEFORE (uniform) | 0.8640 | 0.6509 | 0.761 | 0.99863 | +0.0303 |
-  | margin_w=2 | 0.8602 | 0.6412 | 0.754 | 0.99857 | +0.0308 |
-  | margin_w=5 | 0.8571 | 0.6320 | 0.748 | 0.99859 | +0.0329 |
-  | margin_w=10 | 0.8540 | 0.6233 | 0.742 | 0.99856 | +0.0344 |
+  | BEFORE (uniform, 300×2) | 0.8640 | 0.6509 | 0.761 | 0.99863 | +0.0303 |
+  | margin_w=2 (300×2) | 0.8602 | 0.6412 | 0.754 | 0.99857 | +0.0308 |
+  | margin_w=5 (300×2) | 0.8571 | 0.6320 | 0.748 | 0.99859 | +0.0329 |
+  | margin_w=10 (300×2) | 0.8540 | 0.6233 | 0.742 | 0.99856 | +0.0344 |
+  | uniform, 600×3 (budget control) | 0.8858 | 0.7017 | 0.797 | 0.99892 | +0.0190 |
+  | margin_w=5 (600×3) | 0.8822 | 0.6902 | 0.789 | 0.99897 | +0.0205 |
   | exact init (control) | 0.9966 | 0.9881 | 0.992 | 0.99996 | +0.0001 |
 
   Main bars hold everywhere (cos ≥ 0.95 incl. 0.99 stretch, |dCE| ≤ 0.05);
-  the aux bars (MoE cos > 0.9, agree > 0.8) never move and more margin weight
-  makes both strictly worse. Recal still converges (cal-pair MSE 3.77→0.0013,
+  the aux bars (MoE cos > 0.9, agree > 0.8) never move on any prototype arm.
+  At the D2 budget, margin weight makes both aux metrics strictly worse; at
+  600 steps × 3 on-trajectory rounds the budget control (uniform) BEATS the
+  margin arm (0.8858/0.7017 vs 0.8822/0.6902) — the higher-budget gain is
+  budget, not margin weighting. Recal still converges (cal-pair MSE 3.77→0.0013,
   on-trajectory 0.005→0.0002).
 - Root cause: the residual per-layer error is NOT fit misallocation near the
   decision boundary — it is **on-trajectory score error from hidden-state
@@ -194,16 +246,19 @@ a lucky pass.
   the family-relative baseline: at the graft's σ it predicts agree 0.40 while
   the graft scores 0.64 (ratio ~1.6) and the true ceiling is 0.99 — graft
   score errors are low-rank/structured, not isotropic.
-- Next tried: (a) budget fairness arm (margin_w=5, 600 steps × 3 on-trajectory
-  rounds) to close out "under-budgeted rather than wrong-mechanism"; (b) the
-  metric proposal for hard-selection families (see HANDOFF): normalize
-  agreement to the **measured exact-init ceiling** `(agree − 1/C(E,k)) /
-  (agree_exact − 1/C(E,k))` (BEFORE = 0.656 of ceiling here) — family-relative
-  is the right FORM, but the baseline must be measured, not noise-modeled; (c)
-  the actual per-layer fix for a plain-linear donor gate: **ship algebraic
-  passports (exact init)** in the registry. Open lever for prototype-only
-  settings: on-trajectory cal coverage (more pairs / val-like cal text), not
-  margin re-weighting.
+- Next tried: (a) budget attribution COMPLETE — 600 steps × 3 on-trajectory
+  rounds moves per-layer (+0.022 cos / +0.051 agree vs BEFORE) but the
+  matched-budget uniform control (0.8858/0.7017) beats the margin arm
+  (0.8822/0.6902): the gain is fit budget / on-trajectory coverage, margin
+  weighting contributes ≤ 0; even the best prototype arm misses the aux bars
+  (0.886 < 0.9, 0.702 < 0.8). (b) the metric proposal for hard-selection
+  families (see HANDOFF): normalize agreement to the **measured exact-init
+  ceiling** `(agree − 1/C(E,k)) / (agree_exact − 1/C(E,k))` (BEFORE = 0.656 of
+  ceiling, best prototype arm 0.708) — family-relative is the right FORM, but
+  the baseline must be measured, not noise-modeled; (c) the actual per-layer
+  fix for a plain-linear donor gate: **ship algebraic passports (exact init)**
+  in the registry. Open lever for prototype-only settings: on-trajectory cal
+  coverage (more pairs / val-like cal text), not margin re-weighting.
 
 ## 2026-10-11 — pretrain-eol-vanish (t3 470m_k + box 429M) — trainer "vanishes" at the end of the step budget with no traceback and no final checkpoint (~490 steps / ~450M tokens of weights lost on the box run)
 - Evidence: box `/home/tliao/pretrain_470m.log` ends at `[10:22:29] Step 03990`
