@@ -41,6 +41,85 @@ data first.
 
 ---
 
+## 2026-10-11 — MODULAR_MOE §9 D1.5 TRANSLATOR FIDELITY: FAIL vs 0.9 bar — variant B deprioritized (MI50 box, GPU 3 only)
+
+**Gate D1.5 (§9.3a/§9.4) measured: telemetry-trained route-conditioned
+translators do NOT reach held-out cosine 0.9 between feature bases; every
+challenge pairing lands 0.55–0.69, which also trips §9.5's <0.7 in-domain
+deprioritize rule → variant B (cross-model expert transplant via translators)
+deprioritized to variant-A-only for now. D2 (cross-family co-location via
+transplant) is NOT unblocked on this axis.** Harness
+`lab/graft_d15_translator.py` (imports HIP shims/registry/GateTap from
+`lab/graft_d0_parity.py` — do not re-break those), synthetic self-test 18/18
+(laptop + box venv). Run on `tliao@100.64.0.7` **GPU 3 ONLY**
+(`HIP_VISIBLE_DEVICES=3`, `ROCBLAS_TENSILE_LIBPATH=/opt/rocm-6.2.4/lib/
+rocblas/library`, fp16, venv `/data/tliao/vesper_sft/venv`), donor
+`/data/tliao/OLMoE-1B-7B-0924`, D0 registry
+`/data/tliao/graft_d0_out/registry_olmoe_6d84c485.pt`, gate slices
+`/data/tliao/graft_d0_slice` (same `graft_d0_build_slice.py` domains:
+chat/code/math/science/web). Artifacts (untracked): `lab/imported/graft_d15/
+d15.json` + `d15_crossmodel.json` (+ box `/data/tliao/graft_d15_out/`).
+
+**What was trained** (spec §9.3a: T: x_host→x_donor paired-activation
+regression, route-conditioned on the graft's passport scores; both directions
+measured; identity/mean baselines; linear = closed-form ridge, 2-layer = Adam
+autograd only — no fla/Triton): two instantiations of "two bases":
+
+1. **Within-donor cross-layer** (§9.3a sharpening 2, layer correspondence):
+   pre-MoE features at OLMoE layers (host) vs (donor), 35,840 tokens, pairs
+   2:12 / 6:12 / 12:12. Held-out cos (best arm = route-conditioned ridge
+   linear): **0.5528** (gap 10), **0.6296** (gap 6); identity baselines
+   0.2075 / 0.4172; same-layer **12:12 CONTROL = 1.0000** (identity+linear)
+   → harness is sound and fidelity scales with depth gap. Strict splits:
+   route-held-out (8 top-1 experts excluded) 0.5227 / 0.6098; domain-held-out
+   (web) 0.3882 / 0.4882. Spec's transplanted-output metric (expert_8:
+   cos(expert(T(x)), expert(x_native))): 0.349 / 0.464 raw, 0.490 / 0.608 in
+   the expert's top-32 singular directions. Wall 22.6 min total (capture 25s).
+2. **Cross-model (the §9.3a gate-of-record pairing)**: OLMoE-1B-7B-0924
+   donor ↔ **ibm-granite/granite-3.0-1b-a400m-base** host (2nd small MoE,
+   24 MoE layers, hidden 1024, 32 experts top-8; fetched to
+   `/data/tliao/d15_models/` — NEVER commit), word-aligned paired activations
+   (char-offset mean-pooling across each model's own tokenizer — different
+   tokenizers make per-token pairing ill-posed), 18,529 paired words, donor
+   layer 12 ↔ host layers 12/18. Held-out cos (route-conditioned linear):
+   **0.6437** (h12) / **0.6885** (h18); train 0.724/0.757; p10 0.52/0.57;
+   route-held-out 0.610/0.657; domain-held-out 0.536/0.587; expert-output cos
+   0.474/0.553 (top-32 dirs 0.629/0.698). Per-route (top-1 expert) breakdown
+   h18:d12: 37 routes ≥30 tok, macro 0.667, worst 0.556 (e56), best 0.898
+   (e59) — no route reaches 0.9. Mirror direction (donor→host) best cell
+   0.7030 (h18, cond). Wall 15.7 min (capture 6.4 min), peak VRAM ~18.4GB
+   (both models fp16 resident) on GPU 3.
+
+**Verdict table vs bars** (worst challenge pair; controls excluded from
+gating): lane bar held-out cos > 0.9 → **FAIL** (0.55–0.69); stretch 0.95 →
+FAIL; §9.5 deprioritize bar < 0.7 in-domain → **FIRES** (0.55–0.69 band);
+spec output cos > 0.9 → FAIL (0.35–0.55 raw / 0.49–0.70 top-dirs);
+route-held-out ≥ 0.7 → FAIL; domain-held-out ≥ 0.7 → FAIL. Route conditioning
+helps mildly (best arm in every challenge pair is the route-conditioned
+linear); 2-layer MLP is NOT better than linear (slight overfit) — within this
+capacity class the residual is feature availability, not translator size
+(consistent with §9.3a's falsifier: "the host spine lacks the features").
+Train cos itself tops out at 0.72–0.76 (the map is not learnable even
+in-sample), so raising translator capacity alone is unlikely to reach 0.9.
+
+**D2 status: NOT unblocked by this gate.** Per §9.5 as written, variant B is
+deprioritized to variant-A-only (one grafted host per donor family, mixed at
+the serving layer) until a translator clears the bars. Untried follow-ups if
+the line is revisited: soft attention over donor layers / per-(expert,layer)
+translators (§9.3a sharpening 2), token-level pairing (1:1 subword words
+only), larger MLP/residual translators, and the one-expert-manifold arm
+(`--expert-scope`). NOTE the sibling D2 lane (`lab/graft_d2_crossfamily.py`,
+GPU 5) is a *different* reading of D2 — portability of the passport/registry
+graft interface to a foreign family (Phi-mini-MoE sparsemixer) — it does not
+need translators and is not gated by this result.
+
+**gfx906 note (new manifestation):** word-pooling `bool-mask + index_add_`
+tripped the known async `hipErrorInvalidDeviceFunction` on GPU (same family
+as the FAILURES.md `torch.sort` wall) → pooling shimmed to CPU (tensors tiny).
+Full story in `lab/FAILURES.md` d15 entry.
+
+---
+
 ## 2026-10-11 — MODULAR_MOE §9 **D0 GATE RUN: PASS** (MI50 box, GPU 0, 10.3 min)
 
 **D0 (graft parity) PASSES — prototype+recal registry recipe reproduces the
