@@ -52,6 +52,14 @@ Usage:
 PASS bars (same as D0 / lab/graft_d0_runbook.md): mean final-logit cosine
 > 0.9 (stretch > 0.99), |dCE| < 0.05 nats, per-layer MoE-output cosine > 0.9
 mean, top-k set agreement > 0.8, purity_graft(d) >= purity_stock(d) - 0.02.
+
+D2 follow-up (FAILURES d2-crossfamily-perlayer's named lever): **score-margin-
+aware recal** — `--recal-margin-w` upweights the MSE on near-threshold expert
+pairs (the pairs whose score error flips sparsemixer's discrete top-k / mask
+choices). `margin_baseline_analysis` (run in the parity phase) reports the
+family-relative agreement baseline: what top-k agreement the family's own
+selection gives at the graft's score-error level (noise-matched Monte-Carlo),
+the metric proposed for hard-selection router families.
 """
 
 from __future__ import annotations
@@ -365,6 +373,235 @@ def collect_route_stats(model, blocks, fam: FamilySpec, batches, device,
 
 
 # ---------------------------------------------------------------------------
+# Score-margin-aware recal (D2 follow-up: FAILURES d2-crossfamily-perlayer)
+# ---------------------------------------------------------------------------
+
+
+def topk_agree_fast(idx_a: torch.Tensor, idx_b: torch.Tensor) -> tuple[float, float]:
+    """Vectorized exact-set match rate + mean Jaccard for (T, k) index rows."""
+    a, _ = idx_a.sort(dim=-1)
+    b, _ = idx_b.sort(dim=-1)
+    k = a.shape[-1]
+    inter = (a.unsqueeze(-1) == b.unsqueeze(-2)).any(dim=-1).sum(dim=-1).float()
+    agree = float((inter >= k).float().mean())
+    union = (2 * k - inter).clamp_min(1)
+    return agree, float((inter / union).mean())
+
+
+def decision_cuts(stock_logits: torch.Tensor, top_k: int,
+                  family: str, jitter_eps: float) -> list[torch.Tensor]:
+    """Per-token decision boundaries of the family's selection.
+
+    In eval the INDEX selection is pure score ranking (top-1 = raw argmax,
+    top-2 = argmax of the remainder — the threshold mask is applied only to
+    the multiplier softmaxes), so index flips happen at the rank-1/2 and
+    rank-k/k+1 midpoints. Sparsemixer multipliers additionally flip where the
+    relative-threshold mask edge `((max-s)/max(|s|,max) = 2*jitter_eps)`, i.e.
+    `s = max*(1-2*jitter_eps)`, changes which experts contribute to the
+    gathered softmax masses.
+    """
+    s_sorted, _ = stock_logits.sort(dim=-1, descending=True)
+    k = max(1, min(top_k, stock_logits.shape[-1] - 1))
+    cuts = [0.5 * (s_sorted[:, 0] + s_sorted[:, 1]),
+            0.5 * (s_sorted[:, k - 1] + s_sorted[:, k])]
+    if family == FAMILY_PHIMOE:
+        cuts.append(s_sorted[:, 0] * (1.0 - 2.0 * jitter_eps))
+    return cuts
+
+
+def margin_weights(stock_logits: torch.Tensor, margin_w: float,
+                   margin_tau: float = 0.05, top_k: int = 2,
+                   family: str = FAMILY_PHIMOE,
+                   jitter_eps: float = 0.01) -> torch.Tensor:
+    """Per-(token, expert) MSE weights concentrated on near-threshold pairs.
+
+    w_te = 1 + margin_w * exp(-min_c |s*_te - cut_tc| / tau_t), mean-normalized
+    to 1 so the loss scale is unchanged and margin_w only re-prioritizes fit
+    capacity toward the expert pairs whose stock scores sit on a decision
+    boundary — the pairs whose score error flips discrete top-k / mask choices.
+    tau_t = margin_tau * per-token score range (scale-free).
+    """
+    if not margin_w or margin_w <= 0:
+        return torch.ones_like(stock_logits)
+    s = stock_logits.float()
+    s_sorted, _ = s.sort(dim=-1, descending=True)
+    tau = (margin_tau * (s_sorted[:, 0] - s_sorted[:, -1])).clamp_min(1e-6)
+    dist = None
+    for cut in decision_cuts(s, top_k, family, jitter_eps):
+        d = (s - cut.unsqueeze(-1)).abs() / tau.unsqueeze(-1)
+        dist = d if dist is None else torch.minimum(dist, d)
+    w = 1.0 + margin_w * torch.exp(-dist)
+    return w / w.mean().clamp_min(1e-12)
+
+
+def recalibrate_weighted(banks: list[PassportBank],
+                         pairs: list[tuple[torch.Tensor, torch.Tensor]],
+                         steps: int, lr: float, kl_w: float = 0.1,
+                         margin_w: float = 0.0, margin_tau: float = 0.05,
+                         top_k: int = 2, family: str = FAMILY_PHIMOE,
+                         jitter_eps: float = 0.01) -> dict:
+    """Router-only recal with score-margin-aware MSE (the D2 named follow-up).
+
+    Same protocol as d0.recalibrate (fit P + optional W_q with Adam, MSE+KL to
+    stock logits, CPU, no model backprop) except the MSE is weighted by
+    margin_weights() so near-threshold expert pairs dominate the fit. With
+    margin_w=0 the loss reduces to the D2-attempt-1 uniform MSE.
+    """
+    report = {"steps": steps, "lr": lr, "kl_w": kl_w,
+              "margin_w": margin_w, "margin_tau": margin_tau,
+              "per_layer": []}
+    if steps <= 0:
+        return report
+    for li, (bank, (h, stock_logits)) in enumerate(zip(banks, pairs)):
+        p = nn.Parameter(bank.P.data.float().clone().cpu())
+        params = [p]
+        wq = None
+        if bank.W_q is not None:
+            wq = nn.Parameter(bank.W_q.data.float().clone().cpu())
+            params.append(wq)
+        opt = torch.optim.Adam(params, lr=lr)
+        stock_logits = stock_logits.float().cpu()
+        h = h.float().cpu()
+        w = margin_weights(stock_logits, margin_w, margin_tau, top_k, family,
+                           jitter_eps)
+        first = last = first_w = last_w = None
+        with torch.enable_grad():  # callers may run under no_grad
+            for step in range(steps):
+                opt.zero_grad()
+                q = h if wq is None else h @ wq.T
+                s = (q @ p.T) / math.sqrt(bank.d_r) * bank.layer_scale
+                err2 = (s - stock_logits).pow(2)
+                mse = err2.mean()
+                wmse = (err2 * w).mean()
+                kl = F.kl_div(F.log_softmax(s, dim=-1),
+                              F.softmax(stock_logits, dim=-1),
+                              reduction="batchmean")
+                loss = wmse + kl_w * kl
+                loss.backward()
+                opt.step()
+                if step == 0:
+                    first, first_w = float(mse.detach()), float(wmse.detach())
+                last, last_w = float(mse.detach()), float(wmse.detach())
+        bank.P.data.copy_(p.data.to(bank.P.device))
+        if wq is not None:
+            bank.W_q.data.copy_(wq.data.to(bank.W_q.device))
+        report["per_layer"].append(
+            {"layer": li, "mse_first": first, "mse_last": last,
+             "wmse_first": first_w, "wmse_last": last_w})
+    return report
+
+
+@torch.no_grad()
+def margin_baseline_analysis(model, blocks, fam: FamilySpec, graft_gates,
+                             batches, device, max_batches: int = 4,
+                             max_rows: int = 2048, n_draws: int = 8,
+                             seed: int = 0) -> dict:
+    """Family-relative agreement baseline (the FAILURES.md metric proposal).
+
+    What top-k agreement does THIS family's selection produce at the graft's
+    own score-error level? Captures (graft scores, stock scores) on the val
+    trajectory, measures per-layer score-error RMS sigma, then Monte-Carlo's
+    the family's own selection on stock_scores + N(0, sigma^2) — the agreement
+    any score-fitting method would get at that error level — plus the
+    flip-prone token fraction (rank-2/3 gap < 2*sigma) and a sigma-multiples
+    curve. Graft agreement at/above the noise-matched baseline means the graft
+    is at the family's inherent discrete-sensitivity limit for its score error.
+    """
+    n = len(blocks)
+    s_s_l = [[] for _ in range(n)]
+    s_g_l = [[] for _ in range(n)]
+    idx_g_l = [[] for _ in range(n)]
+    stock_restored = [install_graft(blocks[i], fam, graft_gates[i])
+                      for i in range(n)]
+    for g in graft_gates:
+        g.capture = True
+    for b_i, (tokens, _dom) in enumerate(batches):
+        if b_i >= max_batches:
+            break
+        model_logits(model, tokens.to(device))
+        for i in range(n):
+            g = graft_gates[i]
+            if g.last_stock_logits is None:
+                continue
+            s_s_l[i].append(g.last_stock_logits.float().cpu())
+            s_g_l[i].append(g.last_logits.float().cpu())
+            idx_g_l[i].append(g.last_indices.cpu())
+    for g in graft_gates:
+        g.capture = False
+    for i in range(n):
+        uninstall_graft(blocks[i], fam, stock_restored[i])
+
+    jitter_eps = float(getattr(graft_gates[0], "jitter_eps", 0.0))
+
+    def select(scores):
+        if fam.name == FAMILY_PHIMOE:
+            return select_sparsemixer(scores, jitter_eps, fam.top_k)
+        return select_softmax_topk(scores, fam.top_k, fam.norm_topk_prob)
+
+    gen = torch.Generator().manual_seed(seed)
+    per_layer = []
+    rows_used = 0
+    for i in range(n):
+        if not s_s_l[i]:
+            continue
+        s_s = torch.cat(s_s_l[i], 0)
+        s_g = torch.cat(s_g_l[i], 0)
+        idx_g = torch.cat(idx_g_l[i], 0)
+        if s_s.shape[0] > max_rows:
+            stride = s_s.shape[0] // max_rows + 1
+            s_s = s_s[::stride][:max_rows]
+            s_g = s_g[::stride][:max_rows]
+            idx_g = idx_g[::stride][:max_rows]
+        rows_used = int(s_s.shape[0])
+        _, idx_s = select(s_s)
+        agree_g, jacc_g = topk_agree_fast(idx_g, idx_s)
+        sigma = float((s_g - s_s).pow(2).mean().sqrt())
+        ss, _ = s_s.sort(dim=-1, descending=True)
+        g12 = ss[:, 0] - ss[:, 1]
+        g23 = ss[:, 1] - ss[:, 2]
+        curve = {}
+        for mult in (0.5, 1.0, 1.5, 2.0):
+            sig = sigma * mult
+            agrees = []
+            for _ in range(n_draws):
+                noisy = s_s + sig * torch.randn(s_s.shape, generator=gen)
+                _, idx_n = select(noisy)
+                a, _jk = topk_agree_fast(idx_n, idx_s)
+                agrees.append(a)
+            curve[f"{mult}x"] = float(sum(agrees) / len(agrees))
+        per_layer.append({
+            "layer": i,
+            "score_err_rms": sigma,
+            "graft_topk_agree": agree_g,
+            "graft_topk_jaccard": jacc_g,
+            "gap12_mean": float(g12.mean()),
+            "gap23_mean": float(g23.mean()),
+            "frac_gap23_lt_2sigma": float((g23 < 2 * sigma).float().mean()),
+            "noise_matched_agree": curve["1.0x"],
+            "noise_matched_agree_curve": curve,
+            "agree_ratio": (agree_g / curve["1.0x"]
+                            if curve["1.0x"] > 0 else None),
+        })
+
+    def mean(key):
+        return float(sum(d[key] for d in per_layer) / max(1, len(per_layer)))
+
+    return {
+        "per_layer": per_layer,
+        "mean_score_err_rms": mean("score_err_rms"),
+        "mean_graft_topk_agree": mean("graft_topk_agree"),
+        "mean_noise_matched_agree": mean("noise_matched_agree"),
+        "mean_agree_ratio": mean("agree_ratio"),
+        "noise_matched_curve_means": {
+            m: float(sum(d["noise_matched_agree_curve"][m] for d in per_layer)
+                     / max(1, len(per_layer)))
+            for m in ("0.5x", "1.0x", "1.5x", "2.0x")},
+        "n_rows_per_layer": rows_used,
+        "n_draws": n_draws,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Two-pass parity measurement (same metrics as D0)
 # ---------------------------------------------------------------------------
 
@@ -674,7 +911,11 @@ def run_pipeline(model, blocks, fam: FamilySpec, domain_batches, val_batches,
         pairs = collect_route_pairs(model, blocks, fam, stock_weights,
                                     domain_batches, device, args.max_cal_pairs)
         fit_layer_scales(banks, pairs)
-        recal_report = {"rounds": args.recal_rounds, "round_detail": []}
+        recal_report = {"rounds": args.recal_rounds,
+                        "margin_w": args.recal_margin_w,
+                        "margin_tau": args.recal_margin_tau,
+                        "round_detail": []}
+        jitter_eps = float(getattr(stock_gate0, "router_jitter_noise", 0.0))
         for rnd in range(args.recal_rounds):
             if rnd > 0:
                 for i in range(len(blocks)):
@@ -684,8 +925,10 @@ def run_pipeline(model, blocks, fam: FamilySpec, domain_batches, val_batches,
                                             args.max_cal_pairs)
                 for i in range(len(blocks)):
                     uninstall_graft(blocks[i], fam, graft_gates[i].stock_gate)
-            r = recalibrate(banks, pairs, args.recal_steps, args.recal_lr,
-                            args.recal_kl_w)
+            r = recalibrate_weighted(
+                banks, pairs, args.recal_steps, args.recal_lr, args.recal_kl_w,
+                margin_w=args.recal_margin_w, margin_tau=args.recal_margin_tau,
+                top_k=fam.top_k, family=fam.name, jitter_eps=jitter_eps)
             recal_report["round_detail"].append(r)
         out["recal"] = recal_report
         out["passport_dim"] = d_r
@@ -696,6 +939,8 @@ def run_pipeline(model, blocks, fam: FamilySpec, domain_batches, val_batches,
             "recal_steps": args.recal_steps,
             "recal_rounds": args.recal_rounds,
             "recal_lr": args.recal_lr,
+            "recal_margin_w": args.recal_margin_w,
+            "recal_margin_tau": args.recal_margin_tau,
             "passport_dim": d_r,
             "query_map": out["query_map"],
             "profile_home_domain": home.tolist(),
@@ -719,6 +964,9 @@ def run_pipeline(model, blocks, fam: FamilySpec, domain_batches, val_batches,
         out["parity"] = report.as_dict()
         out["wall_s"] = round(time.time() - t0, 2)
         out["status"] = "parity_done"
+        dump_json(out, args.out)
+        out["margin_analysis"] = margin_baseline_analysis(
+            model, blocks, fam, graft_gates, val_batches, device)
         dump_json(out, args.out)
         stats_g = collect_route_stats(model, blocks, fam, domain_batches,
                                       device, n_domains, graft_gates=graft_gates)
@@ -967,6 +1215,47 @@ def run_synthetic_tests() -> int:
           rep_o["logit_cosine_mean"] > 0.999,
           f"cos={rep_o['logit_cosine_mean']:.6f}")
 
+    # G. score-margin-aware recal (the D2 named follow-up)
+    sl = torch.randn(256, 8)
+    w0 = margin_weights(sl, 0.0)
+    check("margin_w0_is_uniform",
+          float(w0.min()) == 1.0 and float(w0.max()) == 1.0,
+          "margin_w=0 reduces to uniform MSE weights")
+    w = margin_weights(sl, 5.0, 0.05, top_k=2, family=FAMILY_PHIMOE,
+                       jitter_eps=0.01)
+    check("margin_w_mean_one", abs(float(w.mean()) - 1.0) < 1e-5,
+          f"mean={float(w.mean()):.6f} (loss scale preserved)")
+    ss, _ = sl.sort(dim=-1, descending=True)
+    cuts = torch.stack([0.5 * (ss[:, 0] + ss[:, 1]),
+                        0.5 * (ss[:, 1] + ss[:, 2]),
+                        ss[:, 0] * 0.98], dim=0)
+    dist = torch.stack([(sl - b.unsqueeze(-1)).abs() for b in cuts],
+                       0).min(0).values
+    tau = (0.05 * (ss[:, 0] - ss[:, -1])).clamp_min(1e-6).unsqueeze(-1)
+    near, far = dist < tau, dist > 3 * tau
+    check("margin_weights_focus_near_threshold",
+          bool(near.any() and far.any()
+               and float(w[near].mean()) > float(w[far].mean()) + 0.5),
+          f"near-cut w={float(w[near].mean()):.2f} vs far w={float(w[far].mean()):.2f}")
+    banks_m = [PassportBank(e, h) for _ in blocks]
+    init_passports_prototype(banks_m, stats)
+    fit_layer_scales(banks_m, pairs)
+    rep_m_pre = parity_measure(model, blocks, fam,
+                               make_graft_gates(blocks, banks_m, fam),
+                               val_batches, device).as_dict()
+    rr = recalibrate_weighted(banks_m, pairs, steps=300, lr=0.05, kl_w=0.1,
+                              margin_w=5.0, margin_tau=0.05, top_k=fam.top_k,
+                              family=fam.name, jitter_eps=0.01)
+    rep_m = parity_measure(model, blocks, fam,
+                           make_graft_gates(blocks, banks_m, fam),
+                           val_batches, device).as_dict()
+    wmse_down = all(l["wmse_last"] < l["wmse_first"] for l in rr["per_layer"])
+    check("recal_margin_fits_and_passes_bars",
+          wmse_down and rep_m["logit_cosine_mean"] > BAR_LOGIT_COSINE
+          and abs(rep_m["ce_delta"]) < BAR_CE_DELTA,
+          f"wmse↓={wmse_down} cos {rep_m_pre['logit_cosine_mean']:.4f} -> "
+          f"{rep_m['logit_cosine_mean']:.4f} dCE={rep_m['ce_delta']:+.4f}")
+
     n_pass = sum(1 for _, ok, _ in results if ok)
     print(f"\n{n_pass}/{len(results)} synthetic checks passed")
     return 0 if n_pass == len(results) else 1
@@ -996,6 +1285,13 @@ def main() -> int:
     ap.add_argument("--recal-lr", type=float, default=0.05)
     ap.add_argument("--recal-kl-w", type=float, default=0.1)
     ap.add_argument("--recal-rounds", type=int, default=1)
+    ap.add_argument("--recal-margin-w", type=float, default=0.0,
+                    help="score-margin-aware recal: MSE weight boost on "
+                         "near-threshold expert pairs (0 = uniform MSE, the "
+                         "D2-attempt-1 loss)")
+    ap.add_argument("--recal-margin-tau", type=float, default=0.05,
+                    help="near-threshold width as a fraction of the per-token "
+                         "score range")
     ap.add_argument("--learn-wq", action="store_true")
     ap.add_argument("--passport-dim", type=int, default=None)
     ap.add_argument("--domains-dir", default=os.path.join(REPO_ROOT, "lab",
@@ -1076,6 +1372,11 @@ def main() -> int:
               f"dCE={p['ce_delta']:+.5f} "
               f"layer_cos={v['mean_layer_moe_cosine']:.4f} "
               f"agree={v['mean_topk_agree']:.4f}")
+        ma = out.get("margin_analysis")
+        if ma:
+            print(f"  margin_baseline: score_rms={ma['mean_score_err_rms']:.5f} "
+                  f"noise_matched_agree={ma['mean_noise_matched_agree']:.4f} "
+                  f"agree_ratio={ma['mean_agree_ratio']:.3f}")
     print(f"wall {out['wall_s']}s")
     return 0 if (v is None or v["pass"]) else 1
 

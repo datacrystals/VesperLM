@@ -138,15 +138,22 @@ registry recipe (slices `lab/graft_d2_slice/`, donor @f620b32c, recal 300×2,
 
 | arm | MoE cos | top-k agree | Jaccard | logit cos | ΔCE | aux bars |
 |---|---|---|---|---|---|---|
-| BEFORE (uniform MSE, D2 att-1) | 0.8640 | 0.6509 | 0.761 | 0.99863 | +0.0303 | FAIL |
-| margin_w=2 | 0.8602 | 0.6412 | 0.754 | 0.99857 | +0.0308 | FAIL |
-| margin_w=5 | 0.8571 | 0.6320 | 0.748 | 0.99859 | +0.0329 | FAIL |
-| margin_w=10 | 0.8540 | 0.6233 | 0.742 | 0.99856 | +0.0344 | FAIL |
+| BEFORE (uniform MSE 300×2, D2 att-1) | 0.8640 | 0.6509 | 0.761 | 0.99863 | +0.0303 | FAIL |
+| margin_w=2 (300×2) | 0.8602 | 0.6412 | 0.754 | 0.99857 | +0.0308 | FAIL |
+| margin_w=5 (300×2) | 0.8571 | 0.6320 | 0.748 | 0.99859 | +0.0329 | FAIL |
+| margin_w=10 (300×2) | 0.8540 | 0.6233 | 0.742 | 0.99856 | +0.0344 | FAIL |
+| uniform MSE 600×3 (budget control) | 0.8858 | 0.7017 | 0.797 | 0.99892 | +0.0190 | FAIL |
+| margin_w=5 (600×3) | 0.8822 | 0.6902 | 0.789 | 0.99897 | +0.0205 | FAIL |
 | **exact init (algebraic control)** | **0.9966** | **0.9881** | 0.992 | **0.99996** | **+0.0001** | **PASS** |
 
 Main bars hold on every prototype arm (stretch 0.99 clears everywhere);
 **the named lever is falsified** — margin weight moves per-layer strictly the
-wrong way. Root cause (from `margin_analysis`): the residual error is
+wrong way at the D2 budget, and at the matched 600×3 budget the uniform
+control BEATS the margin arm (0.8858/0.7017 vs 0.8822/0.6902), so the
+higher-budget gain (+0.022 cos / +0.051 agree) is fit budget / on-trajectory
+coverage, not margin weighting. Best prototype arm still misses the aux bars
+(0.886 < 0.9, 0.702 < 0.8). Root cause (from `margin_analysis`): the residual
+error is
 on-trajectory score error from hidden-state drift (val-trajectory score RMS
 0.05–0.27/layer vs recal cal-fit RMSE 0.014), and `frac(gap23 < 2σ) = 0.87–
 0.99` — nearly every token is flip-prone at that error level, so re-weighting
@@ -159,11 +166,11 @@ relative-threshold mask only moves the multiplier softmaxes — donor source
 relative agreement is the right *form* for hard-selection routers, but the
 baseline must be the **measured exact-init ceiling** — `(agree − 1/C(E,k)) /
 (agree_exact − 1/C(E,k))` — not isotropic noise-matched at the graft's σ:
-that model predicts agree 0.40 where the graft scores 0.64 and the true
-ceiling is 0.99 (graft score errors are low-rank/structured). On this donor
-the fp-noise ceiling is 0.9881, so the absolute 0.8 bar was already ≈0.81-of-
-ceiling — **the OLMoE bars are NOT unfairly calibrated for Phi-mini-MoE**;
-BEFORE sits at 0.656 of ceiling. Practical consequence for §9.6: **for a
+that model predicts agree 0.40–0.48 where the graft scores 0.64–0.70 and the
+true ceiling is 0.99 (graft score errors are low-rank/structured). On this
+donor the fp-noise ceiling is 0.9881, so the absolute 0.8 bar was already
+≈0.81-of-ceiling — **the OLMoE bars are NOT unfairly calibrated for
+Phi-mini-MoE**; BEFORE sits at 0.656 of ceiling (best prototype arm 0.708). Practical consequence for §9.6: **for a
 plain-linear donor gate, ship algebraic passports (exact init — the D0 core's
 `init_passports_exact`) and the per-layer gap vanishes** (registry
 `registry_phimoe_exact.pt`, 8.4MB, same format); prototype+recal is for
