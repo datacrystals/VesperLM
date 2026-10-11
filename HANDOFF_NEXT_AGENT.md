@@ -41,6 +41,44 @@ data first.
 
 ---
 
+## 2026-10-11 — Door 4b RECIPE V2: quality still FAILS in both arms — plug-in quality story NOT closed; binding constraint = expert provenance (pretrained core), not the delivery contract
+
+**Final grab-story experiment** (`lab/door4b_fit_v2.py`, MI50 GPU 4, detached,
+incremental JSON `/data/tliao/graft_d0_out/door4b_{fresh,door3}.json`): recipe
+v2 = contract (b) additive delivery (λ learned/layer, stock scale preserved)
++ Door-2.5 fit (task-loss CE, **wd 0**, neutral_w 300, clip 1.0, 250 steps,
+post-training on-trajectory row recal, held-out quality). Two arms on the D1
+code plug-in + the Door-3 expert source:
+
+| gate | bar | fresh rank-64 adapters (4.2M, lr 3e-3) | door3 distilled core refit (100.7M, lr 1e-3) |
+|---|---|---|---|
+| quality held-out (train) | delivered<masked | 9.25 vs 1.74 (5.67 vs 1.26) ✗ | 8.88 vs 1.74 (6.49 vs 1.26) ✗ |
+| parity overall | ≥0.95 | 0.683 ✗ | 0.843 ✗ (fire 0.740 / nonfire 0.862) |
+| retention | ≥0.70 | 0.890 ✓ | 1.015 ✓ |
+| contamination (per-layer / any-layer base) | ≤0.30 | 0.061 ✓ | 0.052 ✓ / 0.152 ✓ |
+| utilization | >0.50 | 0.692 ✓ | 0.672 ✓ |
+
+**Verdict: the plug-in quality story is NOT closed — and the causal story is
+corrected**: the delivery contract was never the binding constraint. Door-2.5's
+existence proof (masked 1.072 → plugged 0.439) used a **pretrained frozen
+expert core** (11.8M Phi-mini-MoE SwiGLU) + thin task-loss adapters under the
+MASS contract. Every from-scratch/refit delta fails quality **in-sample**
+across 3 contracts and 6 fit recipes (D1 SwiGLU ×4; linear adapters;
+distilled-core refit — the refit double-counts a replacement-trained core
+under additive delivery). lr 3e-3 is proven only for thin-adapter-around-
+frozen-core (fresh swiglu at 3e-3 NaNs ≤25 steps). Firing-split caveat:
+non-firing base tokens are not bit-identical under contract (b) — fired
+neighbors contaminate them through attention (0.862 at 15% any-layer firing).
+
+**Next (queued): expert provenance as the lever** — (i) Door-3 core refit
+under its NATIVE delivery (no double-count) + Door-2.5 thin-adapter wrap;
+(ii) distill-then-deliver with no refit; (iii) bigger data/steps budget.
+Door-2.5's wrap geometry + task-loss fit is the recipe to copy exactly.
+Platform: NaN guard added (fresh-swiglu run-1 archived), split-metric capture
+fixed (membership must be read inside the pass), any-layer firing reported.
+
+---
+
 ## 2026-10-11 — Door 4 DELIVERY CONTRACT head-to-head: additive-λ wins, quality still open (expert-fit bottleneck confirmed in-sample)
 
 **Setup:** the D1 s6_quality + Door-3 blocker (train "stock+e_new", deliver

@@ -18,6 +18,49 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-11 — door4b-fit-v2 — recipe v2 (contract b + Door-2.5 fit) FAILS quality in both arms: the binding constraint is EXPERT PROVENANCE, not the delivery contract
+- Evidence: `lab/door4b_fit_v2.py`, MI50 GPU 4, incremental JSON
+  `/data/tliao/graft_d0_out/door4b_{fresh,door3}.json` (run-1 swiglu@3e-3 NaN
+  archived `door4b_run1_swiglu_nan.json`). Recipe v2 = additive fixed-weight
+  delivery (`y = y_stock + λ·m·e_new`, λ learned per layer) + Door-2.5 fit
+  (task-loss CE, wd 0, neutral_w 300 on base-h, clip 1.0, 250 steps,
+  post-training on-trajectory row recal, held-out quality). Arms on the D1
+  code plug-in: **fresh** = from-scratch rank-64 linear adapters (4.19M
+  params, lr 3e-3): quality **9.25 vs 1.74** held-out (**5.67 vs 1.26**
+  train!), parity 0.683, retention 0.890, contam 0.061, util 0.692 — FAIL.
+  **door3-warm** = Door-3 distilled SwiGLU core (100.7M) refit (lr 1e-3):
+  quality **8.88 vs 1.74** held-out (6.49 vs 1.26 train), parity 0.843
+  (firing 0.740 / non-firing 0.862; any-layer base firing 0.152, code 0.849),
+  retention 1.015, contam 0.052, util 0.672 — FAIL.
+- Root cause (evidence-ranked, CORRECTS the door4 entry's framing): (1) **the
+  delivery contract is not the binding constraint** — Door-2.5's pass
+  (code CE 1.072 masked → 0.439 plugged) happened under the MASS contract
+  with a PRETRAINED expert core (frozen 11.8M Phi-mini-MoE SwiGLU) + thin
+  task-loss adapters. (2) **From-scratch/refit deltas fail quality in-sample
+  under every contract tried** (D1 SwiGLU ×4 recipes, linear rank-64
+  adapters, distilled-core-then-refit): 12k tokens / 250 steps cannot grow a
+  delta that beats the already-strong masked baseline (1.26) — and the fit
+  dynamics explode first (fresh swiglu NaNs ≤25 steps at lr 3e-3; adapters
+  jump ce 0.46→12.4 before partial recovery; door3 refit double-counts the
+  trained core under additive delivery (trained as a replacement, delivered
+  additively) and raises ce 0.50→5.14). (3) lr 3e-3 is proven ONLY for
+  thin-adapter-around-frozen-core; applying it to from-scratch deltas is not
+  the same recipe. (4) Firing-split caveat: non-firing tokens are not
+  bit-identical under contract (b) — fired neighbors contaminate them through
+  attention (non-firing cos 0.86 with 15% any-layer firing).
+- What it rules out: "combine contract (b) with recipe v2 and from-scratch
+  deltas go green" — falsified. Plug-in quality for TRAINED-FROM-SCRATCH
+  deltas is falsified within the tested budget/data class across 3 contracts
+  and 6 fit recipes. The one existence proof (Door 2.5) requires a
+  pretrained-core expert; that is now the named mechanism.
+- Next tried (untried, queued): expert provenance as the lever — (i) refit
+  the Door-3 distilled core under its NATIVE delivery (mass/forced, not
+  additive — no double-count) with the Door-2.5 thin-adapter wrap on top;
+  (ii) train the from-scratch delta against a frozen PRETRAINED core's output
+  (distill-then-deliver, no refit); (iii) more data/steps budget for the
+  in-surface fit if (i)/(ii) fail. Door-2.5's wrap geometry + task-loss fit
+  remains the recipe to copy exactly.
+
 ## 2026-10-11 — door4-delivery-contract — delivery-contract head-to-head: additive λ wins, but NEITHER contract passes quality — blocker is the expert fit, in-sample
 - Evidence: `lab/door4_delivery_contract.py` on the MI50 box GPU 4 (fp16,
   OLMoE-1B-7B-0924 + D0 registry graft, D1 code-domain plug-in; same bars:
