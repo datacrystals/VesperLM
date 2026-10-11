@@ -41,6 +41,45 @@ data first.
 
 ---
 
+## 2026-10-11 — MODULAR_MOE §9 **D0 GATE RUN: PASS** (MI50 box, GPU 0, 10.3 min)
+
+**D0 (graft parity) PASSES — prototype+recal registry recipe reproduces the
+donor's stock router.** Ran on the MI50 box (`tliao@100.64.0.7`, GPU 0 ONLY,
+fp16, ROCBLAS_TENSILE_LIBPATH set): `allenai/OLMoE-1B-7B-0924` @ `6d84c485`
+(sha256-verified on box after rsync), gate-scale slice from
+`lab/graft_d0_build_slice.py` (102k domain + 86k val OLMoE tokens: code=codeparrot,
+math=open-web-math, web=wikitext-2, science=ag_news-sci/tech, chat=oasst1-en),
+`--phase all --init prototype --recal-steps 300 --recal-rounds 2`, bs2×512.
+
+**Verdict (86,016 val tokens):** logit cosine **0.99913** (std 0.0025, min
+0.7831) | ΔCE **+0.00075** (stock 2.0082 → graft 2.0089) | per-layer MoE-output
+cosine **0.9952 mean** (min 0.9932) | top-k set agreement **0.8366 mean**
+(Jaccard 0.963) | purity margins ~0 / JS ~0 on every domain (PASS). ALL gates
+green incl. the cos>0.99 stretch. Recal: layer MSE 0.73→0.0005 (round 0),
+0.0005→~0 (on-trajectory round 1) — passport rows fit stock logits almost
+exactly, hence 0.999 parity. **Wall 615s, peak VRAM 15.2GiB on GPU 0**
+(32GB card). CPU exact-arm reference was cos 0.9999 / ΔCE +0.0013 — GPU
+prototype+recal is statistically indistinguishable. Registry artifact
+`registry_olmoe_6d84c485.pt` (8.4MB) + JSON verdict on box
+`/data/tliao/graft_d0_out/` and copied home to `lab/imported/graft_d0/`
+(untracked). Honest caveat: purity passes weakly — OLMoE's own routing entropy
+is near-maximal (4.15/4.16 nats, mushiness 0.92), so the baseline is maximally
+permissive; the load-bearing evidence is the cosine/CE/top-k agreement.
+
+**gfx906 gotchas (both shimmed inside `lab/graft_d0_parity.py`, auto-deployed
+on HIP):** (1) `torch._grouped_mm` — "grouped gemm is not supported on ROCM";
+transformers 5.19's MoE dispatch wrongly enables it on HIP → forced their
+`grouped_mm_fallback`; (2) **`torch.sort` device kernel broken at S=8192**
+exactly (`hipErrorInvalidDeviceFunction`, async-misattributed to whatever runs
+next — use `AMD_SERIALIZE_KERNEL=3` to localize; 4096/16384 fine) → experts
+merge shim sorts on CPU, same math. Full story: `lab/FAILURES.md` gfx906 entry.
+**P40/MI300X not needed for D0** (closed here); D1 plug-in recal can also run
+on this box (router-only), but training VesperLM experts still needs the
+MI300X lane (fla/Triton gfx906 wall, see FAILURES). **Next: D1 — plug ONE
+foreign expert into the graft using the registry .pt (§9.4 D1 gates).**
+
+---
+
 ## 2026-10-11 — MODULAR_MOE §9 D0 graft-parity PREPARED (GPU run pending a free ≥16GB card)
 
 **Everything except the GPU measurement is done.** Donor downloaded +
@@ -78,6 +117,7 @@ fixtures `lab/graft_d0_texts/` (tiny, plumbing only — gate wants a ≥50k-toke
 mixed slice; snippet in runbook). **Next: run the gate when a ≥16GB GPU frees
 (box P40s ~Oct 12 or an MI300X droplet if approved), record the JSON verdict
 here; if prototype+recal passes, D1 plug-in can start against the registry .pt.**
+→ **DONE same day on the MI50 box — see the "D0 GATE RUN: PASS" section above.**
 
 ---
 

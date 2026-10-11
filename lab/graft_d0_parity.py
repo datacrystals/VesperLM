@@ -111,11 +111,12 @@ class PassportBank(nn.Module):
 
     def queries(self, h: torch.Tensor) -> torch.Tensor:
         h = h.reshape(-1, self.d_model).float()
-        return h if self.W_q is None else h @ self.W_q.float().T
+        return h if self.W_q is None else h @ self.W_q.to(h.device).float().T
 
     def scores(self, h: torch.Tensor) -> torch.Tensor:
         q = self.queries(h)
-        return (q @ self.P.float().T) / math.sqrt(self.d_r) * self.layer_scale
+        p = self.P.to(q.device).float()
+        return (q @ p.T) / math.sqrt(self.d_r) * self.layer_scale
 
 
 class GraftGate(nn.Module):
@@ -406,7 +407,7 @@ def fit_layer_scales(banks: list[PassportBank],
                      pairs: list[tuple[torch.Tensor, torch.Tensor]]) -> None:
     """Closed-form per-layer scalar so prototype scores match stock logit scale."""
     for bank, (h, stock_logits) in zip(banks, pairs):
-        s0 = (bank.queries(h) @ bank.P.float().T) / math.sqrt(bank.d_r)
+        s0 = (bank.queries(h) @ bank.P.to(h.device).float().T) / math.sqrt(bank.d_r)
         denom = (s0 * s0).sum().item()
         if denom > 0:
             bank.layer_scale = float(
@@ -435,7 +436,7 @@ def collect_route_pairs(model: nn.Module, blocks: list[nn.Module],
         for i in range(n):
             hs[i].append(tap.h[i].float().cpu())
             sts[i].append(F.linear(tap.h[i].float(),
-                                   stock_weights[i].float().cpu()).cpu())
+                                   stock_weights[i].float()).cpu())
     tap.close()
     out = []
     for i in range(n):
@@ -480,8 +481,8 @@ def recalibrate(banks: list[PassportBank],
                 loss.backward()
                 opt.step()
                 if step == 0:
-                    first = float(mse)
-                last = float(mse)
+                    first = float(mse.detach())
+                last = float(mse.detach())
         bank.P.data.copy_(p.data.to(bank.P.device))
         report["per_layer"].append(
             {"layer": li, "mse_first": first, "mse_last": last})
@@ -864,12 +865,114 @@ def mock_batches(n_domains: int = 3, vocab: int = 90, seq_len: int = 24,
 # ---------------------------------------------------------------------------
 
 
+def patch_rocm_grouped_mm() -> str:
+    """ROCm shim part 1: force transformers' per-group mm fallback for MoE GEMMs.
+
+    On ROCm (incl. gfx906/MI50) `torch._grouped_mm` raises "grouped gemm is
+    not supported on ROCM", but transformers' `_can_use_grouped_mm` probes CUDA
+    compute capability (HIP reports device.type=='cuda') and wrongly enables
+    it — the failure surfaces as a confusing async `hipErrorInvalidDeviceFunction`
+    at a later kernel unless AMD_SERIALIZE_KERNEL=3 is set. Forcing the
+    registered `grouped_mm_fallback` (plain per-expert `torch.mm` loop,
+    rocBLAS-backed, nonzero-free) is numerically identical. No-op off ROCm.
+    """
+    if not getattr(torch.version, "hip", None):
+        return "no-op (not ROCm)"
+    try:
+        import transformers.integrations.moe as moe
+    except Exception:  # noqa: BLE001 — transformers without the integrations path
+        return "no-op (transformers.integrations.moe unavailable)"
+    if getattr(moe._can_use_grouped_mm, "_vesper_rocm_patched", False):
+        return "already patched"
+    orig = moe._can_use_grouped_mm
+
+    def _never_grouped_mm(*args, **kwargs):
+        return False
+
+    _never_grouped_mm._vesper_rocm_patched = True
+    _never_grouped_mm._vesper_orig = orig
+    moe._can_use_grouped_mm = _never_grouped_mm
+    return "patched (_can_use_grouped_mm -> False, grouped_mm_fallback active)"
+
+
+def _rocm_safe_experts_forward(self, hidden_states, top_k_index, top_k_weights):
+    """gfx906-safe expert merge — same math as the donor's experts forward.
+
+    Groups (token, slot) pairs by expert, runs each expert's SwiGLU FFN
+    (`gate_up_proj[e]` / `down_proj[e]` in the OLMoE 3D layout), scales by the
+    router's top-k weights, and reduces over the top-k slots. Identical to
+    transformers' eager/grouped implementations up to fp accumulation order.
+
+    Deviation from upstream: the grouping permutation is computed with a CPU
+    sort. The gfx906 ROCm wheel's `torch.sort` device kernel is broken at some
+    sizes (S = tokens*top_k == 8192 raises `hipErrorInvalidDeviceFunction`,
+    async-misattributed to whatever kernel runs next; 4096/16384 work). S is
+    tiny (a few thousand), so the CPU sort costs microseconds. Every other op
+    in this path (gather, bincount, F.linear via rocBLAS, index_put, view+sum)
+    is verified on gfx906.
+    """
+    device = hidden_states.device
+    num_tokens, hidden_dim = hidden_states.shape
+    num_top_k = top_k_index.size(-1)
+    expert_ids = top_k_index.reshape(-1)          # (S,)
+    sample_weights = top_k_weights.reshape(-1)    # (S,)
+    s_total = expert_ids.numel()
+
+    expert_ids_g, perm = torch.sort(expert_ids.cpu())   # CPU sort — see docstring
+    expert_ids_g = expert_ids_g.to(device)
+    perm = perm.to(device)
+    hidden_g = hidden_states[perm // num_top_k]
+    w_g = sample_weights[perm]
+
+    counts = torch.bincount(expert_ids_g, minlength=self.num_experts)
+    merged = torch.zeros(s_total, hidden_dim, device=device,
+                         dtype=hidden_states.dtype)
+    start = 0
+    for e in range(self.num_experts):
+        n = int(counts[e])
+        if n == 0:
+            continue
+        end = start + n
+        gate, up = F.linear(hidden_g[start:end], self.gate_up_proj[e]).chunk(2, dim=-1)
+        y = self.act_fn(gate) * up
+        y = F.linear(y, self.down_proj[e])
+        merged[start:end] = y * w_g[start:end].unsqueeze(-1)
+        start = end
+
+    inv_perm = torch.empty_like(perm)
+    inv_perm[perm] = torch.arange(s_total, device=device)
+    merged = merged[inv_perm]
+    return merged.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+
+
+def patch_rocm_experts(model: nn.Module) -> int:
+    """ROCm shim part 2: install the safe experts merge on every expert bank.
+
+    Replaces the instance forward of 3D expert banks (duck-typed:
+    gate_up_proj + down_proj + num_experts). Returns how many were patched.
+    """
+    if not getattr(torch.version, "hip", None):
+        return 0
+    import types
+    n = 0
+    for mod in model.modules():
+        if (hasattr(mod, "gate_up_proj") and hasattr(mod, "down_proj")
+                and hasattr(mod, "num_experts")
+                and not getattr(mod, "_vesper_rocm_safe", False)):
+            mod.forward = types.MethodType(_rocm_safe_experts_forward, mod)
+            mod._vesper_rocm_safe = True
+            n += 1
+    return n
+
+
 def load_donor(model_path: str, device: str, dtype_name: str):
     """Load the donor via transformers; returns (model, tokenizer)."""
     from transformers import AutoModelForCausalLM, AutoTokenizer
     dtype = {"float32": torch.float32,
              "float16": torch.float16,
              "bfloat16": torch.bfloat16}[dtype_name]
+    status = patch_rocm_grouped_mm()
+    print(f"rocm grouped-mm shim: {status}")
     tok = AutoTokenizer.from_pretrained(model_path)
     try:
         model = AutoModelForCausalLM.from_pretrained(
@@ -879,6 +982,10 @@ def load_donor(model_path: str, device: str, dtype_name: str):
             model_path, torch_dtype=dtype, low_cpu_mem_usage=True)
     model.eval()
     model.to(device)
+    n_patched = patch_rocm_experts(model)
+    if n_patched:
+        print(f"rocm experts shim: patched {n_patched} expert banks "
+              f"(CPU-sort merge)")
     return model, tok
 
 

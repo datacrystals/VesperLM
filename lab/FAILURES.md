@@ -18,6 +18,44 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-11 — d0-gfx906-moe-kernels — torch ROCm wheel missing grouped-GEMM + a broken sort kernel (D0 recovered via shims)
+- Evidence: D0 gate run (`lab/graft_d0_parity.py`, OLMoE-1B-7B-0924 fp16,
+  `tliao@100.64.0.7` GPU 0, torch 2.9.1+rocm6.4) died twice on the first MoE
+  forward: `torch.AcceleratorError: HIP error: invalid device function`,
+  stack pointing at `torch.sort(expert_ids)` in
+  `transformers/integrations/moe.py:grouped_mm_experts_forward`. With
+  `AMD_SERIALIZE_KERNEL=3` (localize async HIP errors!) the first wall exposed
+  itself: `RuntimeError: grouped gemm is not supported on ROCM` from
+  `torch._grouped_mm`. After bypassing that, the async error persisted —
+  micro-probe of every op in the expert path showed `torch.sort` (and
+  `argsort`) FAIL **only at n=8192** (`invalid device function`) while
+  n≤4096 and n=16384 work: the run's shape S = tokens×top_k = 1024×8 = 8192
+  hits the broken kernel on every forward. histc/bincount/one_hot/gather/
+  index_put/index_add_/slice-mm all fine.
+- Root cause: two independent gaps in the torch 2.9.1+rocm6.4 wheel's gfx906
+  coverage: (1) `torch._grouped_mm` has no ROCm kernel at all, yet
+  transformers' `_can_use_grouped_mm` probes CUDA compute capability (HIP
+  reports device.type=='cuda', gfx906 capability ≥ 8?) and wrongly enables
+  it; (2) the device sort kernel variant selected at exactly 8192 elements is
+  missing/broken for gfx906 — and because HIP reports launch errors
+  asynchronously, the crash lands on an innocent later kernel (misleading
+  stacks; `AMD_SERIALIZE_KERNEL=3` is mandatory for debugging).
+- What it rules out: transformers' grouped_mm MoE fast path and device-side
+  `torch.sort` at some sizes on gfx906 — NOT matmul in general (rocBLAS with
+  `ROCBLAS_TENSILE_LIBPATH=/opt/rocm-6.2.4/lib/rocblas/library` is solid), so
+  plain inference pipelines remain viable on MI50 after shimming.
+- Next tried: **worked around in-harness, D0 then PASSED the same day.**
+  `lab/graft_d0_parity.py` now auto-deploys two ROCm shims at `load_donor`
+  (no-op off HIP): (a) `_can_use_grouped_mm -> False` so transformers uses
+  its own `grouped_mm_fallback` (per-expert `torch.mm`, rocBLAS); (b)
+  `_rocm_safe_experts_forward` — identical SwiGLU-merge math with the
+  grouping sort done on CPU (S is a few thousand elements; microseconds).
+  Result on GPU 0: logit cos 0.99913, ΔCE +0.00075, per-layer MoE cos 0.9952,
+  top-k agree 0.837 — full verdict in HANDOFF "D0 GATE RUN: PASS" and
+  `lab/imported/graft_d0/olmoe_d0.json` (untracked). Fallback if a future
+  donor still trips a missing kernel: run with `AMD_SERIALIZE_KERNEL=3`,
+  probe the op table, shim or move to MI300X.
+
 ## 2026-10-11 — mi50-fullft-sft-gate — fla/Triton kernels cannot compile on gfx906 (MI50 box)
 - Evidence: `lab/smi50_smoke_gate.py` on `tliao@100.64.0.7` GPU 0 (torch
   2.9.1+rocm6.4, pytorch-triton-rocm 3.5.1, fla 0.6.0@37a6b1c+patches): all 4
