@@ -1352,3 +1352,25 @@ crash at step 15 leaving step_14/checkpoint.pt + traceback.
 epilogue (it saves at every eval_interval, so its loss window is only
 eval_interval steps) — port the terminal trigger before the next dense run.
 Vesper-K pretrain unblocked on this bug.
+
+---
+
+## 2026-10-11 ~15:00 UTC — LAPTOP OFFLINE PAUSE #2 (user at hackathon again)
+
+Safe-shutdown wrap. State at pause: everything committed through e64fcfa.
+**Done this session:** D0 PASS (c837c4d) + D2 PASS cross-family Phi-mini-MoE
+(fa6ad0f) + D1 PASS with mass-cal recipe owner_mass 0.35/reject_w 10/out_pen
+300 (e64fcfa; quality sub-gate open — expert-fit at delivered-mass is the
+named next branch) + passport sweep complete (19cf4ed: sat at dim64=gate
+rank, recal mandatory, 8MB spine + 256B/expert) + D1.5 FAIL (transplant
+dead, serving-layer fallback) + trainer 3990-vanish FIXED (364d544) + SFT r2
+NOT talkable (d1add87 — base pretrain is the binding limit).
+**Interrupted:** agent-34 (SFT r2 recipe on box 429M step_3000) was still in
+setup, no box job launched — resume from scratch on return (brief: SFT the
+step_3000 pre-switch ckpt per 470m_k_sft_r2 on the free box P40s, eval_chat,
+talkable verdict).
+**On return:** restart farm runner (systemd-inhibit + lab/runner.py --slots 1
+--watch); box P40s are free (429M run ended; step_3000/step_3500 ckpts
+saved); MI50 box idle & available again (GPUs 0,3-7, never 1&2 hackathon);
+budget call still open: MI300X pretrain tokens ~$65-200 (recommended) vs
+nothing. v2 SFT result comparison pending. Cron coalesces while offline.
