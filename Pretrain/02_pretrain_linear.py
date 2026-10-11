@@ -52,6 +52,7 @@ import time
 import datetime
 import json
 import shutil
+import traceback
 
 import torch
 
@@ -375,6 +376,68 @@ def train():
         train_iter = iter(streams.train_pre)
         current_phase = 1
 
+    _last_completed_step = start_step - 1
+
+    def _build_checkpoint(step):
+        ckpt = {
+            'model_config': model_config,
+            'model': model.module.state_dict() if is_distributed else model.state_dict(),
+            'muon_state': optimizers['muon'].state_dict() if optimizers else None,
+            'adamw_state': optimizers['adamw'].state_dict() if optimizers else optimizer.state_dict(),
+            'step': step,
+            'train_loss_history': train_loss_history,
+            'val_loss_history': val_loss_history,
+            'tokens_trained': total_tokens_trained,
+            'tokens_generated': total_tokens_generated,
+            'phase1_stream_state': phase1_stream.get_state(),
+            'phase2_stream_state': phase2_stream.get_state(),
+            'val_stream_state': (val_stream.get_state()
+                                 if val_stream is not None else None),
+            'best_val_loss': best_val_loss,
+        }
+        if route_nonphase:
+            ckpt['nonphase_stream_state'] = (
+                nonphase_stream.get_state() if nonphase_stream is not None else None)
+            ckpt['val_group_stream_states'] = {
+                g: s.get_state() for g, s in val_group_streams.items()}
+        return ckpt
+
+    def _write_checkpoint(ckpt, step):
+        # Only step_N dirs that actually contain checkpoint.pt may exist —
+        # get_latest_checkpoint resumes from the highest step_N and a dir
+        # without a checkpoint breaks resume (HANDOFF trap).
+        ckpt_dir = os.path.join(checkpoint_dir, f"step_{step}")
+        os.makedirs(ckpt_dir, exist_ok=True)
+        try:
+            shutil.copy(os.path.join(_common, MODEL_SNAPSHOT_NAME),
+                        os.path.join(ckpt_dir, "vesper_linear_model_snapshot.py"))
+            shutil.copy(__file__, os.path.join(ckpt_dir, f"{os.path.basename(__file__)}_snapshot.py"))
+        except Exception as e:
+            print(f"Warning: Could not save code snapshots: {e}")
+        p01.print_model_stats(model, model_config, save_path=os.path.join(ckpt_dir, "model_stats.txt"))
+        torch.save(ckpt, os.path.join(ckpt_dir, "checkpoint.pt"))
+        return ckpt_dir
+
+    def _emergency_excepthook(exc_type, exc, tb):
+        # Any uncaught failure must leave a traceback AND a checkpoint in the
+        # log/artifacts — the t3 and box-429M runs "vanished" with neither.
+        traceback.print_exception(exc_type, exc, tb)
+        print(f"[!] {exc_type.__name__} while training (last completed step "
+              f"{_last_completed_step}): {exc}", flush=True)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        if is_main:
+            try:
+                saved = _write_checkpoint(_build_checkpoint(_last_completed_step),
+                                          _last_completed_step)
+                print(f"[!] emergency checkpoint saved: {saved}/checkpoint.pt", flush=True)
+            except Exception as e:
+                print(f"[!] emergency checkpoint save failed: {e!r}", flush=True)
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+    sys.excepthook = _emergency_excepthook
+
     for step in range(start_step, total_steps):
 
         # Cooperative vLLM yield (same as 01)
@@ -456,6 +519,7 @@ def train():
             optimizer.step()
 
         train_loss_history.append((step, accumulated_ce_loss))
+        _last_completed_step = step
 
         if is_main and step % 10 == 0:
             t1 = time.time()
@@ -482,7 +546,10 @@ def train():
                 f"CE Loss: {accumulated_ce_loss:.4f} | Aux: {accumulated_aux_loss:.4f} | VRAM: {mem:.1f}GB"
             )
 
-        if step > 0 and step % eval_interval == 0:
+        # Eval on the interval AND at the final step: range(start, total_steps)
+        # never steps `total_steps` itself, so without the terminal trigger the
+        # end-of-run eval/save silently never fires (t3 + box 429M vanish).
+        if step > 0 and (step % eval_interval == 0 or step == total_steps - 1):
             model.eval()
             val_loss = 0.0
             group_losses = {g: [] for g in ('phase1', 'phase2', 'nonphase')}
@@ -563,38 +630,9 @@ def train():
                 for pr, gen in zip(p01.EVAL_PROMPTS, generated_texts):
                     print(f"Prompt: {pr}\nOutput: {gen}\n" + "-" * 30)
 
-                ckpt = {
-                    'model_config': model_config,
-                    'model': model.module.state_dict() if is_distributed else model.state_dict(),
-                    'muon_state': optimizers['muon'].state_dict() if optimizers else None,
-                    'adamw_state': optimizers['adamw'].state_dict() if optimizers else optimizer.state_dict(),
-                    'step': step,
-                    'train_loss_history': train_loss_history,
-                    'val_loss_history': val_loss_history,
-                    'tokens_trained': total_tokens_trained,
-                    'tokens_generated': total_tokens_generated,
-                    'phase1_stream_state': phase1_stream.get_state(),
-                    'phase2_stream_state': phase2_stream.get_state(),
-                    'val_stream_state': (val_stream.get_state()
-                                         if val_stream is not None else None),
-                    'best_val_loss': best_val_loss,
-                }
-                if route_nonphase:
-                    ckpt['nonphase_stream_state'] = (
-                        nonphase_stream.get_state() if nonphase_stream is not None else None)
-                    ckpt['val_group_stream_states'] = {
-                        g: s.get_state() for g, s in val_group_streams.items()}
-                if step % 500 == 0:
-                    ckpt_dir = os.path.join(checkpoint_dir, f"step_{step}")
-                    os.makedirs(ckpt_dir, exist_ok=True)
-                    try:
-                        shutil.copy(os.path.join(_common, MODEL_SNAPSHOT_NAME),
-                                    os.path.join(ckpt_dir, "vesper_linear_model_snapshot.py"))
-                        shutil.copy(__file__, os.path.join(ckpt_dir, f"{os.path.basename(__file__)}_snapshot.py"))
-                    except Exception as e:
-                        print(f"Warning: Could not save code snapshots: {e}")
-                    p01.print_model_stats(model, model_config, save_path=os.path.join(ckpt_dir, "model_stats.txt"))
-                    torch.save(ckpt, os.path.join(ckpt_dir, "checkpoint.pt"))
+                ckpt = _build_checkpoint(step)
+                if step % 500 == 0 or step == total_steps - 1:
+                    _write_checkpoint(ckpt, step)
 
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
@@ -642,13 +680,28 @@ def train():
                     plt.savefig(os.path.join(checkpoint_dir, "loss_curve.png"), dpi=150)
                     plt.close()
 
-                if step % 500 == 0:
+                if step % 500 == 0 or step == total_steps - 1:
                     print(f">>> Saved checkpoint to: {checkpoint_dir}/step_{step}")
                 print(f"    Total tokens trained: {total_tokens_trained:,}\n")
 
             t0 = time.time()
             if is_distributed:
                 torch.distributed.barrier()
+
+    sys.excepthook = sys.__excepthook__
+    if is_main:
+        steps_run = max(0, total_steps - start_step)
+        if steps_run:
+            print(f"\n[TRAINING COMPLETE] steps {start_step}..{total_steps - 1} done "
+                  f"({steps_run} steps) | final checkpoint: "
+                  f"{checkpoint_dir}/step_{total_steps - 1} | "
+                  f"tokens trained: {total_tokens_trained:,} | "
+                  f"best val loss: "
+                  f"{best_val_loss if best_val_loss != float('inf') else 'n/a'}")
+        else:
+            print(f"\n[TRAINING COMPLETE] nothing to run "
+                  f"(start_step {start_step} >= total_steps {total_steps})")
+        sys.stdout.flush()
 
     if is_distributed:
         torch.distributed.destroy_process_group()
