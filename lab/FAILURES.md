@@ -18,6 +18,51 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-11 — door3-distill-quality — Door 3 behavioral distillation into a fresh plug-in expert: formal D1 bars PASS but the quality sub-gate FAILS harder than the D1 toy (held-out home CE 8.07 active vs 1.83 masked) — the donor skill IS cloned at forced dispatch (KL-to-donor 5.17→2.59) but delivery through the softmax-mass row destroys it (plugged KL 6.63)
+- Evidence: `lab/door3_distill_expert.py` on `tliao@100.64.0.7` **GPU 4**
+  (fp16, HIP shims, detached `setsid`, synthetic 17/17). Teacher =
+  Phi-mini-MoE @ f620b32c (7.65B), host = OLMoE-1B-7B-0924 @ 6d84c485 +
+  `registry_olmoe_6d84c485.pt`, home domain = codeparrot + open-web-math
+  slices (`/data/tliao/graft_d0_slice/{code,math}.txt` — the same data files
+  the wrap lane uses). Cross-tokenizer KL defined over the shared single-token
+  decode set (S = 12,480 strings; char-offset alignment, exact-boundary frac
+  0.92 code / 0.98 math; teacher row coverage 1.0). Wall 1381 s, peak VRAM
+  19.8 GiB. Recipe: `KL(teacher||student)` coef 1.0 + GT CE 0.3 + out_pen 300
+  (forced dispatch, 200 steps @ 1e-4) → row recal owner_mass 0.35 / reject_w
+  10 / mass_w 2 (400 steps + 200 on-trajectory). Box
+  `/data/tliao/graft_d3_out/door3_distill.json` + `lab/imported/graft_d3/`
+  (untracked).
+- Numbers: formal bars — parity cos **0.951** (≥0.95, tight: token-cos std
+  0.129, min −0.67; base CE Δ+0.77), retention **3.216** (≥0.70, but gains
+  +0.27 solo / +0.88 lib = the same lib>solo metric artifact as att-3),
+  contamination **0.133** (≤0.30), §6 utilization **0.959** (>0.50). Quality
+  (held-out home CE) **1.83 masked → 8.07 active** (Δ+6.24; per-slice code
+  1.53→9.24, math 2.13→6.90) — **FAIL**, larger gap than D1 att-4's
+  1.26→12.58 ratio. In-situ home routing mass **0.911** vs owner_mass target
+  0.35 (gate p_new_code 0.774 after the on-trajectory round). Distill
+  fidelity, held-out KL(teacher‖student) over 31,682 positions:
+  masked **5.17** → forced/solo **2.59** → plugged **6.63**.
+- Root cause: **delivered-mass mismatch, now measured with a real (non-tiny)
+  delta**. Phase A trains e_new at forced gain 1.0 (composition
+  `stock + e_new`); delivery is `~0.09·stock + 0.91·e_new` (with
+  `norm_topk_prob=false` the softmax mass IS the merge scale), so the plugged
+  model is not the trained model. The clone itself is real — forced delivery
+  halves KL to the donor on held-out text — and it still collapses under
+  passport-mass delivery. Same failure signature as `d1-plugin-pass-1`'s open
+  s6_quality sub-gate (att-4: tiny delta, mass ~0.85, CE 1.26→12.58);
+  distillation does NOT rescue quality by itself because the blocker is the
+  delivery contract, not expert expressiveness.
+- What it rules out: "train a better expert (distill it from a stronger donor)
+  and the D1 quality gate will pass under the mass-cal recipe" — NO. Door 3's
+  §10.3 fallback claim holds only at the forced/solo interface (behavior is
+  hostable: KL 5.17→2.59); passport-mass delivery is the shared blocker for
+  both the wrap (2.5) and distill (3) lanes at quality level.
+- Next tried (named branch, queued): **expert-fit at delivered-mass** — train
+  the delta at the routing weight it will actually receive (or deliver
+  additively at a fixed small weight instead of competing for softmax mass).
+  This is D1 att-4's named next branch and is now the single blocker for any
+  §10 head-to-head to be meaningful on the quality read.
+
 ## 2026-10-11 — d2-crossfamily-perlayer — foreign-family graft (Phi-mini-MoE sparsemixer): logit parity PASSES (cos 0.9986, dCE +0.030) but per-layer MoE gates MISS (cos 0.864 < 0.9, top-k agree 0.651 < 0.8)
 - Evidence: `lab/imported/graft_d2/phimoe_d2.json` + `phimoe_d2_reparity.json`
   (88,064 val tokens, MI50 box GPU 5, fp16, prototype+recal 300×2,

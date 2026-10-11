@@ -863,6 +863,24 @@ home domain (donor runs, produces scores/generations; host expert distills).
 No feature compatibility needed. Fidelity loss + distillation compute, but
 "any model's specialty becomes one of my plug-ins" always works.
 
+**STATUS 2026-10-11 (`lab/door3_distill_expert.py`, MI50 GPU 4): expert-level
+PASS / delivery-level FAIL on the quality gate.** Donor Phi-mini-MoE @f620b32c
+→ fresh OLMoE plug-in (D1 path, registry `registry_olmoe_6d84c485.pt`,
+mass-cal owner_mass 0.35 / reject_w 10 / out_pen 300), home = codeparrot +
+open-web-math slices (same files as the Door 2.5 wrap lane). Cross-tokenizer
+KL over the shared single-token decode set (S=12,480; char-offset alignment,
+exact-boundary 0.92/0.98). Held-out KL(teacher‖student) 5.17 → 2.59 under
+forced dispatch (behavior IS cloned) but → 6.63 when delivered through the
+passport-mass row (in-situ home mass 0.911 vs 0.35 target; `norm_topk_prob=false`
+makes mass the merge scale, so the delivered composition ≠ trained
+composition). Formal D1 bars PASS (parity 0.951, retention 3.22 with the
+att-3 lib>solo artifact caveat, contam 0.133, util 0.959); s6 quality FAIL
+(held-out home CE 1.83 masked → 8.07 active). Shared blocker with D1's toy
+plug-in and the Door 2.5 wrap comparison at quality level is the delivery
+contract, not what the expert was trained from — next branch: expert-fit at
+delivered-mass (or additive fixed-weight delivery). Numbers: HANDOFF §10
+Door 3 + `lab/FAILURES.md` door3-distill-quality.
+
 Composition: models in the format swap experts natively (10.1); out-of-format
 donors are grabbed by wrap (10.2) or distilled (10.3). Registry economics
 (§9 sweep: ~8MB spine artifact, 256B/row at d_canon=64) are unchanged — the

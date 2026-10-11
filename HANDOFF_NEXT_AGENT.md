@@ -41,6 +41,75 @@ data first.
 
 ---
 
+## 2026-10-11 — MODULAR_MOE §10 **Door 3 (behavioral distillation): formal D1 bars PASS on the mass-cal recipe, s6 quality sub-gate FAILS — but the skill IS cloned at forced dispatch (held-out KL-to-donor 5.17→2.59); delivery composition, not expressiveness, is the blocker** (MI50 box, GPU 4 only, fp16)
+
+**Door 3 = the §10.3 behavioral-distillation counterpart to Door 2.5's
+weight-wrap**: train a FRESH OLMoE-graft plug-in expert (the D1 path) to
+imitate a donor skill's behavior, so the parent can compile a head-to-head
+grab table (wrapped foreign weights vs distilled behavior). Harness
+`lab/door3_distill_expert.py` (imports the D0 core + D1 plug-in path — do not
+re-break those; synthetic 17/17). Teacher **Phi-mini-MoE @ f620b32c**
+(slimmoe→native load vendored from `graft_d2_crossfamily.py` so this lane does
+not depend on the wrap lane's WIP edits), host OLMoE-1B-7B-0924 @ 6d84c485 +
+`registry_olmoe_6d84c485.pt`, **home = codeparrot + open-web-math slices of
+`/data/tliao/graft_d0_slice/{code,math}.txt` — the same data files the wrap
+lane uses (fairness contract)**. Run: detached `setsid`, GPU 4
+(`HIP_VISIBLE_DEVICES=4`), wall **1381 s**, peak VRAM **19.8 GiB**, box
+`/data/tliao/graft_d3_out/door3_distill.json` (+ `lab/imported/graft_d3/`,
+untracked).
+
+**Cross-tokenizer distillation definition** (both tokenizers differ; recorded
+in the JSON): shared support S = strings that single-token decode identically
+in both vocabs (**12,480 strings**); positions aligned by char offsets (soft
+target for student token k = teacher next-token dist at the teacher token
+covering k's start; exact-boundary frac 0.9217 code / 0.9806 math, teacher row
+coverage 1.0); both dists log-softmax renormalized over S; loss =
+**KL(teacher‖student)**. Teacher soft targets precomputed once (VRAM-safe:
+teacher and host never co-resident), fp16 cache, 148 s.
+
+**Recipe (as specified):** forced-dispatch fit of 16 zero-init SwiGLU deltas
+at `KL + 0.3·GT-CE + 300·off-domain L2` (200 steps @ 1e-4), then the D1
+mass-calibration recal **owner_mass 0.35 / reject_w 10 / mass_w 2**
+(400 steps + 200 on-trajectory). Phase-A KL 155.5 → **1.44** (train);
+Phase-B p_new_code 0 → 0.774, p_new_base 0 → 0.024 (after the on-trajectory
+round).
+
+**Gate table (for the §10 comparison — wrap lane reports separately):**
+
+| gate | bar | Door 3 (distill) | verdict |
+|---|---|---|---|
+| base parity cos | ≥0.95 | **0.9510** (std 0.129, min −0.67; base CE Δ+0.77) | PASS (tight) |
+| retention vs solo | ≥0.70 | **3.216** (gains +0.27 solo / +0.88 lib) | PASS w/ att-3-style lib>solo artifact caveat |
+| contamination | ≤0.30 | **0.1328** | PASS |
+| §6 utilization | >0.50 | **0.9592** (in-situ home mass 0.911) | PASS |
+| §6 quality CE active<masked | must hold | held-out **8.068 vs 1.830** (Δ+6.24) | **FAIL** |
+
+Quality per slice (held-out): code 1.525→9.243 (Δ+7.72), math 2.133→6.895
+(Δ+4.76). Base CE 2.345 masked → 3.118 plugged.
+
+**Distill-native fidelity read (the Door-3 headline number):** held-out
+KL(teacher‖student) over 31,682 positions — masked **5.17** → solo/forced
+**2.59** → plugged **6.63**. I.e. **the donor's behavior IS successfully
+distilled into the fresh expert at the trained (forced) composition — a 50%
+KL reduction — but passport-mass delivery degrades it below the masked
+baseline.** In-situ home routing mass 0.911 vs the 0.35 target (the CE router
+term dominates, same as D1 att-4), and `norm_topk_prob=false` makes that mass
+the merge scale: delivered composition ~0.09·stock + 0.91·e_new ≠ trained
+`stock + e_new`. Root-cause detail + the named next branch (expert-fit at
+delivered-mass / additive fixed-weight delivery) in `lab/FAILURES.md`
+`door3-distill-quality`.
+
+**Status for §10:** Door 3 delivers the universal fallback at the *expert*
+level (behavior is hostable — any model's specialty becomes a plug-in expert
+that halves KL to the donor) and FAILS at the *delivery* level exactly where
+D1's toy expert failed — the shared blocker for the §10.3 vs §10.2 comparison
+to read on quality is the softmax-mass delivery contract, not what the expert
+was trained from. Formal D1 bars (parity/retention/contam) all PASS on the
+mass-cal recipe, so routing is intact; only quality is open. Wrap-lane
+comparison owner (GPU 3) should report the same five rows for the compile.
+
+---
+
 ## 2026-10-11 — MODULAR_MOE §9 **D2 attempt 1 (cross-family graft): PASS on the user bars — passport interface generalizes to Phi-mini-MoE (sparsemixer router)** (MI50 box, GPU 5 only, fp16)
 
 **D2 = graft a FOREIGN-FAMILY open MoE through the same passport/registry
