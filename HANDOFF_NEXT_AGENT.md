@@ -41,6 +41,74 @@ data first.
 
 ---
 
+## 2026-10-12 — MODULAR_MOE §10.5 **Door 8b BANK-SCALE DEMAND (the v2 freeze gate): one wrapped core recovers 57.7% (rank 64) / 47.2% (rank 512) of a FULL LAYER's expert-bank demand (+0.0793 / +0.0650 nats of a +0.1376 nat layer-mask cost) — MARGINAL band, SHORT of the ≥80% freeze bar; per-slot redundancy is high but the bank is load-bearing as a whole; run-3 width-norm curve folded in (64 still the best carrier)** (MI50 box GPU 0, fp16; m=2/1 arms + chain continuing detached)
+
+**Q (the last gate before the v2 all-grafted-bank format freezes): can
+wrapped cores carry a FULL LAYER's expert demand?**  Bars: recovery ≥80% of
+the layer-mask CE cost at rank ≤512 = FREEZE-able; 50-80% = marginal;
+<50% = not at one core.  Harness `lab/door8_bridge_width.py --bank-test`
+(fork-ext of door8; d0/d1/d2/door25 UNMODIFIED), synthetic **16/16**
+(incl. a full mock smoke of the bank pipeline — two NameErrors in the
+bank branch were caught this way before GPU time was burned).
+
+**Protocol.** Same host/generalist core/general text as Door 8 run-1
+(Phi L3 e8 mushiness 0.9998 frozen; OLMoE; 137k/32k/32k tok; site = run-1's
+L2).  Demand sweep = how many of the layer's routed experts are masked
+(exact slot zeroing, norm_topk_prob=false): **1** (top-1 = e7), **2**
+(top-2), **all** (every expert at L2 — the whole layer bank).  One wrapped
+core stands in per arm (width-norm init; rank 64 + rank 512), additive
+delivery with fitted λ (grid extended below 0.25 per the run-1 note),
+membership-gated variant (wrap stands in only on tokens that routed into
+the masked set) read on every arm.
+
+**Demand-vs-cost and demand-vs-recovery (gen_heldout, n=31.7k tok):**
+| demand | masked | CE stock | CE masked | mask cost | rank | graft@λ* | nats recovered | recovery% |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | 2.3463 | 2.3485 | +0.0022 | 64 | 2.2874 | +0.0611 ± 0.0099 | 2723% |
+| 2 | 2 | 2.3463 | 2.3489 | +0.0026 | 64/512 | (chain) | — | — |
+| **all** | 64 | 2.3463 | **2.4839** | **+0.1376** | **64** | **2.4046** (λ 0.3125) | **+0.0793 ± 0.0132** | **57.7%** |
+| **all** | 64 | 2.3463 | 2.4839 | +0.1376 | **512** | 2.4189 (λ 0.225, lr 1.5e-3 fb) | +0.0650 ± 0.0120 | **47.2%** |
+
+val_mixed mirrors the all-mask cost (+0.1004: 1.4952 → 1.5956).  Three
+findings: (1) **the layer denominator is real** — killing the whole bank
+costs 62× a single expert (+0.138 vs +0.0022 nats); (2) **per-slot
+redundancy is high** — top-2 mask cost (+0.0026) ≈ top-1 (+0.0022); the
+bank is load-bearing as a distributed whole, not slot-by-slot; (3) **rank
+64 beats 512 again** at demand-all (57.7% vs 47.2%; 512 still NaNs at
+3e-3 even width-norm — the 1.5e-3 fresh-init fallback trains it) — the
+door8 width story is consistent: 64 is the sweet spot at this recipe/step
+budget.  Membership-gated delivery is **degenerate at demand-all**
+(gated CE == forced to 4 decimals: every token routes into a 64-expert
+mask) — only meaningful at m=1/2.
+
+**Freeze verdict: MARGINAL — one wrapped core per layer recovers 47-58% of
+the layer demand at rank ≤512, in the 50-80% band, SHORT of the ≥80% bar.**
+The format is NOT freeze-able on one-core-per-layer standing-in.  But the
+endgame bank is inherently multi-core per layer (one graft per native
+slot): here ONE core already carries half the layer, and door6 measured
+exactly-additive composition (0.996×), so 2-3 rank-64 cores project past
+80% — the multi-core standing-in run is the single queued confirmation
+before freeze (no format change implied).  Demand=2/1 arms + membership
+reads at m=2/1 land in the chain (box `door8_bank_a*.json`).
+
+**Run-3 width-norm curve (folded in — what changed vs run-1):** the
+width-norm init makes 256/512/1024 TRAINABLE (run-1: 512/1024 NaN, 256
+net-harmful): 256 → +0.0044 ± 0.0103 nats (noise), **512 → +0.0442 ±
+0.0105 nats (2nd best, λ 0.25, lr 1.5e-3 fallback)**, 1024 → 0 (λ*=0).
+Rank 64 keeps the largest delta (+0.0611).  Secondary code@512 (the wide
+specialty re-check) is WORSE than code@64 (train 1.0263 @λ 2.25 / held
+1.9613 vs 0.1458 / 1.892) — the rank-64 sweet spot again.
+
+**Ops:** GPU 0 (0/4-7 free at launch; map stable this session), detached
+`setsid` 3-attempt OOM-retry chain (`door8_bank_launch.sh`, per-attempt
+JSONs `door8_bank_a*.json`), incremental dumps per arm, NaN guard + fresh-
+init lr fallback (which the demand-all 512 arm used), numeric-only.
+Harness bugs caught by the mock smoke before launch: `device` NameError in
+the bank branch (attempt-1/2 of the first chain burned on it — chain
+killed, smoke added, relaunched).  Code+docs only.
+
+---
+
 ## 2026-10-12 — MODULAR_MOE §10.5 **Door 8 BRIDGE WIDTH (the all-grafted-bank make-or-break): a 64-wide wrap OVER-RECOVERS one native expert's general-LM job (gen_heldout CE 2.287 vs stock 2.346 vs N-masked 2.3485) — the bottleneck does NOT kill general traffic at expert-replacement scale — but the door25 recipe does not scale in width (rank ≥256 explodes at lr 3e-3; width-normalized init is the v2 rule) and the single-expert demand itself is tiny (+0.0022 nats)** (MI50 box GPU 0 run-1, fp16; width-norm run-3 retry-chain detached in flight)
 
 **Q (the endgame's load-bearing measurement): how wide must the wrap bridge
@@ -128,16 +196,21 @@ synthetic-checked) + fresh reinit before any lr fallback.
 door25 init nan_aborts like the generalist arms.  Specialty quality is not
 lost by using a generalist core and is not limited by the 64-wide bridge.
 
-**Run-3 (width-norm) first points (in flight, attempts continue detached at
-box `/data/tliao/graft_door8_out/door8_width_p2_a*.json`):** d_canon 256
-trains to a **mildly positive** wrap (λ*=0.125, gen_heldout **2.3441** vs
-masked 2.3485 — recovery 197% = +0.0044 nats; the door25-init 256 was
-net-harmful with λ*=0), and d_canon 512 trains **healthy** past step 150 at
-lr 3e-3 (|y| ~8e-3, no explosion — the init fix removes the NaN family);
-1024 follows.  So the width-norm fix converts "untrainable/ harmful" into
-"trainable", while the best absolute general-LM delta still sits at rank 64
-(+0.061 nats at λ=0.25 vs +0.004 at 256) — wider bridges are not yet showing
-more general capacity at this recipe/step budget.
+**Run-3 (width-norm) COMPLETE — the init fix makes wide ranks trainable;
+rank 64 is still the best carrier (non-monotone in width):**
+| d_canon | trainable | lr | λ* | gen@λ* | nats recovered | recovery% |
+|---|---|---|---|---|---|---|
+| 64 (run-1) | 786,432 | 3e-3 | 0.25 | **2.2874** | +0.0611 ± 0.0099 | 2723% |
+| 256 | 3,145,728 | 3e-3 | 0.125 | 2.3441 | +0.0044 ± 0.0103 | 197% (noise-level) |
+| 512 | 6,291,456 | 1.5e-3 (fallback) | 0.25 | 2.3044 | +0.0442 ± 0.0105 | 1969% |
+| 1024 | 12,582,912 | 1.5e-3 (fallback) | 0.0 | 2.3485 | 0 | 0% |
+
+512 still NaN'd at 3e-3 under width-norm (fresh-init 1.5e-3 fallback trained
+it); 1024 trained but is net-harmful (λ*=0).  "How wide must the bridge be"
+→ **64 is enough; wider is not better at this recipe/step budget** — width
+is not the binding constraint.  Secondary code@512 (generalist core, the
+wide-rank specialty re-check) is WORSE than code@64 (train 1.0263 @λ 2.25 /
+held 1.9613 vs 0.1458 / 1.892) — the rank-64 sweet spot again.
 
 **Final verdict (v2 feasibility line): FEASIBLE — ≥80% recovery at rank
 ≤512 is met at rank 64 itself** (the run-1 in-harness verdict line:

@@ -1044,18 +1044,24 @@ natural scale and explodes the fp16 residual (|y| 2.2 at 512 step 25 ->
 NaN; the half-lr fallback then NaN'd at step 1 from the poisoned weights).
 **Fix = width-normalized init** (adapter_up/down x sqrt(64/d_canon),
 composite scale pinned at the verified 64 geometry — the v2 format's init
-rule) + fresh reinit before any lr fallback.  **Run-3 (width-norm, in
-flight; first points landed): 256 trains to a MILDLY POSITIVE wrap**
-(lam*=0.125, gen_heldout 2.3441 vs masked 2.3485 — recovery 197% = +0.0044
-nats; the door25-init 256 was net-harmful at lam*=0), and **512 trains
-HEALTHY at lr 3e-3 past step 150** (|y| ~8e-3, no explosion — the init fix
-removes the NaN family); 1024 follows.  Specialty re-check (secondary, run-1
-complete): the SAME generalist core on code at d_canon 64 fits the specialty
-(code train CE 0.1458 at lam=1, held-out 1.892 — comparable to door25's
-code-specialist L13e8 forced 0.101/1.950 and with the same held-out
-memorization gap), while code@512 at door25 init nan_aborts like the
-generalist arms — specialty quality is not lost with the generalist core and
-not limited by the 64 bridge; wide-rank specialty pending run-3.
+rule) + fresh reinit before any lr fallback.  **Run-3 COMPLETE (width-norm
+init) — the fix makes wide ranks trainable, but rank 64 remains the best
+carrier:**
+| d_canon | trainable | lr | lam* | gen@lam* | nats recovered | recovery% |
+|---|---|---|---|---|---|---|
+| 256 | 3,145,728 | 3e-3 | 0.125 | 2.3441 | +0.0044 +- 0.0103 | 197% (noise-level) |
+| 512 | 6,291,456 | 1.5e-3 (fallback) | 0.25 | 2.3044 | +0.0442 +- 0.0105 | 1969% |
+| 1024 | 12,582,912 | 1.5e-3 (fallback) | 0.0 | 2.3485 | 0 | 0% |
+
+vs run-1's 64 (2.2874, +0.0611 nats).  Non-monotone in width: 64 > 512 >
+256 ~ 1024.  512 still NaN'd at 3e-3 under width-norm (the fresh-init
+1.5e-3 fallback trained it); 1024 trained but is net-harmful (lam*=0).  So
+the answer to "how wide must the bridge be" is **64 is enough — wider is
+not better at this recipe/step budget**; width is not the binding
+constraint.  Specialty re-check (secondary): the generalist core on code
+fits at 64 (train 0.1458 / held 1.892, door25 comparables 0.101/1.950) but
+is WORSE at 512 (train 1.0263 @lam 2.25 / held 1.9613) — same rank-64
+sweet spot.
 
 **Verdict (v2 feasibility line, run-1): FEASIBLE at rank 64 for the
 expert-replacement demand** — a grafted generalist over-recovers one native
@@ -1071,9 +1077,37 @@ of 0.0022 nats is itself a design input: on a 64x-top-8 host, "one native
 expert's job" is a small demand — the endgame bank test should be read at
 bank scale (all-top-k masked), the queued follow-up.  Secondary (code
 specialty at wide rank) + the membership-gated delivery arm (door25
-site-with-membership) follow run-3.  Numbers: HANDOFF Door 8 +
+site-with-membership) follow run-3.  **Bank-scale demand test (the v2 freeze gate, `--bank-test`, run at the
+run-1 site L2; demand = how many of the layer's routed experts are masked
+(exact slot zeroing), one wrapped core standing in per arm, width-norm init,
+lam grid extended below 0.25):**
+| demand | mask | CE stock | CE masked | mask cost | graft@lam* (rank 64) | nats recovered | recovery% |
+|---|---|---|---|---|---|---|---|
+| 1 (top-1 e7) | 1 | 2.3463 | 2.3485 | +0.0022 | 2.2874 (run-1) | +0.0611 | 2723% |
+| 2 (top-2) | 2 | 2.3463 | 2.3489 | +0.0026 | (in flight) | — | — |
+| **all (full bank)** | 64 | 2.3463 | **2.4839** | **+0.1376** | **2.4046** (lam 0.3125) | **+0.0793 +- 0.0132** | **57.7%** |
+
+rank 512 at demand-all: CE 2.4189 (lam 0.225, lr 1.5e-3 fallback — 3e-3
+NaNs even width-norm at this demand), +0.0650 +- 0.0120 nats, **47.2%**.
+val_mixed mirrors (masked 1.5956 vs stock 1.4952, cost +0.1004).  The
+layer denominator is real (+0.138 nats = 62x the single-expert cost) and
+per-slot redundancy is high (top-1 and top-2 mask costs are near-identical
+at +0.0022/+0.0026 — the bank is load-bearing as a distributed whole).
+Cheap membership-gated delivery (wrap stands in only on tokens that routed
+into the masked set) is **degenerate at demand-all** (gated CE == forced CE
+to 4 decimals — every token routes into a 64-expert mask) and is only
+meaningful at m=1/2.  **Freeze verdict: MARGINAL — one wrapped core per
+layer recovers 47-58% of the layer's expert-bank demand at rank <=512, in
+the 50-80% band, short of the >=80% freeze bar.**  The v2 all-grafted-bank
+format is therefore NOT freeze-able on one-core-per-layer standing-in — but
+the endgame bank IS multi-core per layer (one graft per native slot); door6
+measured exactly-additive composition (0.996x), so 2-3 cores at rank 64
+project past the 80% bar (each core here already carries half the layer).
+Freeze requires the multi-core standing-in confirmation (queued) — one
+clean rung, no format change implied.  Numbers: HANDOFF Door 8 +
 `lab/imported/graft_door8/` (untracked) + box `/data/tliao/graft_door8_out/`
-(door8_width.json, door8_width_p2_a*.json, wraps/, core_gen.pt).
+(door8_width.json, door8_width_p2_a*.json, door8_bank_a*.json, wraps/,
+core_gen.pt).
 
 Composition: models in the format swap experts natively (10.1); out-of-format
 donors are grabbed by wrap (10.2) or distilled (10.3). Registry economics
