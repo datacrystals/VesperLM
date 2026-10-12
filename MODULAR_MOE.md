@@ -1153,17 +1153,25 @@ wrap's capacity (~58% of a full layer):**
 | joint (8c) | 2 | [0.25, 0.15] | 2.4164 | +0.0675 +- 0.0123 | 49.0% |
 | joint (8c) | 3 | [0.10, 0.15, 0.05] | 2.4310 | +0.0529 +- 0.0078 | 38.4% |
 | boosting (1 frozen + 2 residual) | 3 | [0.25, 0.10, 0.10] | 2.4056 | +0.0783 +- 0.0120 | 56.9% |
-| per-slot (8 slots, 8 distinct cores, gated) | 8 | [0.1x6, 0.25, 0.1] | 2.5679 | -0.0840 +- 0.0592 | **-61.0%** |
+| per-slot OUT-of-env (8d) | 8 | [0.1x6, 0.25, 0.1] | 2.5680 | -0.0840 +- 0.0592 | **-61.1%** |
+| per-slot **IN-env** (8e, the endgame shape) | 8 | [0.1x7, 0.25] | 2.4823 | +0.0016 +- 0.0332 | **+1.1%** |
 
-Boosting is flat vs one core (residual gains collapse to 0.1); per-slot is
-WORSE than masked (each slot wrap fit under mask={e} only — atop a LIVE
-layer — then stacked onto a dead one: environment shift; lam=1 -> CE 4.76).
-Freeze input: the per-graft endgame claim stays SAFE (m1 = 2625% of one
-native slot's demand); what saturates is whole-layer replacement by a few
-cores; the one untested hybrid is per-slot DATA fits under the demand=all
-ENVIRONMENT.  Nothing here is adverse to the format itself (64-dim bridge,
-width-norm init, additive lam, registry rows) — every failure is
-composition-mode, not bridge capacity.  Numbers:
+Boosting is flat vs one core (residual gains collapse to 0.1).  **Door 8e
+(the endgame shape: per-slot DATA fits under the demand=all ENVIRONMENT)
+COMPLETE: training atop the dead layer removes the environment-shift harm
+(-61.1% -> +1.1%) but creates NO capacity** (+0.0016 +- 0.033 nats; the
+top-k probe recovers -11.2% of even the COVERED demand => COMPOSITION is
+the binding limit, with top-8 slot coverage a secondary cap at 11.9% of
+the layer's CE demand).  **FREEZE VERDICT: NOT FREEZE-ABLE** — no
+mode/count reaches 80%; the demand=all objective saturates at one rank-64
+wrap's ~58% and multi-wrap composition of any flavor does not add.
+Freeze input: (a) the format itself is not implicated (64-dim bridge,
+width-norm init, additive lam, registry rows — every failure is
+composition/capacity); (b) the per-graft endgame claim stands (m1 = 2625%
+of one slot's demand) but a whole layer needs its FULL graft bank (the
+untested 56 slots carry 88% of demand) with per-graft performance at m1
+level; (c) few-core whole-layer replacement needs more capacity PER wrap,
+not more wraps.  Numbers:
 HANDOFF Door 8d + Door 8c + Door 8 +
 `lab/imported/graft_door8/` (untracked) + box `/data/tliao/graft_door8_out/`
 (door8_width.json, door8_width_p2_a*.json, door8_bank_a*.json, wraps/,

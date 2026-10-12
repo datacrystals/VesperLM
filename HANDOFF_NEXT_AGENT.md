@@ -149,6 +149,64 @@ starvation mode, which is finite-but-dead, reported as-is).
 
 ---
 
+## 2026-10-12 — MODULAR_MOE §10.5 **Door 8e IN-ENV PER-SLOT (the endgame shape, last rung): v2 NOT FREEZE-ABLE — in-env training removes the environment-shift HARM (−61.1% → +1.1%) but creates ~NO capacity (+0.0016 ± 0.033 nats of the +0.1376 cost); the top-k probe (−11.2% of the COVERED demand) says COMPOSITION is the binding limit, not slot coverage; one core (57.8%) remains the best any mode achieves** (MI50 box GPU 0, fp16; top-16 extension chain in flight)
+
+**Q (the last untested hybrid): does per-slot DATA fitting under the
+demand=all ENVIRONMENT (each wrap trained atop the DEAD layer, on its own
+slot's routed traffic) clear the ≥80% bar that out-of-env per-slot (−61%),
+joint (58/49/38%), and boosting (56.9%) all missed?**  Protocol: L2, full
+bank masked (all 64 routed slots zeroed) during training AND delivery —
+the environment the wrap is delivered in — wrap gated per-wrap to its
+slot's traffic (pre-mask routing record), rank-64 width-norm, door25
+recipe (250 steps lr 3e-3 wd 0; all 8 fits ok), joint λ-only combine (no
+joint weight training).  Slots = Door 8d's top-8 (e7,e10,e58,e16,e40,e63,
+e14,e60), same 8 distinct top-mushy Phi cores.  Out-of-env reference wraps
+(8d's saved artifacts) re-evaluated in-run so the in/out table is one JSON.
+
+**In-env vs out-of-env per-slot (gen_heldout; stock 2.3463, all-masked
+2.4839 = +0.1376 cost; top-8-masked 2.3627 = +0.0164 cost):**
+| variant | λ* | CE combined | nats recovered | recovery% | top-k probe CE | top-k probe rec% |
+|---|---|---|---|---|---|---|
+| per-slot OUT-of-env (8d) | [0.1×6, 0.25, 0.1] | 2.5680 | −0.0840 ± 0.0592 | **−61.1%** | 2.4076 | **−273.0%** |
+| per-slot **IN-env** (8e) | [0.1×7, 0.25] | **2.4823** | **+0.0016 ± 0.0332** | **+1.1%** | 2.3645 | **−11.2%** |
+| (1-core ceiling, joint 8c) | [0.30] | 2.4043 | +0.0796 ± 0.0129 | 57.8% | — | — |
+
+**Environment-shift effect, quantified:** training atop the dead layer
+removes ~62pp of harm (−61.1% → +1.1%) — the 8d wraps' per-wrap solos
+degrade in-env for exactly the wraps that hurt at combine (out-env slot 40
+solo CE 2.5296, slot 14 2.5565 vs in-env 2.4795/2.4849; masked 2.4839) —
+but it creates no capacity: +0.0016 ± 0.033 nats is noise, and val_mixed
+is −3.9%.  **Coverage-vs-composition: COMPOSITION is the binding limit** —
+the top-k probe (same 8 wraps delivering under a top-8-only mask) recovers
+−11.2% of even the COVERED demand (top-k CE 2.3645 vs masked 2.3627): the
+bank does not fix the demand its own slots own.  (Secondary structural
+fact: those 8 slots carry only +0.0164 of the +0.1376 — 11.9% of the
+layer's CE demand; the other 56 slots carry 88% — so coverage would cap a
+top-8 bank too, but composition fails first.)
+
+**FREEZE VERDICT: NOT FREEZE-ABLE.**  No mode/count reaches 80% of the
+demand=all cost: 1 core 57.8% (best), joint 2/3 = 49.0/38.4%, boosting 3 =
+56.9%, per-slot out-env 8 = −61.1%, per-slot in-env 8 = +1.1%.  The
+demand=all objective saturates at one rank-64 wrap's ~58%; multi-wrap
+composition of ANY flavor (joint / sequential / per-slot gated, in or out
+of environment) does not add capacity.  Freeze input for v2: (a) the
+FORMAT is not implicated — 64-dim bridge + width-norm init + additive λ +
+registry rows; every failure is composition/capacity, not bridge width;
+(b) the per-graft endgame claim stands (m1 = 2625% of ONE slot's demand)
+but a whole layer needs its FULL bank of grafts (the untested 56 slots
+carry 88% of demand) with per-graft performance at m1 level — top-8
+partial banks cannot substitute; (c) if few-core whole-layer replacement
+is wanted, it needs a different ingredient (e.g. one wide wrap trained on
+the full demand=all objective is already the 58% ceiling — more capacity
+per wrap, not more wraps).  Numbers: box `door8e_inenv_k8_a1.json`
+(complete) + `door8e_inenv_k16_a*.json` (top-16 extension chain in flight
+— reuse of the 8 in-env fits confirmed working).  Ops: detached
+`door8e_launch.sh` 2-phase chain (GPU 0, all GPUs free at launch),
+incremental JSON per fit, NaN guard + width-norm + lr fallback,
+numeric-only.  Code+docs only.
+
+---
+
 ## 2026-10-12 — MODULAR_MOE §10.5 **Door 8d COMPOSITION-MODE FREEZE TABLE — v2 NOT FREEZE-ABLE on the demand=all bar in ANY tested mode: joint 1/2/3 cores 57.8/49.0/38.4%, sequential boosting 3 cores 56.9% (flat vs 1), per-slot bank-shape 8 cores **−61.0%** (worse than masked — single-slot fits don't transfer to the full-bank environment). The demand=all task SATURATES at one rank-64 wrap (~58% of a layer); the per-graft endgame claim (m1 = 2625% of one slot) stays safe** (MI50 box GPUs 0+1, fp16)
 
 **Q (the freeze re-test): does the true bank shape (one wrap per masked
