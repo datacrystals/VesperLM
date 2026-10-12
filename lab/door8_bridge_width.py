@@ -157,39 +157,60 @@ def reinit_wrap(wrap, seed: int = 0, ref_rank: int = 64) -> None:
 
 
 class MaskedPluginMerge:
-    """PluginMerge semantics with exact capacity-removal of one native expert.
+    """PluginMerge semantics with exact capacity-removal of a native expert SET.
 
     The stock merge is `sum_k w_k * e_{idx_k}(h)` with NO renormalization
     (OLMoE norm_topk_prob=false), so zeroing the weight of every slot whose
-    index equals `mask_idx` removes exactly expert N's contribution and
-    leaves the rest of the routing untouched.
+    index is in `mask_idx` removes exactly those experts' contributions and
+    leaves the rest of the routing untouched.  `mask_idx` may be one expert
+    (the single-N protocol) or a list (the bank-scale protocol: top-2, or
+    all of a layer's experts).
 
     Modes (same names as d1.PluginMerge so d1.set_plugin_mode works):
-      off      masked stock merge (N's slots zeroed) — arm (b)
+      off      masked stock merge (masked slots zeroed) — arm (b)
       forced   masked stock + force_gain * e_wrap(h) — arm (c), additive
-               delivery at the site where N lives (door6's y = y_stock +
-               lam * e with membership m == 1)
+               delivery at the masked site (door6's y = y_stock + lam * e
+               with membership m == 1); with `membership_gated=True` the
+               wrap only stands in on tokens whose routed slots hit the
+               masked set (m = 1[k ∩ mask ≠ ∅]) — the cheap routed-
+               membership delivery variant
       plugged  kept for interface parity; unused in the primary curve
     `mask_active=False` restores the plain stock merge (arm (a) via the same
     install, or a bitwise-stock sanity read).
     """
 
     def __init__(self, stock_forward, new_expert, num_stock: int,
-                 mask_idx: int | None = None):
+                 mask_idx=None, membership_gated: bool = False):
         self.stock = stock_forward
         self.new_expert = new_expert
         self.num_stock = num_stock
-        self.mask_idx = mask_idx
-        self.mask_active = mask_idx is not None
+        if mask_idx is None:
+            self.mask_set = []
+        elif isinstance(mask_idx, int):
+            self.mask_set = [int(mask_idx)]
+        else:
+            self.mask_set = [int(e) for e in mask_idx]
+        self.mask_idx = self.mask_set[0] if len(self.mask_set) == 1 else \
+            (self.mask_set or None)
+        self.mask_active = bool(self.mask_set)
+        self.membership_gated = bool(membership_gated)
         self.mode = "off"
         self.force_gain = 1.0
         self.last_new_out = None
 
+    def _slot_mask(self, top_k_index) -> torch.Tensor:
+        m = torch.zeros_like(top_k_index, dtype=torch.bool)
+        for e in self.mask_set:
+            m |= (top_k_index == e)
+        return m
+
     def __call__(self, hidden_states, top_k_index, top_k_weights):
         w = top_k_weights
-        if self.mask_active and self.mask_idx is not None:
-            w = torch.where(top_k_index == self.mask_idx,
-                            torch.zeros_like(top_k_weights), top_k_weights)
+        hit = None
+        if self.mask_active and self.mask_set:
+            hit = self._slot_mask(top_k_index)
+            w = torch.where(hit, torch.zeros_like(top_k_weights),
+                            top_k_weights)
         if self.mode == "off":
             return self.stock(hidden_states, top_k_index, w)
         is_new = top_k_index == self.num_stock
@@ -204,6 +225,9 @@ class MaskedPluginMerge:
         if self.mode == "forced":
             if ne is None or self.force_gain == 0.0:
                 return y
+            if self.membership_gated and hit is not None:
+                m = hit.any(dim=-1).to(ne.dtype).unsqueeze(-1)
+                return y + self.force_gain * m * ne
             return y + self.force_gain * ne
         if ne is None:
             return y
@@ -211,12 +235,14 @@ class MaskedPluginMerge:
         return y + ne * w_new.unsqueeze(-1)
 
 
-def install_masked_plugin(blocks, host_i: int, wrap, mask_idx: int | None) -> list:
-    """Install MaskedPluginMerge at ONE block (the site where N lives)."""
+def install_masked_plugin(blocks, host_i: int, wrap, mask_idx=None,
+                          membership_gated: bool = False) -> list:
+    """Install MaskedPluginMerge at ONE block (the masked site)."""
     blk = blocks[host_i]
     stock_forward = blk.experts.forward
     num_stock = getattr(blk.experts, "num_experts", blk.gate.weight.shape[0])
-    pm = MaskedPluginMerge(stock_forward, wrap, num_stock, mask_idx)
+    pm = MaskedPluginMerge(stock_forward, wrap, num_stock, mask_idx,
+                           membership_gated=membership_gated)
     blk._plugin_merge = pm
 
     def make_fwd(pm=pm):
@@ -444,6 +470,32 @@ def top_expert_per_layer(model, blocks, batches, device, max_batches: int = 4):
                     "slots_per_token": round(float(share[e]), 4),
                     "mean_slots_per_token": round(float(share.mean()), 5)})
     return out
+
+
+@torch.no_grad()
+def top_experts_at_layer(model, blocks, batches, device, layer: int,
+                         m: int | None, max_batches: int = 6) -> tuple:
+    """Top-m routed experts at ONE layer by slots-per-token (m=None -> all).
+    Returns (expert_ids, per_expert_share)."""
+    tap = d0.GateTap(blocks)
+    n_exp = blocks[layer].gate.weight.shape[0]
+    hits = torch.zeros(n_exp)
+    counts = 0
+    for tokens, _ in batches[:max_batches]:
+        tokens = tokens.to(device)
+        tap.clear()
+        d0.model_logits(model, tokens)
+        counts += tokens.numel()
+        idx = tap.idx[layer].reshape(-1)
+        hits += torch.bincount(idx.cpu(), minlength=n_exp).float()
+    tap.close()
+    share = hits / max(1, counts)
+    order = torch.argsort(share, descending=True)
+    if m is None or m >= n_exp:
+        chosen = order.tolist()
+    else:
+        chosen = order[:m].tolist()
+    return chosen, [round(float(share[e]), 4) for e in chosen]
 
 
 @torch.no_grad()
@@ -676,7 +728,7 @@ def paired_recovery(masked_pb, stock_pb, graft_pb) -> dict:
     return out
 
 
-def save_wrap(wrap, args, w: int, arm: dict, host_i: int, n_idx: int,
+def save_wrap(wrap, args, w: int, arm: dict, host_i: int, n_idx,
               kind: str) -> str | None:
     """Checkpoint a trained wrap (adapters only — the core lives in core_gen.pt
     / door25's door25_core.pt) for follow-up delivery/membership runs."""
@@ -691,7 +743,8 @@ def save_wrap(wrap, args, w: int, arm: dict, host_i: int, n_idx: int,
         "wrap": wrap.state_dict(),
         "wrap_spec": wrap.wrap_spec(),
         "host_layer": host_i,
-        "masked_native_expert": n_idx,
+        "masked_native_experts": (n_idx if isinstance(n_idx, list)
+                                  else [n_idx]),
         "lam": arm.get("lam_fit", {}).get("best_lam"),
         "recovery": arm.get("recovery_primary"),
         "status": arm.get("status"),
@@ -701,11 +754,12 @@ def save_wrap(wrap, args, w: int, arm: dict, host_i: int, n_idx: int,
 
 @torch.no_grad()
 def fit_lam_grid(model, blocks, handles, batches, device,
-                 grid=(0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0),
-                 max_batches: int = 8) -> dict:
+                 grid=(0.05, 0.1, 0.15, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0),
+                 max_batches: int = 6) -> dict:
     """Pick the forced-delivery gain that minimizes train CE (the trained
     composition is lam=1; the grid tests whether the delivered scale should
-    differ).  Coarse grid + local refine."""
+    differ).  Grid extends below 0.25 (door8 run-1 hit the floor there) +
+    local refine with a step scaled to the winner."""
     sub = batches[:max_batches]
 
     def ce_at(lam: float) -> float:
@@ -714,9 +768,11 @@ def fit_lam_grid(model, blocks, handles, batches, device,
     t0 = time.time()
     curve = [(lam, ce_at(lam)) for lam in grid]
     best_lam = min(curve, key=lambda p: p[1])[0]
-    lo, hi = max(0.0, best_lam - 0.25), best_lam + 0.25
-    fine = [lo + (hi - lo) * i / 4 for i in range(5)]
-    curve += [(lam, ce_at(lam)) for lam in fine if lam not in dict(curve)]
+    step = min(0.25, max(0.05, 0.5 * best_lam))
+    fine = [best_lam - step, best_lam - step / 2, best_lam + step / 2,
+            best_lam + step]
+    curve += [(round(lam, 4), ce_at(round(lam, 4))) for lam in fine
+              if lam > 0 and lam not in dict(curve)]
     best_lam = min(curve, key=lambda p: p[1])[0]
     return {"best_lam": round(float(best_lam), 4),
             "curve": [{"lam": round(float(a), 4), "ce": round(float(b), 5)}
@@ -791,6 +847,20 @@ def run_width_arm(model, blocks, wrap, host_i, mask_idx, data, baselines,
                 per_source[src] = round(_ce_forced(
                     model, blocks, batches, device, handles, best_lam), 4)
         reads["per_source_lam"] = per_source
+        # cheap membership-gated delivery variant (routed-to-masked-set):
+        # the wrap only stands in on tokens whose routed slots hit the mask
+        if getattr(args, "membership_eval", False):
+            pm = getattr(handles[0][0], "_plugin_merge", None)
+            if pm is not None:
+                pm.membership_gated = True
+                pbm = _ce_forced_per_batch(model, blocks,
+                                           data["eval_batches"], device,
+                                           handles, best_lam)
+                pm.membership_gated = False
+                reads["gen_heldout"]["ce_graft_lam_membership"] = round(
+                    sum(pbm) / max(1, len(pbm)), 4)
+                reads["gen_heldout"]["per_batch"]["graft_lam_membership"] = \
+                    [round(x, 5) for x in pbm]
         arm["ce"] = reads
 
         rec, rec_stats = {}, {}
@@ -799,7 +869,10 @@ def run_width_arm(model, blocks, wrap, host_i, mask_idx, data, baselines,
                 continue
             b = baselines[set_name]
             bp = b.get("per_batch", {})
-            for key in ("graft_lam1", "graft_lam"):
+            keys = ["graft_lam1", "graft_lam"]
+            if "graft_lam_membership" in reads[set_name].get("per_batch", {}):
+                keys.append("graft_lam_membership")
+            for key in keys:
                 graft_pb = reads[set_name]["per_batch"][key]
                 if bp.get("masked") and bp.get("stock"):
                     st = paired_recovery(bp["masked"], bp["stock"], graft_pb)
@@ -881,6 +954,173 @@ def run_secondary_code(model, blocks, wrap, host_i, code_data, args, device,
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Bank-scale demand test (the v2 all-grafted-bank freeze gate)
+# ---------------------------------------------------------------------------
+
+
+def run_bank_test(model, blocks, data, args, out, device, d_model,
+                  w_gu, w_down, t_run) -> int:
+    """Mask ALL of a layer's routed experts (or the top-m) at once and stand
+    one wrapped core in for the whole layer demand.
+
+    Demand sweep m in {1, 2, all} at the run-1 site (host layer N lives in);
+    rank sweep {64, 512} (512 = best wide rank of the width-norm run-3).
+    Arms: (a) stock, (b) layer-masked (exact zeroing of the masked set's
+    routed slots), (c) masked + wrapped core (width-norm init) delivering
+    additively with fitted lam (grid extended below 0.25).  Recovery% =
+    (CE_masked - CE_graft)/(CE_masked - CE_stock) per demand level — the
+    layer denominator is much larger than the single-expert one — plus the
+    absolute-CE read.  Cheap membership-gated delivery variant (wrap stands
+    in only on tokens whose routed slots hit the mask) on every arm.
+
+    Freeze bar: recovery >= 80% of the LAYER-mask CE cost at rank <= 512
+    => the v2 all-grafted-bank format is FREEZE-able."""
+    host_i = args.bank_layer
+    n_exp = int(blocks[host_i].gate.weight.shape[0])
+    widths = [int(x) for x in args.widths.split(",") if x.strip()]
+    print(f"\n=== BANK-SCALE DEMAND TEST at layer {host_i} "
+          f"({n_exp} experts) ===", flush=True)
+
+    # ---- demand sets: top-m routed experts at the site (m=all -> every expert)
+    probe = data["eval_batches"][:6] or data["train_batches"][:6]
+    demands = []
+    for spec in [s.strip() for s in args.bank_demands.split(",") if s.strip()]:
+        m = None if spec == "all" else int(spec)
+        experts, shares = top_experts_at_layer(model, blocks, probe, device,
+                                               host_i, m)
+        demands.append({"label": spec, "mask_set": experts,
+                        "slots_per_token": shares,
+                        "n_masked": len(experts)})
+        print(f"  demand {spec}: mask {len(experts)} experts "
+              f"(top shares {shares[:8]})", flush=True)
+    out["bank_test"] = {
+        "host_layer": host_i, "n_experts": n_exp,
+        "demands": [{"label": d["label"], "n_masked": d["n_masked"],
+                     "mask_set": d["mask_set"][:16],
+                     "slots_per_token": d["slots_per_token"][:16]}
+                    for d in demands],
+        "widths_order": widths,
+        "bars": {"freeze": 0.80,
+                 "note": "recovery of the LAYER-mask CE cost at rank <= 512"},
+    }
+    out["phase"] = "bank_demands_chosen"
+    d25.dump_json(out, args.out)
+
+    # ---- baselines: (a) stock once, (b) masked per demand level ----
+    t0 = time.time()
+    pb_stock = {}
+    for set_name, batches in (("gen_heldout", data["eval_batches"]),
+                              ("val_mixed", data["val_batches"])):
+        if batches:
+            pb_stock[set_name] = ce_per_batch_stock_or_masked(
+                model, blocks, batches, device, host_i, None)
+    baselines_by_demand = {}
+    for d in demands:
+        base = {}
+        for set_name, batches in (("gen_heldout", data["eval_batches"]),
+                                  ("val_mixed", data["val_batches"])):
+            if not batches:
+                continue
+            pb_m = ce_per_batch_stock_or_masked(model, blocks, batches,
+                                                device, host_i, d["mask_set"])
+            pb_s = pb_stock[set_name]
+            ce_s = sum(pb_s) / max(1, len(pb_s))
+            ce_m = sum(pb_m) / max(1, len(pb_m))
+            base[set_name] = {"ce_stock": round(ce_s, 4),
+                              "ce_masked": round(ce_m, 4),
+                              "mask_cost": round(ce_m - ce_s, 4),
+                              "per_batch": {"stock": [round(x, 5) for x in pb_s],
+                                            "masked": [round(x, 5) for x in pb_m]}}
+            print(f"  baseline demand {d['label']} {set_name}: stock "
+                  f"{ce_s:.4f}  masked {ce_m:.4f}  cost {ce_m - ce_s:+.4f}",
+                  flush=True)
+        baselines_by_demand[d["label"]] = base
+    out["bank_test"]["baselines"] = baselines_by_demand
+    out["bank_test"]["baselines_wall_s"] = round(time.time() - t0, 2)
+    out["phase"] = "bank_baselines_done"
+    d25.dump_json(out, args.out)
+
+    # ---- sweep: demand (largest first) x rank ----
+    out["bank_test"]["arms"] = {}
+    ordered = sorted(demands, key=lambda d: -d["n_masked"])
+    for d in ordered:
+        for w in widths:
+            tag = f"m{d['label']}_d{w}"
+            wrap = make_wrap(d_model, w, w_gu, w_down,
+                             seed=args.seed, ref_rank=args.ref_rank)
+            arm = run_width_arm(model, blocks, wrap, host_i, d["mask_set"],
+                                data, baselines_by_demand[d["label"]], args,
+                                device, tag)
+            arm["demand"] = d["label"]
+            arm["n_masked"] = d["n_masked"]
+            wpath = save_wrap(wrap, args, w, arm, host_i, d["mask_set"],
+                              f"bank_m{d['label']}")
+            if wpath:
+                arm["wrap_path"] = wpath
+            out["bank_test"]["arms"][tag] = arm
+            out["elapsed_s"] = round(time.time() - t_run, 2)
+            out["phase"] = f"bank_{tag}_done"
+            d25.dump_json(out, args.out)
+            del wrap
+
+    # ---- freeze verdict (bar on the LAYER demand = all-masked) ----
+    curve = []
+    for d in ordered:
+        for w in widths:
+            arm = out["bank_test"]["arms"].get(f"m{d['label']}_d{w}") or {}
+            curve.append({
+                "demand": d["label"], "n_masked": d["n_masked"],
+                "d_canon": w, "trainable_params": arm.get("trainable_params"),
+                "lam": (arm.get("lam_fit") or {}).get("best_lam"),
+                "ce_graft": ((arm.get("ce") or {}).get("gen_heldout") or {}
+                             ).get("ce_graft_lam"),
+                "recovery": arm.get("recovery_primary"),
+                "nats_recovered": (((arm.get("recovery_stats") or {})
+                                    .get("gen_heldout:graft_lam") or {})
+                                   .get("ce_recovered_nats")),
+                "status": arm.get("status"),
+            })
+    layer_rows = [c for c in curve if c["demand"] == "all"
+                  and c["recovery"] is not None and c["d_canon"] <= 512]
+    best_layer = max((c["recovery"] for c in layer_rows), default=None)
+    if best_layer is None:
+        verdict = ("INCOMPLETE — layer-demand recovery not measured "
+                   "(chain continues detached)")
+    elif best_layer >= 0.80:
+        at = min(c["d_canon"] for c in layer_rows if c["recovery"] >= 0.80)
+        verdict = (f"FREEZE-ABLE — recovery {best_layer:.1%} of the "
+                   f"layer-mask CE cost at rank {at} (<=512): wrapped cores "
+                   f"carry a full layer's expert demand")
+    elif best_layer >= 0.50:
+        verdict = (f"MARGINAL — best layer-demand recovery at rank <=512 is "
+                   f"{best_layer:.1%}: wider/multi-core standing-in needed "
+                   f"before freeze")
+    else:
+        verdict = (f"NOT FREEZE-ABLE at one core — layer-demand recovery "
+                   f"{best_layer:.1%} < 50% at rank <=512: a single wrapped "
+                   f"core cannot carry a full layer's expert bank (see the "
+                   f"1/2/all demand curve — the format needs ~one graft per "
+                   f"native slot, which is the endgame shape)")
+    out["bank_test"]["curve"] = curve
+    out["bank_test"]["verdict"] = {
+        "text": verdict, "best_layer_recovery_rank_le_512": best_layer,
+        "bars": {"freeze": 0.80, "marginal": 0.50}}
+    out["phase"] = "complete"
+    out["elapsed_s"] = round(time.time() - t_run, 2)
+    d25.dump_json(out, args.out)
+
+    print(f"\nresults -> {args.out}")
+    print("bank demand-vs-recovery (gen_heldout):")
+    for c in curve:
+        print(f"  demand {c['demand']:>3} (mask {c['n_masked']:2d})  "
+              f"d_canon {c['d_canon']:5d}  params {c['trainable_params']}  "
+              f"lam {c['lam']}  ce {c['ce_graft']}  rec {c['recovery']}  "
+              f"nats {c['nats_recovered']}  {c['status']}")
+    print(f"VERDICT: {verdict}")
+    return 0
+
+
 # Synthetic self-test (--synthetic)
 # ---------------------------------------------------------------------------
 
@@ -941,6 +1181,32 @@ def run_synthetic_tests() -> int:
               torch.allclose(y_forced, y_masked, atol=1e-5),
               f"max diff {float((y_forced - y_masked).abs().max()):.2e}")
         d1.set_plugin_mode(handles, "off")
+    d1.uninstall_plugin(handles)
+
+    # mask-set + membership-gated variants (bank-scale delivery plumbing)
+    handles = install_masked_plugin(blocks, 0, wrap, mask_idx=[0, 1])
+    pm = blk._plugin_merge
+    with torch.no_grad():
+        y_m2 = blk.experts.forward(h, idx, w)
+        w_zero2 = torch.where((idx == 0) | (idx == 1), torch.zeros_like(w), w)
+        y_ref2 = stock_fwd(h, idx, w_zero2)
+        check("mask_set_equals_zeroed_slots",
+              torch.allclose(y_m2, y_ref2, atol=1e-5),
+              f"max diff {float((y_m2 - y_ref2).abs().max()):.2e}")
+        # membership gating: with a live wrap output, forced+gated only adds
+        # on tokens whose routed slots hit the masked set
+        with torch.no_grad():
+            wrap.host_out.weight.fill_(0.01)
+        d1.set_plugin_mode(handles, "forced", 1.0)
+        y_plain = blk.experts.forward(h, idx, w)
+        pm.membership_gated = True
+        y_gated = blk.experts.forward(h, idx, w)
+        pm.membership_gated = False
+        hit = ((idx == 0) | (idx == 1)).any(dim=-1)
+        same = torch.isclose(y_gated, y_plain, atol=1e-5).all(dim=-1)
+        check("membership_gating_hits_only",
+              bool(((hit == same) | (~hit)).all()),
+              f"hit {int(hit.sum())}/{hit.numel()} tokens gated-through")
     d1.uninstall_plugin(handles)
 
     # mushiness selection on a synthetic RouteStats (tok_count is per-layer-
@@ -1021,6 +1287,38 @@ def run_synthetic_tests() -> int:
           arm.get("trainable_params") == wrap.adapter_param_count(),
           f"{arm.get('trainable_params')}")
 
+    # ---- bank-test pipeline smoke on the mock (exercises run_bank_test) ----
+    class B:
+        pass
+    bargs = B()
+    bargs.bank_layer = 0
+    bargs.bank_demands = "1,all"
+    bargs.widths = "8"
+    bargs.seed = 0
+    bargs.ref_rank = 64
+    bargs.expert_steps = 8
+    bargs.expert_lr = 1e-2
+    bargs.out_pen = 0.0
+    bargs.grad_clip = 1.0
+    bargs.weight_decay = 0.0
+    bargs.membership_eval = True
+    bargs.wrap_out_dir = None
+    bargs.out = None
+    bout = {"gate": "bank-smoke"}
+    bdata = {"train_batches": batches, "eval_batches": batches,
+             "val_batches": batches,
+             "per_source_eval": {"a": batches[:2]}, "sources": ["a"]}
+    rc_bank = run_bank_test(model, blocks, bdata, bargs, bout, device,
+                            d_model, w_gu, w_down, time.time())
+    bt = bout.get("bank_test") or {}
+    check("bank_pipeline_completes",
+          rc_bank == 0 and "curve" in bt and "verdict" in bt,
+          f"rc {rc_bank} arms {list((bt.get('arms') or {}).keys())} "
+          f"verdict {(bt.get('verdict') or {}).get('text', '')[:60]}")
+    check("bank_demands_resolved",
+          [d["n_masked"] for d in (bt.get("demands") or [])] == [1, 9],
+          f"{[(d['label'], d['n_masked']) for d in (bt.get('demands') or [])]}")
+
     n_fail = sum(1 for _, ok, _ in results if not ok)
     print(f"\n{len(results) - n_fail}/{len(results)} synthetic checks passed")
     return 1 if n_fail else 0
@@ -1086,6 +1384,18 @@ def main() -> int:
                          "door25 init verbatim). 64 keeps the composite "
                          "scale at the verified door25 geometry — without it "
                          "rank>=256 explodes at lr 3e-3 (see the docstring).")
+    ap.add_argument("--bank-test", action="store_true",
+                    help="bank-scale demand test (v2 freeze gate): mask the "
+                         "top-m/all experts of --bank-layer and stand one "
+                         "wrapped core in for the whole layer demand")
+    ap.add_argument("--bank-layer", type=int, default=2,
+                    help="host layer for the bank test (2 = the run-1 site)")
+    ap.add_argument("--bank-demands", default="1,2,all",
+                    help="comma-separated mask sizes at the bank layer")
+    ap.add_argument("--membership-eval", action="store_true",
+                    help="also eval the cheap routed-membership delivery "
+                         "variant (wrap stands in only on tokens that "
+                         "routed into the masked set)")
     ap.add_argument("--secondary", action="store_true",
                     help="code specialty re-check at --secondary-widths")
     ap.add_argument("--secondary-widths", default="64,512")
@@ -1102,6 +1412,8 @@ def main() -> int:
         ap.error("--model and --registry are required unless --synthetic")
     if not args.core_from and (not args.donor or not args.donor_domains_dir):
         ap.error("--donor + --donor-domains-dir (or --core-from) required")
+    if args.bank_test:
+        args.membership_eval = True  # the cheap variant — always read it here
 
     widths = [int(x) for x in args.widths.split(",") if x.strip()]
     out = {"gate": "D8-bridge-width", "phase": "start", "format": FORMAT,
@@ -1166,6 +1478,11 @@ def main() -> int:
           f"{data['n_val_tokens']} tok")
     out["phase"] = "data_ready"
     d25.dump_json(out, args.out)
+
+    # ---- bank-scale demand test (the v2 freeze gate) ----
+    if args.bank_test:
+        return run_bank_test(model, blocks, data, args, out, args.device,
+                             d_model, w_gu, w_down, t_run)
 
     # ---- native expert N: most load-bearing on general text ----
     probe = data["eval_batches"][:4] or data["train_batches"][:4]
