@@ -1177,6 +1177,48 @@ HANDOFF Door 8d + Door 8c + Door 8 +
 (door8_width.json, door8_width_p2_a*.json, door8_bank_a*.json, wraps/,
 core_gen.pt).
 
+### 10.6 Door 10 — multi-slice calibration scale (the data-scale hypothesis)
+
+The door25 held-out caveat (fit 0.439 vs held 1.621 on 11k tokens), door7's
+breadth limit and door8's small-lambda deliveries all point one way: the
+memorization/held-out gap is DATA STARVATION, not method.  Door 10 tests it
+directly — the Door 2.5 winner (Phi L13e8 frozen core, rank-64 width-norm
+wrap, door25 recipe 250 steps lr 3e-3 wd 0 out_pen 300) retrained at
+calibration budgets 11k / 50k / 200k / 500k code tokens (codeparrot; nested
+prefixes of one 540k pool), quality read on THREE md5-disjoint slices: FIT
+(the arm's own calibration data), HELDOUT (same distribution, fresh rows),
+UNSEEN3 (a third fresh draw, never touched by fit/lam/recal).  Delivery
+states: masked / forced lam=1 / additive lam* (fit on FIT slice only) /
+plugged+recal.  gap = CE_state - CE_masked (paired per-batch SE).
+
+| budget | ep | lam* | fit gap_add | HELD gap_add | UNSEEN3 gap_add | mem gap | flip? |
+|---|---|---|---|---|---|---|---|
+| 11k  | 46.6 | 1.0000 | -0.9712 +- 0.0375 | +0.3825 +- 0.0261 | +0.3375 +- 0.0157 | 1.3536 | no |
+| 50k  | 10.2 | 0.3125 | -0.0153 +- 0.0030 | +0.0236 +- 0.0083 | +0.0068 +- 0.0013 | 0.0389 | no |
+| 200k | 2.6  | (chain) | — | — | — | — | — |
+| 500k | 2.0  | (chain) | — | — | — | — | — |
+
+**The gap collapses with data.**  11k reproduces the door25 caveat exactly
+(fit 1.072/0.101 vs HELD 1.067/1.450 — a 46-epoch memorization read: train
+gap -0.97, held gap +0.38).  At 50k (10 ep) the memorization gap falls
+34.8x (1.354 -> 0.039): held gap +0.0236, unseen3 gap +0.0068.  UNSEEN3
+tracks HELDOUT in sign at both budgets (the gap is distributional, not a
+held-out artifact) but is consistently smaller.  Log-linear in N (2 points):
+b = -0.546 (HELD) / -0.503 (UNSEEN3) nats/decade, zero-crossing at
+~5.5e4 / ~5.2e4 tokens — i.e. the curve projects a FLIP just past 50k.
+Not yet flipped at 50k (HELD +0.024 is red, +2.8 SE).  Two side reads:
+lam* falls 1.0 -> 0.31 as data grows (the trained composition overshoots
+more honestly fitted — the door8 lam lesson); plugged (mass contract) is
+strictly worse than additive lam* at every budget (50k HELD +0.107 vs
++0.024) — door6's additive>mass re-confirmed at second site + scale.
+
+Line status: 11k+50k complete; 200k/500k in the detached chain (the
+deliverable fit is 4-point).  Harness `lab/door10_calscale.py` (fork of the
+door25/door8 family; d0/d1 imported UNMODIFIED; synthetic 16/16) +
+`lab/door10_build_calscale.py` (pool 540k/198 docs, heldout 41k/28,
+unseen3 41k/25, md5-disjoint) + `lab/door10_chain2.sh` (claim-aware GPU
+grab; box `/data/tliao/graft_door10_out/`).
+
 Composition: models in the format swap experts natively (10.1); out-of-format
 donors are grabbed by wrap (10.2) or distilled (10.3). Registry economics
 (§9 sweep: ~8MB spine artifact, 256B/row at d_canon=64) are unchanged — the

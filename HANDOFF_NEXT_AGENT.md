@@ -127,6 +127,31 @@ eval bs2, NaN guard.
 
 ---
 
+## 2026-10-12 — MODULAR_MOE §10.6 **Door 10 MULTI-SLICE CALIBRATION SCALE (the data-scale hypothesis, tested directly): the door25 held-out gap COLLAPSES with calibration data — 11k tokens (46 ep) reproduces the caveat exactly (fit gap −0.97 / held gap +0.38 nats); at 50k (10 ep) the memorization gap falls 34.8× (1.354 → 0.039) and held gap drops to +0.024, unseen3 +0.007 — log-linear zero-cross projects a FLIP just past 50k tokens; 200k/500k in the detached chain** (MI50 box GPU 5, fp16)
+
+**Q (the lever every line of evidence named): is the door25 memorization/held-out gap data starvation or method?**  Protocol: the Door 2.5 winner retrained at calibration budgets 11k/50k/200k/500k code tokens — Phi L13e8 frozen core (door25_core.pt), rank-64 width-norm wrap, door25 recipe verbatim (250 steps lr 3e-3 wd 0 out_pen 300, bs4×512=2048 / eval-batch 2; steps = max(250, ceil(2·budget/2048)) so the 500k arm gets 2 passes and is not single-pass undertrained).  Calibration data = nested prefixes of one 540k-token codeparrot pool (`door10_build_calscale.py`: pool 540,759 tok/198 docs, heldout 41,082/28, unseen3 40,681/25, **md5-disjoint**, eval slices per-doc-capped 3k for doc diversity).  Quality read on **THREE** slices: FIT (the arm's own calibration prefix), HELDOUT (same distribution, fresh rows — the door25 caveat set), **UNSEEN3** (a third fresh draw never touched by fit, λ-fit, or recal).  Four delivery states per slice: masked / forced λ=1 / additive λ* (λ grid fit on FIT slice only — no peeking) / plugged+row-recal.  gap = CE_state − CE_masked, paired per-batch SE.
+
+**The gap-vs-calibration-size curve (additive λ* delivery; nats vs masked):**
+
+| budget | ep | λ* | fit gap | HELDOUT gap | UNSEEN3 gap | mem gap | flip? |
+|---|---|---|---|---|---|---|---|
+| 11k | 46.6 | 1.0000 | −0.9712 ± 0.0375 | **+0.3825 ± 0.0261** | +0.3375 ± 0.0157 | **1.3536** | no |
+| 50k | 10.2 | 0.3125 | −0.0153 ± 0.0030 | **+0.0236 ± 0.0083** | +0.0068 ± 0.0013 | **0.0389** | no |
+| 200k | 2.6 | — chain — | | | | | |
+| 500k | 2.0 | — chain — | | | | | |
+
+**11k reproduces the door25 caveat to the decimal** (fit CE masked 1.0719 / delivered 0.1008; held 1.0673 / 1.4498 — vs the door25 table's 1.072/0.101 and 1.587/1.950; same recipe, same core).  It is a pure memorization read: 46.5 epochs over 11k tokens, fit gap −0.97 nats, held gap +0.38, λ* = 1.0 (the overfit composition is "best" on FIT).  **At 50k the gap collapses 34.8×** — memorization gap 1.354 → 0.039; HELD gap +0.0236 (still red, +2.8 SE), UNSEEN3 gap +0.0068 (red but tiny, +5 SE on a tight SE).  UNSEEN3 tracks HELDOUT in SIGN at both budgets (the gap is distributional, not a held-out artifact) and is consistently SMALLER.  Base (val_mixed) mirrors: +0.301 → +0.016.
+
+**Fit of gap vs data (2 points in hand; the 4-point fit lands with the chain):** log-linear gap = a + b·log10(N): b = **−0.546 nats/decade** (HELDOUT), −0.503 (UNSEEN3), zero-crossing at **5.5e4 / 5.2e4 tokens** — the curve projects a flip to delivered<masked just past 50k.  The hyperbolic a+b/N is not identifiable at 2 points; the deliverable fit is the chain's 4-point curve.  **Production calibration-size estimate: ~5e4–2e5 code tokens per specialty** (zero-cross ~55k log-linear; if the curve saturates short of 0 instead of crossing, the 200k/500k arms bound the asymptote — either way the 10-12k door25 budget is 5-20× under).
+
+**Bars:** held-out flip to delivered<masked — **NOT at 11k or 50k** (held gap +0.38 → +0.024); the trend is steeply toward green.  Two secondary reads: (1) λ* falls 1.0 → 0.3125 as data grows — the trained composition overshoots more honestly with more data (the door8 λ lesson at scale); (2) plugged (mass contract + recal) is strictly worse than additive λ* at every budget (50k HELD +0.1073 vs +0.0236) — door6's additive>mass re-confirmed at a second site and across data scale.  Epochs confound note: the arms hold the door25 STEP recipe (floor 250), so epochs fall with N (46.6 → 10.2 → 2.6 → 2.0); the 50k collapse is therefore "more unique tokens at the same recipe", and the 200k/500k arms at ~2 ep test the "at least a couple of passes" end.
+
+**Ops (co-tenant war story):** the box's margin_router launchers grab any GPU with ≥19GiB free the moment it appears (claim dir `/data/hackathon/.tmp/mr_gpu_claims`, 10-min TTL) — our first smoke and the first 3 arm attempts OOM'd mid-model-load from this.  Fixed by (a) joining their claim protocol (flock pick+claim+refresh-while-running in `door10_chain2.sh`) and (b) a **memory seat-hold** in the harness — note the seat must NOT be large: seat+our 18.4GiB work peak on a 32GB card self-OOMs (tried leave-18.0 → OOM; removed seat entirely, rely on claims+retry, NEED=19GiB floor).  Also fixed: the harness returned exit 0 on per-arm OOM (chain logged "OK"); now exit 1 on any arm ≠ ok.  Sequential arms (one card at a time) survived the contention where 4 parallel lanes starved.  GPU 5 for the landed arms.  gfx906 shapes held (bs4×512 train / bs2×512 eval), NaN guard + width-norm + wd-0 intact, numeric-only.
+
+**Status at handoff:** 11k + 50k COMPLETE (box `door10_b{11000,50000}.json`), 200k then 500k running in the detached chain (`door10_chain2.sh`, PIDs 3341365/3344955/3344956 — **do not relaunch**; it merges `door10_merged.json` at the end).  Read: box `/data/tliao/graft_door10_out/` (door10_b*.json, door10_chain2.log) / home `lab/imported/graft_door10/` (untracked).  The task-2 memory-expert mini-sweep (§8 shaped-episode wrap) NOT run — all wall went to the primary curve + the GPU contention recovery.  Code+docs only committed.
+
+---
+
 ## 2026-10-12 — MODULAR_MOE §9.3a/§10.2 **Door 9 EMBEDDING-ANCHORED BASIS TRANSLATION (the better-posed D1.5): FAIL the 0.95/0.90 revision bar — exact token-identity pairing does NOT rescue linear translation (best held cos 0.467; the pairing artifact was real but NOT binding) and emb-W dies past ~25% depth (0.48→0.05); W-init of the door25 wrap input chain does NOT close the held-out memorization gap (donor-scale α=190 collapses the wrap to a no-op; quiet α=1.0 ≈ rand) → D1.5's "feature availability" read CONFIRMED, not revised** (MI50 box GPUs 2/5/6, fp16 trunk / fp32 emb math)
 
 **Q (user's hypothesis, 2026-10-12):** was D1.5's 0.55–0.69 translator
