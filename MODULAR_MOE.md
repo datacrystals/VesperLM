@@ -984,6 +984,72 @@ unchanged; **multi-specialty coexistence is not the blocker; calibration
 breadth is.** Numbers: HANDOFF Door 6 + FAILURES door6-expert-mix +
 `lab/imported/graft_door6/door6_mix.json` (untracked).
 
+### 10.5 Door 8 — bridge width vs GENERAL-LM recovery (the all-grafted-bank make-or-break)
+The endgame ("our own spine + a MoE whose ENTIRE expert bank is grafted donor
+experts") needs the wrap bridge to carry not just specialty deltas but the
+boring general FFN lifting.  Q: **how wide must d_canon be for a wrapped
+generalist core to recover the CE cost of removing a NATIVE expert on general
+text?**  Bars (v2 feasibility line): ≥80% recovery at rank ≤512 = FEASIBLE;
+50–80% = marginal (wider/multi-core); <50% = the bottleneck is fatal and the
+v2 format needs a different bridge.  Protocol (`lab/door8_bridge_width.py`,
+fork of door25; d0/d1/d2/d25 imported UNMODIFIED): generalist donor core =
+the max-mushiness Phi-mini-MoE expert (D2 RouteStats, usage-floor'd hit-rate)
+frozen in the door25 geometry with the rank sweep d_canon ∈ {64, 256, 512,
+1024} (trainable 786k / 3.15M / 6.29M / 12.58M — note 512 ≈ one native OLMoE
+expert's 6.29M); general text = graft_d0_slice web+chat+science+math + a
+wikitext-2-TEST slice (disjoint from web.txt = wikitext-2-train), 80/20
+train/held-out, 137k/32k tokens, val_mixed as third set; arms (a) stock host
+(b) native expert N masked — its routed slots zeroed in the stock merge, an
+exact capacity removal under norm_topk_prob=false (c) N masked + wrapped
+core delivering additively at the site where N lives
+(`y = y_masked + λ·e_wrap(h)`, door6's additive with m≡1), recovery% =
+(CE_masked − CE_graft)/(CE_masked − CE_stock) with paired per-batch SE.
+
+**STATUS 2026-10-12 (`lab/door8_bridge_width.py`, MI50 box GPU 0, run-1;
+width-norm run-3 retry-chain detached in flight): the 64-dim bridge does NOT kill general
+traffic at expert-replacement scale — a 64-wide wrap over-recovers the
+masked-native CE cost on general held-out (2.287 vs stock 2.346 vs masked
+2.3485) — but the door25 TRAINING RECIPE does not scale in width (rank ≥256
+explodes at lr 3e-3), and the single-expert demand itself is tiny.** Setup:
+core = Phi @f620b32c **L3 e8** (mushiness 0.9998 = global max of the 32×16
+grid, hit-rate 0.142 vs 0.125 uniform — a true domain-generalist workhorse;
+11.8M frozen); N = OLMoE **L2 e7** (top of a 16-candidate per-layer
+top-routed search; probe mask cost +0.0167, gen_heldout **+0.0022** nats —
+single-expert capacity of a 64×top-8/16-layer host is small and concentrates
+on web (+0.0223) rather than chat/math/science (~+0.000); val_mixed +0.0003).
+**Rank 64** (786k trainable, door25 recipe lr 3e-3 / wd 0 / clip 1 / 250
+steps bs4×512 / out_pen 0 = pure task loss; wall 778 s): trained composition
+λ=1 **overshoots** (gen_heldout 2.489 — worse than masked); λ grid on train
+picks 0.25 (grid floor) → gen_heldout **2.2874 = −0.059 nats vs stock**
+(recovered 0.0611 ± 0.0099 vs a 0.0022 cost — over-recovery ~27× the mask
+cost, paired 6σ), but val_mixed is null-to-slightly-bad (1.503 vs 1.495,
+−0.008 ± 0.016).  Recovery% on this denominator is numerically explosive and
+not the headline — the absolute CE read is.  **Rank 256/512 at the verbatim
+door25 init: FAIL to train** (the width sweep's real finding): Var(u_k) of
+the adapter_up→core path grows ∝ d_canon, so the frozen donor core sees
+inputs √(d_canon/64)× its natural scale — 512 NaNs by ~step 30 at lr 3e-3
+(and a half-lr retry from the poisoned weights NaNs at step 1); 256 limps
+into a worse-than-masked state (fixed-batch CE ~3.8-4.5 vs 2.3).  **Fix =
+width-normalized init** (adapter_up/down × √(64/d_canon), composite scale
+pinned at the verified 64 geometry — the v2 format's init rule) + fresh
+reinit before any lr fallback; run-3 (widths 256/512/1024 @ width-norm init,
+secondary code@512, 3-attempt OOM-retry chain after run-2 died on a
+co-tenant OOM) launched detached — curve lands in HANDOFF.
+**Verdict as of run-1: FEASIBLE at rank 64 for the expert-replacement demand**
+(a grafted generalist carries an expert's worth of general traffic even at
+the narrowest bridge; wider ranks' ceiling pending run-3), with two
+conditions written into the v2 line: (1) delivered scale must be fitted (λ
+0.25, not the trained λ=1 — same door6 λ lesson at general scale); (2) the
+wrap init must be width-normalized or ranks ≥256 never train.  The
+single-expert mask cost of 0.0022 nats is itself a design input: on a
+64×top-8 host, "one native expert's job" is a small demand — the endgame
+bank test should be read at bank scale (all-top-k masked), the queued
+follow-up.  Secondary (code specialty at wide rank) + the membership-gated
+delivery arm (door25 site-with-membership) follow run-3.  Numbers:
+HANDOFF Door 8 + `lab/imported/graft_door8/` (untracked) + box
+`/data/tliao/graft_door8_out/` (door8_width.json, door8_width_p2_a*.json,
+wraps/, core_gen.pt).
+
 Composition: models in the format swap experts natively (10.1); out-of-format
 donors are grabbed by wrap (10.2) or distilled (10.3). Registry economics
 (§9 sweep: ~8MB spine artifact, 256B/row at d_canon=64) are unchanged — the

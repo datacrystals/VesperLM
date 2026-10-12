@@ -18,6 +18,33 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-12 — door8-bridge-width-recipe-scale — the door25 wrap recipe does NOT scale past d_canon≈64: rank 512 NaNs by step 30 at lr 3e-3 and rank 256 limps worse-than-masked (init-scale drift, not bridge incapacity)
+- Evidence: box `/data/tliao/graft_door8_out/door8_width.json` widths 256/512
+  (run-1, MI50 GPU 0, lr 3e-3 wd 0 clip 1 bs4×512, general CE): 512 goes
+  ce_batch 2.65→8.06 / |y| 5e-4→2.2 by step 25 and NaNs ~step 30 (guard);
+  256 trains but fixed-batch CE stalls 3.8-4.5 vs the 2.3 masked baseline
+  (|y| ~2e-2, |W| 42-44).  Same harness/recipe trains cleanly at 64
+  (ce0 2.64→2.57, |y| 5.9e-3) and the geometry itself is width-independent
+  in parameter count terms.
+- Root cause: door25's fixed init std 0.02 on every adapter entry makes
+  Var(u_k) of the adapter_up→frozen-core path grow ∝ d_canon (0.02²·d_canon
+  ·Var(c)); at 512 the frozen donor SwiGLU sees inputs ~2.8× the verified
+  64-geometry scale and its silu(gate)*up explodes the residual (fp16 trunk
+  + fp32 wrap).  A secondary bug compounded it: the half-lr NaN fallback
+  reused the already-poisoned wrap weights, so the retry NaN'd at step 1
+  (|y| 62.9 at step 0).
+- What it rules out: any width sweep (or wide d_canon plug-in) built on
+  door25's verbatim init — measured width effects confound bridge width with
+  init-scale drift.  Also rules out "just lower the lr" alone (1.5e-3 from a
+  poisoned state is dead on arrival).
+- Next tried: width-normalized init — adapter_up/adapter_down × sqrt(64/
+  d_canon) so the composite scale is pinned at the verified d_canon=64
+  geometry (`make_wrap(..., ref_rank=64)` in door8; ref_rank=0 reproduces
+  door25 verbatim) — plus fresh weight reinit before any lr fallback
+  (`reinit_wrap`).  Synthetic-checked (12/12 incl. init-scale ratio and
+  reinit-finiteness).  Run-3 = widths 256/512/1024 at width-norm init
+  (detached 3-attempt OOM-retry chain; the curve is the v2 format input).
+
 ## 2026-10-12 — grafted-spine-v0-math-nan — the lr 3e-3 wrap-fit NaN mode recurs on the Phi spine: math wrap (L24 e4) fit went non-finite at step ~150 after the plug-in output collapsed (|y| 5e-3 → 7e-6), killing lane B before its memory wraps
 - Evidence: box `/data/tliao/grafted_spine_v0_out/fit_B.log` (phaseA hist:
   |W| grew 17.8→28.1 while |y| shrank to 7.4e-6 and fixed-batch CE stalled
