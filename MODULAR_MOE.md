@@ -1144,14 +1144,26 @@ under joint training; the bottleneck is composition mode, not bridge width
 or count.**  Freeze input for v2: (1) the 64-dim bridge + width-norm init +
 additive lam + registry rows are supported — one rank-64 wrap carries ~58%
 of a full layer's demand and 2625% of a single native slot (the per-graft
-endgame claim is safe); (2) the freeze re-test is composition MODE.  **Door 8d (in flight):
-boosting is FLAT vs one core** (3 rounds = base frozen + 2 residual,
-recovery 58.1% vs 57.8% — residual gains collapse to 0.1; the demand=all
-task SATURATES at ~one rank-64 wrap's worth, ~58% of a layer, across every
-mode trained against the same compensating objective); **per-slot
-standing-in** (top-8 slots, 8 distinct donor cores, per-slot traffic fits,
-gated delivery + lam-only combine — the one mode with genuine functional
-diversity) is the last rung, landing in the chain.  Numbers:
+endgame claim is safe); (2) the freeze re-test is composition MODE — **Door 8d COMPLETE: NOT
+FREEZE-ABLE in ANY mode; the demand=all task SATURATES at one rank-64
+wrap's capacity (~58% of a full layer):**
+| mode | cores | lam* | CE @lam* | nats recovered | recovery% |
+|---|---|---|---|---|---|
+| joint (8c) | 1 | [0.30] | 2.4043 | +0.0796 +- 0.0129 | 57.8% |
+| joint (8c) | 2 | [0.25, 0.15] | 2.4164 | +0.0675 +- 0.0123 | 49.0% |
+| joint (8c) | 3 | [0.10, 0.15, 0.05] | 2.4310 | +0.0529 +- 0.0078 | 38.4% |
+| boosting (1 frozen + 2 residual) | 3 | [0.25, 0.10, 0.10] | 2.4056 | +0.0783 +- 0.0120 | 56.9% |
+| per-slot (8 slots, 8 distinct cores, gated) | 8 | [0.1x6, 0.25, 0.1] | 2.5679 | -0.0840 +- 0.0592 | **-61.0%** |
+
+Boosting is flat vs one core (residual gains collapse to 0.1); per-slot is
+WORSE than masked (each slot wrap fit under mask={e} only — atop a LIVE
+layer — then stacked onto a dead one: environment shift; lam=1 -> CE 4.76).
+Freeze input: the per-graft endgame claim stays SAFE (m1 = 2625% of one
+native slot's demand); what saturates is whole-layer replacement by a few
+cores; the one untested hybrid is per-slot DATA fits under the demand=all
+ENVIRONMENT.  Nothing here is adverse to the format itself (64-dim bridge,
+width-norm init, additive lam, registry rows) — every failure is
+composition-mode, not bridge capacity.  Numbers:
 HANDOFF Door 8d + Door 8c + Door 8 +
 `lab/imported/graft_door8/` (untracked) + box `/data/tliao/graft_door8_out/`
 (door8_width.json, door8_width_p2_a*.json, door8_bank_a*.json, wraps/,
