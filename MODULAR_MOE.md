@@ -1144,11 +1144,15 @@ under joint training; the bottleneck is composition mode, not bridge width
 or count.**  Freeze input for v2: (1) the 64-dim bridge + width-norm init +
 additive lam + registry rows are supported — one rank-64 wrap carries ~58%
 of a full layer's demand and 2625% of a single native slot (the per-graft
-endgame claim is safe); (2) the queued freeze re-test is composition MODE:
-sequential residual training (boosting: train core 1, freeze, train core 2
-on the residual) and/or per-slot standing-in (one core per masked slot,
-each fit on its slot's routed tokens — the true bank shape).  Numbers:
-HANDOFF Door 8c + Door 8 +
+endgame claim is safe); (2) the freeze re-test is composition MODE.  **Door 8d (in flight):
+boosting is FLAT vs one core** (3 rounds = base frozen + 2 residual,
+recovery 58.1% vs 57.8% — residual gains collapse to 0.1; the demand=all
+task SATURATES at ~one rank-64 wrap's worth, ~58% of a layer, across every
+mode trained against the same compensating objective); **per-slot
+standing-in** (top-8 slots, 8 distinct donor cores, per-slot traffic fits,
+gated delivery + lam-only combine — the one mode with genuine functional
+diversity) is the last rung, landing in the chain.  Numbers:
+HANDOFF Door 8d + Door 8c + Door 8 +
 `lab/imported/graft_door8/` (untracked) + box `/data/tliao/graft_door8_out/`
 (door8_width.json, door8_width_p2_a*.json, door8_bank_a*.json, wraps/,
 core_gen.pt).
