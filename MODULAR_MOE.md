@@ -915,12 +915,15 @@ bitwise-frozen): quality **1.890 vs 1.829** held / 1.944 vs 1.923 train —
 FAIL, but delivery is exonerated (learned λ beats the trained composition:
 1.89 vs forced 2.33) — the distilled core simply has no next-token-CE skill
 to deliver (forced 2.33 vs masked 1.83; its skill is KL-to-donor, door3's
-5.17→2.59). (i) 16-site @3e-3 NaNs in 50 steps (guard). Donor-pretrained
-reference (10.2) remains the one existence proof: forced 0.101 vs masked
-1.072, train 0.439. Single-site distilled wrap (exact 10.2 control) in
-`door5_wrap_single.json`. Full table: HANDOFF Door 5 + FAILURES
-door5-provenance. Next lever if the grab is still wanted: CE-objective
-distillation (not KL), or a CE-pretrained donor core.
+5.17→2.59). (i') single-site wrap (the exact 10.2 geometry + recipe at the
+verified 2048-token shape) also FAILS quality in-sample (1.882 vs 1.829
+held / 1.997 vs 1.924 train; forced 1.897) while every aux gate passes —
+thin adapters cannot manufacture CE skill from a non-CE core. (i) 16-site
+@3e-3 NaNs in 50 steps (guard). Donor-pretrained reference (10.2) remains
+the one existence proof: forced 0.101 vs masked 1.072, train 0.439. Full
+table: HANDOFF Door 5 + FAILURES door5-provenance. Next lever if the grab
+is still wanted: CE-objective distillation (not KL), or a CE-pretrained
+donor core.
 
 ### 10.4 Door 6 — the mix (two specialties, one host; the first "sum of parts" test)
 If wrap-verbatim (10.2) is the grab, the product claim needs MULTIPLE grabbed

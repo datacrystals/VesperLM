@@ -431,6 +431,10 @@ def measure_all(tag, model, blocks, pack, handles, gates_delivered, mode,
                 lams=None, route_blocks=None) -> dict:
     out = {"arm": tag, "mode": mode}
     route_blocks = blocks if route_blocks is None else route_blocks
+
+    def _flush():
+        if device != "cpu" and torch.cuda.is_available():
+            torch.cuda.empty_cache()
     # membership capture for the mass contract needs gate.last_indices
     for g in gates_delivered:
         if hasattr(g, "capture"):
@@ -452,6 +456,7 @@ def measure_all(tag, model, blocks, pack, handles, gates_delivered, mode,
                       "gain_lib": round(g_lib, 4),
                       "retention_vs_solo": None if ret is None else round(ret, 4),
                       "retention_degenerate": bool(g_solo <= 0)}
+    _flush()
 
     out["base_parity"] = parity_split(model, blocks, base_batches, device,
                                       gates_delivered, handles, mode, new_idx)
@@ -469,6 +474,7 @@ def measure_all(tag, model, blocks, pack, handles, gates_delivered, mode,
     out["graft_parity_vs_registry_graft"] = {
         "logit_cosine_mean": tot["cos"] / max(1, tot["n"]),
         "n_tokens": tot["n"]}
+    _flush()
 
     def hits(mode_gates, mode_m, batches):
         if additive:
@@ -543,6 +549,7 @@ def measure_all(tag, model, blocks, pack, handles, gates_delivered, mode,
         "plugged": ce(base_batches, gates_delivered, mode),
     }
     out["base_ce"]["delta"] = out["base_ce"]["plugged"] - out["base_ce"]["masked"]
+    _flush()
 
     # CE-space delivery retention (door25's analog when margins degenerate)
     gain_solo_ce = q["heldout"]["ce_home_masked"] - q["heldout"]["ce_home_forced"]
@@ -584,7 +591,8 @@ def measure_all(tag, model, blocks, pack, handles, gates_delivered, mode,
 
 
 def run_wrap(model, blocks, banks_registry, cores, rows, home_train, home_held,
-             per_slice, base_batches, probe_windows, args, device) -> dict:
+             per_slice, base_batches, base_eval, probe_windows, args,
+             device) -> dict:
     out = {"gate": "door5-provenance", "arm": "wrap-distilled-core",
            "format": FORMAT,
            "recipe": {"geometry": "host_in->c(64)->adapter_up->FROZEN CORE->"
@@ -703,7 +711,7 @@ def run_wrap(model, blocks, banks_registry, cores, rows, home_train, home_held,
     out["n_probes"] = len(probes)
     m = measure_all("wrap", model, blocks, pack, handles, gates_delivered,
                     "plugged", gates64, probes, home_held, home_train,
-                    per_slice, base_batches, device, new_idx, additive=False,
+                    per_slice, base_eval, device, new_idx, additive=False,
                     route_blocks=site_blocks)
     m["phase_a"] = pa
     m["wrap_layout"] = layout
@@ -720,8 +728,8 @@ def run_wrap(model, blocks, banks_registry, cores, rows, home_train, home_held,
 
 
 def run_deliver(model, blocks, banks_registry, cores, rows, home_train,
-                home_held, per_slice, base_batches, probe_windows, args,
-                device) -> dict:
+                home_held, per_slice, base_batches, base_eval, probe_windows,
+                args, device) -> dict:
     out = {"gate": "door5-provenance", "arm": "distill-then-deliver-noref",
            "format": FORMAT,
            "recipe": {"delivery": "additive_lambda (contract b)",
@@ -813,7 +821,7 @@ def run_deliver(model, blocks, banks_registry, cores, rows, home_train,
     print("MEASURE — five gates + fire/non-fire parity (additive contract)")
     m = measure_all("deliver", model, blocks, pack, hB, gates_add, "additive",
                     gates64, probes, home_held, home_train, per_slice,
-                    base_batches, device, new_idx, additive=True, lams=lams)
+                    base_eval, device, new_idx, additive=True, lams=lams)
     m["lam_fit"] = fit
     m["lambda_per_layer"] = lams_final
     m["lambda_mean"] = out["lambda_mean"]
@@ -890,7 +898,8 @@ def run_synthetic_tests() -> int:
     fp_pre = core_fingerprint(cores)
 
     out_w = run_wrap(model, blocks, banks_reg, cores, rows, home_train,
-                     home_held, per_slice, base_b, probe_wins, args, device)
+                     home_held, per_slice, base_b, base_b, probe_wins, args,
+                     device)
     rw = out_w["result"]
     check("wrap_core_frozen_bitwise",
           out_w["core_frozen_bitwise"] and fp_pre == out_w["core_fingerprint_pre"],
@@ -919,7 +928,8 @@ def run_synthetic_tests() -> int:
     args.wrap_layout = "single"
     args.host_layer = 0
     out_s = run_wrap(model, blocks, banks_reg, cores, rows, home_train,
-                     home_held, per_slice, base_b, probe_wins, args, device)
+                     home_held, per_slice, base_b, base_b, probe_wins, args,
+                     device)
     rs = out_s["result"]
     check("wrap_single_site",
           out_s["recipe"]["wrap_layout"] == "single"
@@ -942,7 +952,8 @@ def run_synthetic_tests() -> int:
           f"fp {core_fingerprint(cores2)}")
 
     out_d = run_deliver(model, blocks, banks_reg, cores2, rows2, home_train,
-                        home_held, per_slice, base_b, probe_wins, args, device)
+                        home_held, per_slice, base_b, base_b, probe_wins,
+                        args, device)
     rd = out_d["result"]
     check("deliver_core_frozen_bitwise",
           out_d["core_frozen_bitwise"] and fp_pre == out_d["core_fingerprint_pre"],
@@ -992,7 +1003,14 @@ def main() -> int:
                     choices=["float32", "float16", "bfloat16"])
     ap.add_argument("--out", default=None)
     ap.add_argument("--seq-len", type=int, default=512)
-    ap.add_argument("--batch-size", type=int, default=2)
+    ap.add_argument("--batch-size", type=int, default=4,
+                    help="bs 4 x seq 512 = 2048 tokens is the gfx906-verified "
+                         "backward shape (Door 2.5); bs 2 lands on the 1024 "
+                         "hole (HIP invalid-device-function in trunk backward)")
+    ap.add_argument("--eval-batch-size", type=int, default=2,
+                    help="forward-only measurement batching (any shape is "
+                         "safe); kept at 2 so eval CE matches the bs2 runs "
+                         "and measure-phase VRAM stays bounded")
     ap.add_argument("--window-stride", type=int, default=256)
     ap.add_argument("--max-tokens", type=int, default=20000)
     ap.add_argument("--max-base-tokens", type=int, default=60000)
@@ -1025,6 +1043,12 @@ def main() -> int:
     if not args.model or not args.registry or not args.artifact:
         ap.error("--model, --registry and --artifact are required "
                  "unless --synthetic")
+    batch_tokens = args.batch_size * args.seq_len
+    if batch_tokens in {256, 768, 1024, 4096}:
+        print(f"WARNING: B*T={batch_tokens} is in the gfx906 backward hole "
+              f"(FAILURES door25-gfx906-backward-holes): trunk backward dies "
+              f"with HIP invalid-device-function. Use --batch-size 4 "
+              f"--seq-len 512 (2048, Door 2.5's verified shape).", flush=True)
 
     torch.manual_seed(args.seed)
     t_load = time.time()
@@ -1055,7 +1079,7 @@ def main() -> int:
             args.max_tokens)
         print("home windows from domain texts (cache missing)")
     home_train = plain_batches(train_w, args.batch_size, 1)
-    home_held = plain_batches(held_w, args.batch_size, 1)
+    home_held = plain_batches(held_w, args.eval_batch_size, 1)
     per_slice = per_slice_batches(held_w, batch_size=1)
     probe_windows = probe_windows_from(held_w) or probe_windows_from(train_w)
     base_ids = []
@@ -1068,6 +1092,10 @@ def main() -> int:
     base_batches = [
         (torch.tensor(wins[i:i + args.batch_size], dtype=torch.long), 0)
         for i in range(0, len(wins) - args.batch_size + 1, args.batch_size)]
+    base_eval = [
+        (torch.tensor(wins[i:i + args.eval_batch_size], dtype=torch.long), 0)
+        for i in range(0, len(wins) - args.eval_batch_size + 1,
+                       args.eval_batch_size)]
     if not home_train or not home_held or not base_batches or not probe_windows:
         raise RuntimeError(
             f"not enough data: home_train {len(home_train)} "
@@ -1087,18 +1115,21 @@ def main() -> int:
            "host": {"model": args.model, "revision": args.revision},
            "registry": args.registry, "cache": args.cache,
            "home_domains": args.home_domains,
+           "seq_len": args.seq_len, "batch_size": args.batch_size,
+           "batch_tokens": batch_tokens,
+           "eval_batch_size": args.eval_batch_size,
            "n_home_train_tokens": int(n_home_tr),
            "n_home_heldout_tokens": int(n_home_he)}
     d4.save_json(args.out, out)
 
     if args.arm == "wrap":
         result = run_wrap(model, blocks, banks_reg, cores, rows, home_train,
-                          home_held, per_slice, base_batches, probe_windows,
-                          args, args.device)
+                          home_held, per_slice, base_batches, base_eval,
+                          probe_windows, args, args.device)
     else:
         result = run_deliver(model, blocks, banks_reg, cores, rows, home_train,
-                             home_held, per_slice, base_batches, probe_windows,
-                             args, args.device)
+                             home_held, per_slice, base_batches, base_eval,
+                             probe_windows, args, args.device)
     out.update(result)
     out["end_unix"] = time.time()
     d4.save_json(args.out, out)
