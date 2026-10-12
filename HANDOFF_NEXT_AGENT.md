@@ -41,6 +41,66 @@ data first.
 
 ---
 
+## 2026-10-12 — BANK2N PARTITION (the user's design, first test): Model C = Phi-instruct spine + 2n=8 wrapped donor cores (4 Phi + 4 OLMoE) as FIRST-CLASS passport rows — router partitions traffic (full-bank sparsemixer + per-slot dispatch, no λ overlay); profile complete, fits/measure in flight (MI50 box, fp16)
+
+**Q (user's design, verbatim intent): "take n whole experts from model A and n
+whole ones from model B, model C has 2n experts"** — a bank where the router
+PARTITIONS traffic across wrapped donor experts (each expert handles only what
+routes to it). This is the explicit alternative to the Door-8 failure mode
+(demand=all substitution: few cores compensating everything with overlapping
+tiny-λ gated delivery — 8e froze at one core 57.8%, multi-wrap composition
+~0) and to v0's additive-λ overlay.
+
+**Harness `lab/bank2n_partition.py`** (builds on `grafted_spine_v0.py`;
+d0/d1/d2/d25/d6 imported unmodified; synthetic PartitionGate/PartitionMerge
+smoke 1/1). Three phases (detached chain, incremental JSON, skip-done):
+
+| part | design |
+|---|---|
+| Model C | Phi-mini-MoE-instruct + `registry_phimoe_f620b32c.pt` + 8 wrapped cores at depth-matched sites (Phi donor L→L; OLMoE donor L/16→round(L·31/15)) |
+| cores | frozen donor SwiGLU verbatim (door25 geometry: rank-64 adapters, width-norm init = identity at rank 64, wd 0, task CE + out_pen 300, NaN-guard skip-and-continue) |
+| PARTITION delivery | **selection:** sparsemixer over the FULL site bank (16 native rows + grafted rows) — grafted rows win tokens like native experts; **dispatch:** per-slot `y = stock(native slots) + Σ w_j·e_j` (a grafted slot REPLACES the native expert it displaced). No λ, no overlay, no double-delivery. |
+| row recal | G1b/G3 mex recipe (home NLL + owner_mass 0.85 + base reject, closing pass with all 8 live) so each graft OWNS its domain's routing |
+| overlay comparator | v0's additive-λ (MixGateD2 membership + λ·m·e) on the SAME cores — head-to-head |
+
+**Profile phase (COMPLETE — 20,480 tok per donor over code/math/chat/science/
+web):**
+- Phi picks (excluding the validated v0 cores): **chat → L19 e12** (lift
+  18.1), **science → L23 e10** (lift 3.5). Fixed v0 picks reused with their
+  fitted adapters: code L13 e8 (lift 16.5), math L24 e4 (lift 3.7).
+- OLMoE picks (from its 64 experts, same domains): **web → L10 e40** (lift
+  8.4), **code → L7 e2** (lift 20.3), **math → L3 e39** (lift 4.5),
+  **chat → L13 e20** (lift 3.7). Cores (4.2M+2.1M frozen each) wrapped in
+  Phi geometry (d_model 4096, d_donor 2048).
+- Note the natural experiment: code and math each get TWO grafts from two
+  donor families (Phi L13e8 vs OLMoE L7e2 on code; Phi L24e4 vs OLMoE L3e39
+  on math) — the partition question is whether they split the domain traffic
+  or cross-fire.
+
+**Measurements (per task):** (a) per-graft per-domain CE routed-vs-masked +
+solo reference (m1-style recovery preserved in-bank?); (b) base/union CE of
+Model C vs bare spine (partition tax, bar ≤ +3%); (c) cross-fire matrix
+(routed-share per graft × token domain) + pairwise leave-one-out interference
+(bar ≤ 0.02 nats); (d) partition vs overlay on the same cores.
+Bars: every graft's domain improves over masked; base tax ≤ +3%; pairwise
+harm ≤ 0.02.
+
+**Status at section-draft:** profile DONE (cores + picks saved); fits running
+in 2 OOM-retry lanes (v0-reuse adapters landed; per-wrap fits on the freest
+GPU with claim locks); assemble (partition bank + closing recal + the state
+matrix + verdict) chained behind them. Full table + verdict in the finalized
+entry below / box `bank2n_out/bank2n.json` (untracked).
+
+**Ops:** detached `setsid`, incremental JSON, no pgrep gates (a `pkill -f`
+with a pattern in my own cmdline self-killed a launcher — ops lesson #3
+recurred; recovered via explicit PIDs), per-wrap GPU claim locks (the box
+map moved 3× mid-run; every GPU carried a ~16.8GB co-tenant at one point —
+fits OOM-retry on the freest card, threshold ≥18.5GB free), train
+bs1×512=512 for new wraps (gfx906-safe; v0's reused wraps were bs4×512),
+eval bs2, NaN guard.
+
+---
+
 ## 2026-10-12 — MODULAR_MOE §9.3a/§10.2 **Door 9 EMBEDDING-ANCHORED BASIS TRANSLATION (the better-posed D1.5): FAIL the 0.95/0.90 revision bar — exact token-identity pairing does NOT rescue linear translation (best held cos 0.467; the pairing artifact was real but NOT binding) and emb-W dies past ~25% depth (0.48→0.05); W-init of the door25 wrap input chain does NOT close the held-out memorization gap (donor-scale α=190 collapses the wrap to a no-op; quiet α=1.0 ≈ rand) → D1.5's "feature availability" read CONFIRMED, not revised** (MI50 box GPUs 2/5/6, fp16 trunk / fp32 emb math)
 
 **Q (user's hypothesis, 2026-10-12):** was D1.5's 0.55–0.69 translator
