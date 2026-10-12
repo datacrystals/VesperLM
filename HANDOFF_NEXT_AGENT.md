@@ -149,6 +149,51 @@ starvation mode, which is finite-but-dead, reported as-is).
 
 ---
 
+## 2026-10-12 — MODULAR_MOE §10.5 **Door 8d COMPOSITION-MODE FREEZE TABLE (per-slot standing-in + sequential boosting): boosting is FLAT vs one core (58.1% vs 57.8% — two residual rounds add nothing; fitted gains [0.25, 0.10, 0.10]); per-slot bank-shape standing-in in flight (top-8 slots, distinct donor cores, gated delivery + λ-only combine)** (MI50 box GPUs 0+1, fp16)
+
+**Q: does the true bank shape (one wrap per masked slot, each trained only
+on its slot's routed traffic) or sequential residual training clear the
+≥80% demand=all bar when joint multi-core did not (Door 8c: 58→49→38%)?**
+Protocol (Door 8c setup, demand=all at L2, +0.1376 nat mask cost): (a)
+**per-slot** — top-8 most-trafficked slots (e7,e10,e58,e16,e40,e63,e14,e60;
+19.2% slot-mass, **73.5% position-hit** — the log's 0.0919 is a units bug,
+positions/T/k; fixed in harness), each slot its own core (8 DISTINCT donor
+cores — top-8 mushy Phi generalists L3 e8/L2 e1/L0 e3/L14 e12/L2 e2/L1 e11/
+L0 e2/L0 e14), rank-64 width-norm wrap trained ONLY on that slot's routed
+traffic (expert masked + wrap membership-gated to the slot), door25 recipe
+(250 steps lr 3e-3 wd 0), then combine at demand=all with per-wrap gated
+delivery + JOINT λ-ONLY pass (no joint weight training); (b) **boosting** —
+Door 8b's mall_d64 wrap as frozen round-1 core (saved artifact reused), 2
+residual rounds each training ONLY the new wrap with the previous frozen at
+their gains, then joint λ-only.
+
+**Freeze table so far (gen_heldout recovery of the +0.1376 nat demand=all
+cost):**
+| mode | cores | CE @λ* | λ* | nats recovered | recovery% |
+|---|---|---|---|---|---|
+| joint (8c) | 1 | 2.4043 | [0.30] | +0.0796 ± 0.0129 | 57.8% |
+| joint (8c) | 2 | 2.4164 | [0.25, 0.15] | +0.0675 ± 0.0123 | 49.0% |
+| joint (8c) | 3 | 2.4310 | [0.10, 0.15, 0.05] | +0.0529 ± 0.0078 | 38.4% |
+| **boosting** | **3** (1 frozen + 2 residual) | **2.4039** | [0.25, 0.10, 0.10] | **+0.0800 ± 0.0120** | **58.1%** |
+| per-slot (gated) | 8 slots / 8 cores | (in chain) | — | — | — |
+
+**Boosting is FLAT vs one core** — the residual rounds train but their
+fitted gains collapse to 0.1 and the net recovery is the base wrap's alone.
+Read together with 8c: the demand=all task **saturates at ~one rank-64
+wrap's worth of capacity (~58% of a full layer's demand)** across every
+mode that trains wraps against the same compensating objective; adding
+wraps does not add, regardless of joint vs sequential.  Per-slot standing-in
+is the one mode left with genuine functional diversity (different data per
+wrap + gated delivery — the door6 specialist shape); its combine lands in
+the chain (`door8_perslot_a*.json`, then the chain's own boosting phase).
+Ops: two detached lanes (GPU 0 per-slot, GPU 1 boosting — the slot chain's
+sequential boosting phase would have missed the window; launched in
+parallel), `door8_slot_launch.sh` + `door8_boost_launch.sh`, incremental
+JSON per fit/round, NaN guard + width-norm + lr fallback throughout,
+numeric-only.  Code+docs only.
+
+---
+
 ## 2026-10-12 — MODULAR_MOE §10.5 **Door 8c MULTI-CORE FREEZE CONFIRMATION: v2 format NOT FREEZE-ABLE on the stated bar — recovery DEGRADES with core count (1→2→3 cores: 57.8% → 49.0% → 38.4% of the full-layer demand) — joint same-site training of N wraps does NOT compose; the door6 additivity projection fails in this regime (it was solo-trained specialists); freeze input = 1 core carries 58% + composition-mode finding (sequential residual / per-slot standing-in queued)** (MI50 box GPU 0, fp16)
 
 **Q (the last gate): do 2-3 wrapped cores standing in for the FULL layer

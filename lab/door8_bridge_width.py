@@ -1138,10 +1138,14 @@ class MultiWrapMerge:
     (1.0 during per-core fitting)."""
 
     def __init__(self, stock_forward, wraps, num_stock: int,
-                 mask_set=None, membership_gated: bool = False):
+                 mask_set=None, membership_gated: bool = False,
+                 wrap_gates=None):
         self.stock = stock_forward
         self.wraps = list(wraps)
         self.gains = [1.0] * len(self.wraps)
+        # per-wrap membership sets: wrap i delivers only where its slot set
+        # fired (the per-slot bank shape); None entry = ungated
+        self.wrap_gates = list(wrap_gates) if wrap_gates else None
         self.num_stock = num_stock
         if mask_set is None:
             self.mask_set = []
@@ -1184,23 +1188,35 @@ class MultiWrapMerge:
         if self.membership_gated and hit is not None:
             m = hit.any(dim=-1).to(outs[0].dtype).unsqueeze(-1)
         total = y
-        for g, ne in zip(self.gains, outs):
+        for i, (g, ne) in enumerate(zip(self.gains, outs)):
             if self.force_gain == 0.0 or g == 0.0:
                 continue
             add = (self.force_gain * g) * ne
-            if m is not None:
+            gm = None
+            if self.wrap_gates is not None and i < len(self.wrap_gates):
+                slots = self.wrap_gates[i]
+                if slots:
+                    sel = torch.zeros_like(top_k_index, dtype=torch.bool)
+                    for e in slots:
+                        sel |= (top_k_index == e)
+                    gm = sel.any(dim=-1).to(ne.dtype).unsqueeze(-1)
+            if gm is not None:
+                add = add * gm
+            elif m is not None:
                 add = add * m
             total = total + add
         return total
 
 
 def install_multiwrap_plugin(blocks, host_i: int, wraps, mask_set=None,
-                             membership_gated: bool = False) -> list:
+                             membership_gated: bool = False,
+                             wrap_gates=None) -> list:
     blk = blocks[host_i]
     stock_forward = blk.experts.forward
     num_stock = getattr(blk.experts, "num_experts", blk.gate.weight.shape[0])
     pm = MultiWrapMerge(stock_forward, wraps, num_stock, mask_set,
-                        membership_gated=membership_gated)
+                        membership_gated=membership_gated,
+                        wrap_gates=wrap_gates)
     blk._plugin_merge = pm
 
     def make_fwd(pm=pm):
@@ -1603,6 +1619,479 @@ def _cores_for_80(curve) -> str:
     return f"{need:.1f}"
 
 
+# ---------------------------------------------------------------------------
+# Per-slot standing-in (the true bank shape) + sequential residual boosting
+# ---------------------------------------------------------------------------
+
+
+def load_wrap_state(path: str, d_model: int, w_gu, w_down, device,
+                    ref_rank: int = 64):
+    """Rebuild a width-norm wrap and load a saved adapters state_dict."""
+    payload = torch.load(path, map_location="cpu", weights_only=False)
+    d_canon = int(payload.get("d_canon") or payload["wrap_spec"]["d_canon"])
+    wrap = make_wrap(d_model, d_canon, w_gu, w_down, seed=0,
+                     ref_rank=ref_rank)
+    wrap.load_state_dict(payload["wrap"])
+    wrap.to(device)
+    return wrap, payload
+
+
+def fit_slot_wrap(model, blocks, wrap, host_i: int, slot: int, data, args,
+                  device) -> dict:
+    """One slot's stand-in: expert `slot` masked, the wrap delivers ONLY on
+    that slot's routed traffic (membership-gated = trained on the traffic
+    that actually used that expert), door25 recipe (lr 3e-3 / wd 0 / clip 1,
+    NaN guard + fresh-init fallback)."""
+    wrap.to(device)
+    handles = install_masked_plugin(blocks, host_i, wrap, [slot],
+                                    membership_gated=True)
+    try:
+        lr = args.expert_lr
+        pa = train_wrap_masked(
+            model, wrap, handles, data["train_batches"], args.expert_steps,
+            lr, device, out_pen=args.out_pen, grad_clip=args.grad_clip,
+            weight_decay=args.weight_decay)
+        if pa["aborted"] is not None:
+            d1.uninstall_plugin(handles)
+            reinit_wrap(wrap, seed=args.seed, ref_rank=args.ref_rank)
+            handles = install_masked_plugin(blocks, host_i, wrap, [slot],
+                                            membership_gated=True)
+            pa2 = train_wrap_masked(
+                model, wrap, handles, data["train_batches"],
+                args.expert_steps, lr / 2, device, out_pen=args.out_pen,
+                grad_clip=args.grad_clip, weight_decay=args.weight_decay)
+            pa2["fallback_from_lr"] = lr
+            pa = pa2
+        return pa
+    finally:
+        d1.uninstall_plugin(handles)
+        for p in wrap.parameters():
+            p.grad = None
+
+
+@torch.no_grad()
+def slot_hit_rate(model, blocks, batches, device, layer: int,
+                  slots, max_batches: int = 8) -> float:
+    """Fraction of positions whose routed slots intersect `slots`."""
+    tap = d0.GateTap(blocks)
+    hit = tot = 0
+    for tokens, _ in batches[:max_batches]:
+        tokens = tokens.to(device)
+        tap.clear()
+        d0.model_logits(model, tokens)
+        idx = tap.idx[layer]
+        sel = torch.zeros_like(idx, dtype=torch.bool)
+        for e in slots:
+            sel |= (idx == e)
+        hit += int(sel.any(dim=-1).sum())
+        tot += idx.shape[0]  # positions (not slots)
+    tap.close()
+    return round(hit / max(1, tot), 4)
+
+
+def run_perslot_test(model, blocks, data, args, out, device, d_model,
+                     cores, t_run) -> int:
+    """Per-slot standing-in — the true bank shape.
+
+    Each of the top-K most-trafficked slots at --bank-layer gets its OWN
+    wrap (distinct donor core, independent adapters, rank 64 width-norm),
+    trained only on that slot's routed traffic (expert masked, wrap
+    membership-gated to the slot).  Then all stand-ins combine additively at
+    the demand=all mask with per-wrap gated delivery and a JOINT LAMBDA-ONLY
+    pass (no joint weight training — that is what broke Door 8c).  Bar:
+    recovery >= 80% of the demand=all mask cost => v2 FREEZE."""
+    host_i = args.bank_layer
+    n_exp = int(blocks[host_i].gate.weight.shape[0])
+    k = min(args.perslot_k, len(cores))
+    print(f"\n=== PER-SLOT STANDING-IN at layer {host_i}: top-{k} slots, "
+          f"{len(cores)} cores available ===", flush=True)
+
+    probe = data["eval_batches"][:8] or data["train_batches"][:8]
+    order, shares = top_experts_at_layer(model, blocks, probe, device,
+                                         host_i, None)
+    slots = order[:k]
+    slot_shares = shares[:k]
+    mass_total = sum(shares) or 1.0
+    mass_cov = sum(slot_shares) / mass_total
+    pos_cov = slot_hit_rate(model, blocks, probe, device, host_i, slots)
+    mask_all = order  # every expert of the layer
+    print(f"  slot-mass coverage {mass_cov:.3f}  position-hit {pos_cov:.3f} "
+          f"(shares {slot_shares})", flush=True)
+    out["perslot_test"] = {
+        "host_layer": host_i, "k": k, "slots": slots,
+        "slot_shares": slot_shares,
+        "coverage": {"slot_mass": round(mass_cov, 4),
+                     "position_hit": pos_cov},
+        "cores": [{"path": c["path"], "layer": c["layer"],
+                   "expert": c["expert"]} for c in cores[:k]],
+        "notes": "each slot its own core (distinct donor cores, top-mushiness "
+                 "Phi generalists); fit per slot on that slot's routed "
+                 "traffic; combine with per-wrap gated delivery + joint "
+                 "lam-only pass (no joint weight training)",
+        "bars": {"freeze": 0.80},
+    }
+    out["phase"] = "perslot_chosen"
+    d25.dump_json(out, args.out)
+
+    # baselines: stock + demand=all masked
+    t0 = time.time()
+    baselines = {}
+    for set_name, batches in (("gen_heldout", data["eval_batches"]),
+                              ("val_mixed", data["val_batches"])):
+        if not batches:
+            continue
+        pb_s = ce_per_batch_stock_or_masked(model, blocks, batches, device,
+                                            host_i, None)
+        pb_m = ce_per_batch_stock_or_masked(model, blocks, batches, device,
+                                            host_i, mask_all)
+        ce_s = sum(pb_s) / max(1, len(pb_s))
+        ce_m = sum(pb_m) / max(1, len(pb_m))
+        baselines[set_name] = {
+            "ce_stock": round(ce_s, 4), "ce_masked": round(ce_m, 4),
+            "mask_cost": round(ce_m - ce_s, 4),
+            "per_batch": {"stock": [round(x, 5) for x in pb_s],
+                          "masked": [round(x, 5) for x in pb_m]}}
+        print(f"  baseline {set_name}: stock {ce_s:.4f}  masked {ce_m:.4f}  "
+              f"cost {ce_m - ce_s:+.4f}", flush=True)
+    out["perslot_test"]["baselines"] = baselines
+    out["phase"] = "perslot_baselines_done"
+    d25.dump_json(out, args.out)
+
+    # per-slot fits (each on its own slot's traffic)
+    wraps = []
+    slot_fits = {}
+    for i, slot in enumerate(slots):
+        wrap = make_wrap(d_model, 64, cores[i]["w_gu"], cores[i]["w_down"],
+                         seed=args.seed + 17 * i, ref_rank=args.ref_rank)
+        pa = fit_slot_wrap(model, blocks, wrap, host_i, slot, data, args,
+                           device)
+        slot_fits[str(slot)] = {"core": cores[i]["path"], "status":
+                                ("ok" if pa["aborted"] is None else "nan_abort"),
+                                "lr": pa.get("lr"),
+                                "fallback_from_lr": pa.get("fallback_from_lr"),
+                                "wall_s": pa.get("wall_s"),
+                                "last": (pa.get("history") or [{}])[-1]}
+        print(f"  slot {slot} fit: {slot_fits[str(slot)]['status']} "
+              f"lr {pa.get('lr')}", flush=True)
+        if pa["aborted"] is not None:
+            del wrap
+            continue
+        wraps.append((slot, wrap))
+        wpath = save_wrap(wrap, args, 64, {"lam_fit": {"best_lam": None}},
+                          host_i, [slot], f"slot{slot}")
+        if wpath:
+            slot_fits[str(slot)]["wrap_path"] = wpath
+        out["perslot_test"]["slot_fits"] = slot_fits
+        out["elapsed_s"] = round(time.time() - t_run, 2)
+        out["phase"] = f"perslot_fit_{i}_done"
+        d25.dump_json(out, args.out)
+
+    if not wraps:
+        out["perslot_test"]["verdict"] = {"text": "INCOMPLETE — no slot fit "
+                                          "survived"}
+        d25.dump_json(out, args.out)
+        return 0
+
+    # combine: demand=all mask, per-wrap gated delivery, joint lam-only
+    gate_sets = [[slot] for slot, _ in wraps]
+    live = [w for _, w in wraps]
+    handles = install_multiwrap_plugin(blocks, host_i, live, mask_all,
+                                       membership_gated=False,
+                                       wrap_gates=gate_sets)
+    try:
+        lam = fit_gains(model, blocks, handles, data["train_batches"], device,
+                        len(live), grid=(0.1, 0.25, 0.5, 1.0, 1.5))
+        arm = {"n_wraps": len(live), "slots": [s for s, _ in wraps],
+               "trainable_params": sum(w.adapter_param_count() for w in live),
+               "lam_fit": lam, "gates": gate_sets}
+        reads = {}
+        for set_name, batches in (("gen_heldout", data["eval_batches"]),
+                                  ("val_mixed", data["val_batches"])):
+            if not batches:
+                continue
+            pb = _ce_multi_per_batch(model, blocks, batches, device, handles,
+                                     lam["gains"])
+            pbu = _ce_multi_per_batch(model, blocks, batches, device,
+                                      handles, [1.0] * len(live))
+            reads[set_name] = {
+                "ce_graft_lam": round(sum(pb) / max(1, len(pb)), 4),
+                "ce_graft_lam1": round(sum(pbu) / max(1, len(pbu)), 4),
+                "per_batch": {"graft_lam": [round(x, 5) for x in pb],
+                              "graft_lam1": [round(x, 5) for x in pbu]}}
+        arm["ce"] = reads
+        rec, rec_stats = {}, {}
+        for set_name in ("gen_heldout", "val_mixed"):
+            if set_name not in reads:
+                continue
+            b = baselines[set_name]
+            for key in ("graft_lam", "graft_lam1"):
+                st = paired_recovery(b["per_batch"]["masked"],
+                                     b["per_batch"]["stock"],
+                                     reads[set_name]["per_batch"][key])
+                rec_stats[f"{set_name}:{key}"] = st
+                rec[f"{set_name}:ce_graft_{key.split('_', 1)[1]}"] = \
+                    st.get("recovery")
+        arm["recovery"] = rec
+        arm["recovery_stats"] = rec_stats
+        arm["recovery_primary"] = rec.get("gen_heldout:ce_graft_lam")
+        arm["status"] = "ok"
+    finally:
+        d1.uninstall_plugin(handles)
+        if device.startswith("cuda"):
+            torch.cuda.empty_cache()
+    out["perslot_test"]["combined"] = arm
+
+    st = (arm.get("recovery_stats") or {}).get("gen_heldout:graft_lam") or {}
+    recov = arm.get("recovery_primary")
+    if recov is None:
+        verdict = "INCOMPLETE — combined recovery not measured"
+    elif recov >= 0.80:
+        verdict = (f"**v2 FORMAT FREEZE** — per-slot standing-in recovers "
+                   f"{recov:.1%} of the demand=all cost at {len(live)} "
+                   f"slots (coverage {mass_cov:.1%} slot-mass / "
+                   f"{pos_cov:.1%} positions): the true bank shape carries "
+                   f"the full layer demand")
+    else:
+        verdict = (f"NOT FREEZE-ABLE at top-{len(live)} per-slot standing-in "
+                   f"— recovery {recov:.1%} < 80% of the demand=all cost "
+                   f"(coverage {mass_cov:.1%} slot-mass / {pos_cov:.1%} "
+                   f"positions); see the combined curve + boosting arm")
+    out["perslot_test"]["verdict"] = {"text": verdict,
+                                      "recovery": recov,
+                                      "bars": {"freeze": 0.80}}
+    out["phase"] = "complete"
+    out["elapsed_s"] = round(time.time() - t_run, 2)
+    d25.dump_json(out, args.out)
+    print(f"\nresults -> {args.out}")
+    print(f"per-slot combined: {len(live)} wraps, gains {lam['gains']}, "
+          f"ce {arm['ce'].get('gen_heldout', {}).get('ce_graft_lam')}, "
+          f"rec {recov}, nats {st.get('ce_recovered_nats')}")
+    print(f"VERDICT: {verdict}")
+    return 0
+
+
+def run_boosting_test(model, blocks, data, args, out, device, d_model,
+                      cores, t_run) -> int:
+    """Sequential residual training (boosting): train core 1 on the
+    demand=all mask (or reuse --boost-base), freeze, train core 2 on the
+    residual, freeze, train core 3; then a joint lam-only pass.  No joint
+    weight training.  Bar: recovery >= 80% of the demand=all mask cost."""
+    host_i = args.bank_layer
+    n_rounds = min(args.boost_rounds, len(cores))
+    print(f"\n=== BOOSTING (sequential residual) at layer {host_i}: "
+          f"{n_rounds} rounds ===", flush=True)
+
+    probe = data["eval_batches"][:6] or data["train_batches"][:6]
+    mask_all, _ = top_experts_at_layer(model, blocks, probe, device,
+                                       host_i, None)
+    out["boosting_test"] = {
+        "host_layer": host_i, "rounds": n_rounds,
+        "cores": [{"path": c["path"], "layer": c["layer"],
+                   "expert": c["expert"]} for c in cores[:n_rounds]],
+        "boost_base": args.boost_base,
+        "notes": "sequential residual: each round trains ONLY the new wrap "
+                 "(previous frozen at their current gains); final joint "
+                 "lam-only pass",
+        "bars": {"freeze": 0.80},
+    }
+    out["phase"] = "boosting_chosen"
+    d25.dump_json(out, args.out)
+
+    t0 = time.time()
+    baselines = {}
+    for set_name, batches in (("gen_heldout", data["eval_batches"]),
+                              ("val_mixed", data["val_batches"])):
+        if not batches:
+            continue
+        pb_s = ce_per_batch_stock_or_masked(model, blocks, batches, device,
+                                            host_i, None)
+        pb_m = ce_per_batch_stock_or_masked(model, blocks, batches, device,
+                                            host_i, mask_all)
+        ce_s = sum(pb_s) / max(1, len(pb_s))
+        ce_m = sum(pb_m) / max(1, len(pb_m))
+        baselines[set_name] = {
+            "ce_stock": round(ce_s, 4), "ce_masked": round(ce_m, 4),
+            "mask_cost": round(ce_m - ce_s, 4),
+            "per_batch": {"stock": [round(x, 5) for x in pb_s],
+                          "masked": [round(x, 5) for x in pb_m]}}
+        print(f"  baseline {set_name}: stock {ce_s:.4f}  masked {ce_m:.4f}  "
+              f"cost {ce_m - ce_s:+.4f}", flush=True)
+    out["boosting_test"]["baselines"] = baselines
+    out["phase"] = "boosting_baselines_done"
+    d25.dump_json(out, args.out)
+
+    wraps = []
+    if args.boost_base and os.path.exists(args.boost_base):
+        w0, payload = load_wrap_state(args.boost_base, d_model,
+                                      cores[0]["w_gu"], cores[0]["w_down"],
+                                      device, ref_rank=args.ref_rank)
+        wraps.append(w0)
+        out["boosting_test"]["base_loaded"] = args.boost_base
+        print(f"  base wrap loaded from {args.boost_base} (frozen)",
+              flush=True)
+    else:
+        w0 = make_wrap(d_model, 64, cores[0]["w_gu"], cores[0]["w_down"],
+                       seed=args.seed, ref_rank=args.ref_rank)
+        w0.to(device)
+        # round-1 fit: demand=all mask, ungated forced (the n=1 arm)
+        handles = install_multiwrap_plugin(blocks, host_i, [w0], mask_all)
+        try:
+            pa = train_multiwrap_masked(
+                model, [w0], handles, data["train_batches"],
+                args.expert_steps, args.expert_lr, device,
+                out_pen=args.out_pen, grad_clip=args.grad_clip,
+                weight_decay=args.weight_decay)
+            if pa["aborted"] is not None:
+                d1.uninstall_plugin(handles)
+                reinit_wrap(w0, seed=args.seed, ref_rank=args.ref_rank)
+                handles = install_multiwrap_plugin(blocks, host_i, [w0],
+                                                   mask_all)
+                pa = train_multiwrap_masked(
+                    model, [w0], handles, data["train_batches"],
+                    args.expert_steps, args.expert_lr / 2, device,
+                    out_pen=args.out_pen, grad_clip=args.grad_clip,
+                    weight_decay=args.weight_decay)
+                pa["fallback_from_lr"] = args.expert_lr
+        finally:
+            d1.uninstall_plugin(handles)
+        wraps.append(w0)
+        out["boosting_test"]["round1"] = {"status":
+                                          ("ok" if pa["aborted"] is None
+                                           else "nan_abort"),
+                                          "wall_s": pa.get("wall_s")}
+        print(f"  round1 fit: {out['boosting_test']['round1']['status']}",
+              flush=True)
+        if pa["aborted"] is not None:
+            out["boosting_test"]["verdict"] = {"text": "INCOMPLETE — round1 "
+                                               "NaN"}
+            d25.dump_json(out, args.out)
+            return 0
+
+    # residual rounds: train ONLY the new wrap, previous frozen at current gains
+    gains = [1.0] * len(wraps)
+    for r in range(len(wraps), n_rounds):
+        wrap = make_wrap(d_model, 64, cores[r]["w_gu"], cores[r]["w_down"],
+                         seed=args.seed + 17 * r, ref_rank=args.ref_rank)
+        wrap.to(device)
+        all_w = wraps + [wrap]
+        handles = install_multiwrap_plugin(blocks, host_i, all_w, mask_all)
+        pm = getattr(handles[0][0], "_plugin_merge", None)
+        pm.gains = list(gains) + [1.0]
+        try:
+            d1.freeze_all_except(model, list(wrap.parameters()))
+            params = list(wrap.parameters())
+            opt = torch.optim.Adam(params, lr=args.expert_lr)
+            hist = []
+            tt = time.time()
+            aborted = None
+            for step in range(args.expert_steps):
+                toks, _ = data["train_batches"][
+                    step % len(data["train_batches"])]
+                toks = toks.to(device)
+                pm.gains = list(gains) + [1.0]
+                d1.set_plugin_mode(handles, "forced", 1.0)
+                pm.gains = list(gains) + [1.0]
+                logits = d0.model_logits(model, toks)
+                v = logits.shape[-1]
+                loss = F.cross_entropy(
+                    logits[:, :-1].reshape(-1, v).float(),
+                    toks[:, 1:].reshape(-1))
+                if not torch.isfinite(loss):
+                    aborted = {"step": step, "loss": float(loss.detach())}
+                    break
+                opt.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(params, args.grad_clip)
+                opt.step()
+                if step % max(1, args.expert_steps // 5) == 0 or \
+                        step == args.expert_steps - 1:
+                    hist.append({"step": step,
+                                 "ce": float(loss.detach())})
+                    print(f"  [boost r{r} {step:4d}] ce "
+                          f"{float(loss.detach()):.4f}", flush=True)
+            pa = {"aborted": aborted, "history": hist,
+                  "wall_s": round(time.time() - tt, 2), "lr": args.expert_lr}
+            if aborted is not None:
+                print(f"  [NaN guard] boost round {r} aborted: {aborted}",
+                      flush=True)
+                break
+            wraps.append(wrap)
+            gains = list(gains) + [1.0]
+            out["boosting_test"][f"round{r + 1}"] = {
+                "status": "ok", "wall_s": pa["wall_s"],
+                "last": (hist or [{}])[-1]}
+        finally:
+            d1.uninstall_plugin(handles)
+            if device.startswith("cuda"):
+                torch.cuda.empty_cache()
+        out["elapsed_s"] = round(time.time() - t_run, 2)
+        out["phase"] = f"boosting_round{r + 1}_done"
+        d25.dump_json(out, args.out)
+
+    # joint lam-only pass + evals
+    handles = install_multiwrap_plugin(blocks, host_i, wraps, mask_all)
+    try:
+        lam = fit_gains(model, blocks, handles, data["train_batches"], device,
+                        len(wraps), grid=(0.1, 0.25, 0.5, 1.0, 1.5))
+        arm = {"n_wraps": len(wraps),
+               "trainable_params": sum(w.adapter_param_count()
+                                       for w in wraps),
+               "lam_fit": lam}
+        reads = {}
+        for set_name, batches in (("gen_heldout", data["eval_batches"]),
+                                  ("val_mixed", data["val_batches"])):
+            if not batches:
+                continue
+            pb = _ce_multi_per_batch(model, blocks, batches, device, handles,
+                                     lam["gains"])
+            reads[set_name] = {
+                "ce_graft_lam": round(sum(pb) / max(1, len(pb)), 4),
+                "per_batch": {"graft_lam": [round(x, 5) for x in pb]}}
+        arm["ce"] = reads
+        rec, rec_stats = {}, {}
+        for set_name in ("gen_heldout", "val_mixed"):
+            if set_name not in reads:
+                continue
+            b = baselines[set_name]
+            st = paired_recovery(b["per_batch"]["masked"],
+                                 b["per_batch"]["stock"],
+                                 reads[set_name]["per_batch"]["graft_lam"])
+            rec_stats[f"{set_name}:graft_lam"] = st
+            rec[f"{set_name}:ce_graft_lam"] = st.get("recovery")
+        arm["recovery"] = rec
+        arm["recovery_stats"] = rec_stats
+        arm["recovery_primary"] = rec.get("gen_heldout:ce_graft_lam")
+        arm["status"] = "ok"
+    finally:
+        d1.uninstall_plugin(handles)
+        if device.startswith("cuda"):
+            torch.cuda.empty_cache()
+    out["boosting_test"]["combined"] = arm
+
+    st = (arm.get("recovery_stats") or {}).get("gen_heldout:graft_lam") or {}
+    recov = arm.get("recovery_primary")
+    if recov is None:
+        verdict = "INCOMPLETE — boosting recovery not measured"
+    elif recov >= 0.80:
+        verdict = (f"**v2 FORMAT FREEZE** — sequential residual boosting "
+                   f"recovers {recov:.1%} of the demand=all cost at "
+                   f"{len(wraps)} cores")
+    else:
+        verdict = (f"NOT FREEZE-ABLE at {len(wraps)} boosting cores — "
+                   f"recovery {recov:.1%} < 80% of the demand=all cost")
+    out["boosting_test"]["verdict"] = {"text": verdict, "recovery": recov,
+                                       "bars": {"freeze": 0.80}}
+    out["phase"] = "complete"
+    out["elapsed_s"] = round(time.time() - t_run, 2)
+    d25.dump_json(out, args.out)
+    print(f"\nresults -> {args.out}")
+    print(f"boosting combined: {len(wraps)} wraps, gains {lam['gains']}, "
+          f"ce {arm['ce'].get('gen_heldout', {}).get('ce_graft_lam')}, "
+          f"rec {recov}, nats {st.get('ce_recovered_nats')}")
+    print(f"VERDICT: {verdict}")
+    return 0
+
+
 # Synthetic self-test (--synthetic)
 # ---------------------------------------------------------------------------
 
@@ -1804,8 +2293,8 @@ def run_synthetic_tests() -> int:
     # ---- multi-core standing-in smoke (2 wraps, mock) ----
     w1 = make_wrap(d_model, 8, w_gu, w_down, seed=0, ref_rank=64)
     w2 = make_wrap(d_model, 8, w_gu, w_down, seed=17, ref_rank=64)
-    for w in (w1, w2):
-        w.to(device)
+    for ww in (w1, w2):
+        ww.to(device)
     mh = install_multiwrap_plugin(blocks, 0, [w1, w2], mask_set=[0])
     pa = train_multiwrap_masked(model, [w1, w2], mh, batches, 4, 1e-2, device)
     fg = fit_gains(model, blocks, mh, batches, device, 2,
@@ -1815,6 +2304,27 @@ def run_synthetic_tests() -> int:
           pa["aborted"] is None and len(fg["gains"]) == 2
           and all(isinstance(g, float) for g in fg["gains"]),
           f"aborted {pa['aborted']} gains {fg['gains']} ce {fg['ce_at_fit']}")
+
+    # per-slot gated delivery (wrap_gates) + slot-fit plumbing
+    w3 = make_wrap(d_model, 8, w_gu, w_down, seed=33, ref_rank=64)
+    w3.to(device)
+    pa3 = fit_slot_wrap(model, blocks, w3, 0, 1, bdata, bargs, device)
+    w4 = make_wrap(d_model, 8, w_gu, w_down, seed=44, ref_rank=64)
+    w4.to(device)
+    gh = install_multiwrap_plugin(blocks, 0, [w3, w4], mask_set=[0, 1],
+                                  wrap_gates=[[1], [0]])
+    pmg = getattr(gh[0][0], "_plugin_merge", None)
+    with torch.no_grad():
+        with torch.no_grad():
+            w3.host_out.weight.fill_(0.01)
+            w4.host_out.weight.fill_(0.01)
+        d1.set_plugin_mode(gh, "forced", 1.0)
+        y_gated = blk.experts.forward(h, idx, w)
+    d1.uninstall_plugin(gh)
+    check("slot_fit_and_wrap_gates",
+          pa3["aborted"] is None and pmg.wrap_gates == [[1], [0]]
+          and bool(torch.isfinite(y_gated).all()),
+          f"slot fit aborted {pa3['aborted']} gates {pmg.wrap_gates}")
 
     n_fail = sum(1 for _, ok, _ in results if not ok)
     print(f"\n{len(results) - n_fail}/{len(results)} synthetic checks passed")
@@ -1902,6 +2412,18 @@ def main() -> int:
                          "donor cores, one wrap each)")
     ap.add_argument("--multicore-counts", default="1,2,3",
                     help="core counts to sweep (prefix of --cores-from)")
+    ap.add_argument("--perslot-test", action="store_true",
+                    help="per-slot standing-in (the true bank shape): each "
+                         "top-trafficked slot gets its own wrap trained on "
+                         "its slot's traffic; combine gated + lam-only")
+    ap.add_argument("--perslot-k", type=int, default=8,
+                    help="how many top-trafficked slots to stand in for")
+    ap.add_argument("--boosting-test", action="store_true",
+                    help="sequential residual training (boosting): train "
+                         "core 1, freeze, train core 2 on the residual, ...")
+    ap.add_argument("--boost-base", default=None,
+                    help="saved wrap .pt to use as frozen round-1 core")
+    ap.add_argument("--boost-rounds", type=int, default=3)
     ap.add_argument("--secondary", action="store_true",
                     help="code specialty re-check at --secondary-widths")
     ap.add_argument("--secondary-widths", default="64,512")
@@ -1985,19 +2507,26 @@ def main() -> int:
     out["phase"] = "data_ready"
     d25.dump_json(out, args.out)
 
-    # ---- multi-core standing-in (the freeze confirmation) ----
-    if args.multicore_test:
+    # ---- per-slot standing-in (the true bank shape) ----
+    if args.perslot_test or args.boosting_test or args.multicore_test:
         if not args.cores_from:
-            ap.error("--multicore-test requires --cores-from")
+            ap.error("--perslot-test/--boosting-test/--multicore-test "
+                     "require --cores-from")
         cores = []
         for path in [p.strip() for p in args.cores_from.split(",") if p.strip()]:
             w_gu, w_down, dl, de, _, prof = d25.load_core(path)
             cores.append({"path": path, "w_gu": w_gu, "w_down": w_down,
                           "layer": dl, "expert": de})
             print(f"core loaded {path}: donor L{dl} e{de}")
-        out["multicore_cores_loaded"] = [
+        out["cores_loaded"] = [
             {"path": c["path"], "layer": c["layer"], "expert": c["expert"]}
             for c in cores]
+        if args.perslot_test:
+            return run_perslot_test(model, blocks, data, args, out,
+                                    args.device, d_model, cores, t_run)
+        if args.boosting_test:
+            return run_boosting_test(model, blocks, data, args, out,
+                                     args.device, d_model, cores, t_run)
         return run_multicore_test(model, blocks, data, args, out, args.device,
                                   d_model, cores, t_run)
 
