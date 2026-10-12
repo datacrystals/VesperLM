@@ -1223,3 +1223,28 @@ Composition: models in the format swap experts natively (10.1); out-of-format
 donors are grabbed by wrap (10.2) or distilled (10.3). Registry economics
 (§9 sweep: ~8MB spine artifact, 256B/row at d_canon=64) are unchanged — the
 format governs the EXPERT side, the passport the ROUTING side.
+
+## §10.7 THE STANDARD RECIPE (2026-10-13 — "simple and flexible", user directive)
+
+After the Door 8/9/10 falsification wave, the surviving plug-in recipe is
+frozen as the standard. Do NOT improvise alternatives without a falsifier:
+
+    1. GRAB    frozen donor expert core (any family) — never trained here
+    2. WRAP    rank-64 adapters, width-norm init (x sqrt(64/d_canon)),
+               wd 0, lr 3e-3, task-CE + out_pen 300, ~250 steps (~20 min)
+    3. FEED    50-200k specialty tokens (door10: gap 1.35 -> 0.039 at 50k;
+               zero-crossing ~52k; 10-12k budgets are 5-20x UNDER)
+    4. DELIVER additive lambda (fitted, grid incl. below 0.25) —
+               softmax-mass stacking is strictly worse (door6/door10)
+    5. ROUTE   registry row (256B) + mex recal owner_mass 0.85, reject_w 10
+
+Killed branches (evidence on file, do not retry without new ideas):
+- feature translators (d1.5, door9): ~0.5 alignment ceiling
+- scratch/refit deltas (93188b0): 3 contracts x 6 recipes, all fail
+- KL-distill cores (door5/door7): no CE skill; CE-distill in-sample only
+- whole-layer substitution (door8b-e): ~58% saturation, all modes
+- wide bridges / fancy inits (door8/door9): rank-64 random-init wins
+
+Flexibility claim: the same 5 steps serve code/math/memory/sensor
+specialties and compose in the v0 assembly (69949e8). Open rungs:
+combine-at-scale (bank2n quality half), memory token-surfacing.
