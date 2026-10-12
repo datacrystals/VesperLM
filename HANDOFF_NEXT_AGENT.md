@@ -41,6 +41,106 @@ data first.
 
 ---
 
+## 2026-10-12 — vk-base pretrain **LAUNCHED** (~10B tokens through the 470m_k lineage + fixed vesperk mix, one MI300X, user-approved)
+
+**RUN STATE:** droplet id **608325412** `vesper-vk-base-ttl3480m-1791789171`,
+ip **129.212.180.230**, created 2026-10-12 07:12:51 UTC, **launched 07:58 UTC**.
+TTL 3480 min (58h): **hard deadline 2026-10-14 17:12:51 UTC**; droplet
+`pod-selfdestruct.timer` fires 2026-10-14 17:17 UTC (verified active) + laptop
+watchdog cron `*/5 pod/devcloud.py watchdog`. Projected finish ~**2026-10-14
+13:30–15:00 UTC** (≈53.6h: 10.07B tok at t3's 3.77B/20h, incl. 800-step seq
+ramp + 100 evals) — inside TTL with ~2–4h margin. Do NOT extend past TTL; pull
+artifacts before it fires. `--force` on create was justified on record: ledger
+settled $48.94 / cap $180; devcloud refuses on cumulative committed(est)
+$121 + $116 = $237 > $180, but worst-case **real** spend = 48.94 + 58h×$2 =
+**$164.94 ≤ $165 < $180**. $116 committed this droplet.
+
+**WHY (user-approved this cycle):** both SFT rounds show the bases are
+undertrained — t3-r2 val 1.4999 / 0/12 talkable, box-429M r2 0/12 same
+failure family (repetition collapse / prompt-echo / corpus drift); t3's 3.77B
+tokens ≈ 2× under Chinchilla for 430M. More pretrain tokens is THE lever.
+
+**WATCHDOG FIX (a6d618e):** devcloud.py's bare 24h HARD_KILL would have
+destroyed this 58h droplet at 24h via the laptop `*/5` cron — age ceiling is
+now `max(24h, declared TTL + 2h)` when the name parses; 24h stays the fallback
+for unparseable/leaked droplets.
+
+**CONFIG** (`Pretrain/configs/model_configs.py` `vk_base`, a6d618e): t3's
+470m_k arch verbatim (dim 1024, 10 layers, kda 8 + mla 2, 8 experts top-2,
+passport_dim 64, 426.77M params → 560.96M with VESPER_VALUE_EMBED tables,
+vocab 65523) with the postmortem deltas: **`route_nonphase: True` /
+`nonphase_share: 0.3`** (bf8f191 — the ~18B-token vesperk corpus actually
+trains now), **`min_lr: 2e-5`** (= 10% of max_lr 2e-4; t3's 3e-5 = 15% floor
+caveat), **`total_steps: 10000`** (800 seq-ramp ≈0.43B + 9200×1.048M tok/step
+≈ **10.07B tokens**), 8k ctx, `router_type: passport` as a config key (t3
+passed it via env). Phase switch at step 8000. Ladder-comparable runs keep
+`470m_k` (route_nonphase off by default there).
+
+**DATA (operator step done):** 24/24 bins laptop→droplet, size-verified
+(20 `vesperk/*` 35GB + 4 `pretrain/*` 9GB) via `ssh root@ip 'cat > f' < local`
+(~23 MB/s ≈ 30 min). `bash pod/rebuild_index.sh` + `pod/MANIFEST` wrote
+`Dataset/data/index.txt`: 20 `vesperk/*` rows (per-shard weights
+fineweb_edu/dclm/finemath/wikipedia 1.0, openwebmath/cosmopedia 0.75,
+code 0.4) + 4 phase rows (nemotron_phase1 2.0 / nemotron_phase2 0.5 /
+phase1_pretrain 1.5 / phase2_pretrain 0.8) — weights honored per-stream under
+route_nonphase. **NOTE: `Dataset/data/index.txt` is wrongly TRACKED in git
+(from an old commit) — never push changes to it; droplet-local only.**
+
+**LAUNCH (exact command + env):**
+`ssh root@129.212.180.230 'setsid nohup bash /root/vk_base_train.sh </dev/null >>/root/vk_base_pretrain.log 2>&1 &'`
+where `/root/vk_base_train.sh` is an auto-resume loop (max 20 restarts, stops
+cleanly on the `[TRAINING COMPLETE]` banner) exporting
+`VESPER_CONFIG=vk_base VESPER_AMP=bf16 VESPER_ROUTER_TYPE=passport
+VESPER_MICRO_BATCH=8 VESPER_ACCUM=128 VESPER_COMPILE=1 VESPER_FUSED_CE=1
+VESPER_VALUE_EMBED=1` (all three MI300X-canary flags on per user — flag-on
+ckpts carry +2 value_emb keys and cannot load flag-off; future SFT must build
+with value_embed=True). Startup verified: PassportRouter in all 10 layers,
+hybrid {kda: 8, mla: 2}, Global Effective Batch 128 (= 1.048M tok/step @8192),
+route_nonphase ON @0.30, per-group val (phase1/phase2/nonphase), dummy pass
+2.4GB reserve.
+
+**EARLY READ (first 200 steps):** train CE 11.2895@0 (seq 128) → 7.27@100
+(seq 1088) → 5.56@~210 (seq 2112); **val 7.2676@100 → 5.8992@200**
+(per-group @200: phase1 5.8575 / phase2 5.8067 / nonphase 5.9965; val mix
+0.70/0.30 in phase 1). Tok/s ramping with seq_len_warmup: 6.0k@192 → 45k@1280;
+t3 measured 51.2k steady @8192 → ETA ≈53.6h to 10.07B. VRAM 7.8GB/192GB.
+`step_best` already saved at step 100.
+
+**SAFETY ARMED:** (1) droplet self-destruct timer + laptop watchdog cron (both
+enforce TTL); (2) the fixed trainer (364d544: %500 incremental saves +
+terminal-step save at `step_{total-1}` + `[TRAINING COMPLETE]` banner +
+emergency save on crash — the 3990-vanish is fixed); (3) auto-resume loop
+(re-runs from highest `step_N` in `vesper_linear_checkpoints_vk_base`); (4)
+NaN tripwire `/root/vk_tripwire.sh` on the droplet (kills trainer+loop if CE
+goes nan/inf after step 200; fires to `/root/VK_TRIPWIRE_FIRED`); (5) laptop
+ckpt puller `/tmp/vk_ckpt_pull.sh` every 10 min → `~/vesper_ckpts/vk_base/`
+(step_*/checkpoint.pt + snapshots + eval_samples*.json + loss_curve.png,
+dedup via `~/vesper_ckpts/vk_base/.pulled`). Transient ssh refusals/hangs to
+the droplet happen occasionally — just retry.
+
+**MONITOR:** `ssh root@129.212.180.230 'tail -f /root/vk_base_pretrain.log'` ·
+`ssh root@129.212.180.230 'grep -E "Validation|COMPLETE|Step 0" /root/vk_base_pretrain.log | tail'` ·
+`tail /tmp/vk_ckpt_pull.log` (laptop) · `python3 pod/devcloud.py list` (laptop).
+
+**RESUME (if the auto-resume loop is ever dead):**
+`ssh root@129.212.180.230 'setsid nohup bash /root/vk_base_train.sh </dev/null >>/root/vk_base_pretrain.log 2>&1 &'`
+— trainer auto-resumes from the highest `step_N`; same env capsule inside
+`/root/vk_base_train.sh`.
+
+**DESTROY (mandatory at run end / early stop — never idle the droplet):**
+`python3 pod/devcloud.py destroy 608325412 && python3 pod/devcloud.py list`
+→ must print `no vesper-* droplets`. If the run is broken mid-flight: FIX or
+DESTROY. TTL + watchdog + self-destruct bound the worst case at 2026-10-14
+17:17 UTC.
+
+**ONECLICK (free parallel shot, non-blocking):** 1 create today `gh-227fa3d1`
+(07:25 UTC, briefed `--minutes 150 --boot-timeout-min 120` command) — `pending`
+("Waiting for resources") as of ~08:10 UTC = the historical starvation
+pattern; do NOT count on it, do NOT create more. Log
+`lab/logs/oneclick_vk_base.log`.
+
+---
+
 ## 2026-10-12 — Door 7 **CE-OBJECTIVE DISTILLATION (the named Door-5 lever): does NOT unlock the distill tier** — teacher-argmax CE makes the core ANTI-skilled (argmax ≠ GT on 84.4% of home positions), GT-CE gives in-sample skill only (memorization), and the winning-stack wrap of the argmax core passes quality IN-SAMPLE for the first time on a distilled core (1.843 vs 1.924) but held-out stays flat (1.837 vs 1.830) with forced ≈ masked (MI50 box, fp16)
 
 **Q (Door-5 verdict's named lever): KL-distilled cores fail the CE-quality
