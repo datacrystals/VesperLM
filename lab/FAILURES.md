@@ -18,6 +18,25 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-12 — grafted-spine-v0-math-nan — the lr 3e-3 wrap-fit NaN mode recurs on the Phi spine: math wrap (L24 e4) fit went non-finite at step ~150 after the plug-in output collapsed (|y| 5e-3 → 7e-6), killing lane B before its memory wraps
+- Evidence: box `/data/tliao/grafted_spine_v0_out/fit_B.log` (phaseA hist:
+  |W| grew 17.8→28.1 while |y| shrank to 7.4e-6 and fixed-batch CE stalled
+  3.71→3.35, then `ce nan` from step 150); `lab/grafted_spine_v0.py` fit lane.
+  The code wrap on the same recipe/harness (L13 e8, lr 3e-3) was healthy
+  (CE home 0.841→0.296 additive, |y|~1e-2), so this is wrap-specific, not a
+  harness bug.
+- Root cause: same family as FAILURES door4b/door5 "lr 3e-3 fits can NaN" —
+  fp32 thin adapters against an fp16 trunk at lr 3e-3.  Why this core/layer
+  collapsed its output before exploding is unknown; the D2 profile already
+  called math specialists mushy (lift 3.69 vs code 16.5).
+- What it rules out: lr 3e-3 as a universal default for Phi-host wraps —
+  use 3e-3 only where the CE curve visibly descends (code-style homes), 1e-3
+  elsewhere; never let a NaN'd wrap kill the rest of a multi-wrap lane.
+- Next tried: (1) fit phase is now skip-and-continue on non-finite adapters
+  (lane survives, bad wrap skipped); (2) recovery refit at **lr 1e-3** on
+  GPU 6 (healthy: ce0 3.71→3.07 @75 steps, |y|→5e-3) + the lane's memory
+  wraps at 1e-3.
+
 ## 2026-10-12 — vk-base-droplet-setup — `git clone` silently skipped on the droplet (non-empty dest), so requirements.txt + patch_fla never ran; also a data-transfer script glob bug that "completed" with 0 files
 - Evidence: droplet 608325412 `/root/setup_vk_base.log` — `git clone
   https://github.com/datacrystals/VesperLM.git` refused because

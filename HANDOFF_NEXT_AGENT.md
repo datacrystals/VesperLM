@@ -41,6 +41,77 @@ data first.
 
 ---
 
+## 2026-10-12 — GRAFTED SPINE V0: first assembly of the user's north star ("a model I can run and talk to … mostly grafted experts") — Phi-mini-MoE-instruct spine + D2 registry + 2 wrapped specialties + shaped episodic memories, additive-λ delivery; chat test bare-vs-grafted (MI50 box, GPUs 1/4/6, fp16)
+
+**Q (the user's dream, verbatim): "a model I can run and talk to (a few B
+params) that is actually intelligent enough to have a conversation and is
+mostly grafted experts."** v0 = assemble the already-validated parts and run
+the chat-level parity test: does a 7.65B instruct spine still CONVERSE with
+the graft + plug-ins attached, and do the specialties/memories show up in
+conversation?
+
+**Harness `lab/grafted_spine_v0.py`** (assembly + chat test in one script;
+imports d0/d1/d2/door25/door6 + `memory_shaping` UNMODIFIED). Phases: `fit`
+(one process per GPU lane, per-wrap plugin artifacts) → `assemble` (joint
+install, closing recal, λ fit, chat test). Recipe, every part previously
+validated on its own:
+
+| part | artifact | provenance |
+|---|---|---|
+| spine | `/data/tliao/Phi-mini-MoE-instruct` (7.65B/1.8B active, 32L, hidden 4096, E16 top-2 sparsemixer, instruct-tuned, ChatML `<\|user\|>…`) | the D2 donor itself |
+| graft | `registry_phimoe_f620b32c.pt` (32×16 rows, d_r=4096, prototype init + 2×300 recal) | D2 parity cos 0.998 |
+| specialty code | donor core **L13 e8** (11.8M frozen SwiGLU) + 1.05M adapters @ d_canon=64 | door25 recipe (250 steps, lr 3e-3, wd 0, out_pen 300) |
+| specialty math | donor core **L24 e4** + adapters, same geometry | door25 recipe, lr **1e-3** (3e-3 NaNs on this host — FAILURES) |
+| memories ×3 | shaped episodes (pet_kepler / editor_helix / math_words) on the `memory_shaping` delta contract (token-substitution = the G3 winner shape), each = door25 wrap on the episode's ChatML home text (3 taught substitutions + 3 approvals), 150 steps | §8 line; closing row recal at **owner_mass 0.85** (g3_owner_mass_fix lever) |
+| delivery | Door 4 (b) / Door 6 MixMerge additive: `y = y_stock + Σ λ_j·m_j·e_j` per expert per layer; membership = plug-in row score beats the k-th stock score (no softmax-mass competition) | additive-λ winner |
+
+**Phi-host wrap geometry** (the OLMoE-host door6 artifacts cannot be reused —
+d_model 2048 vs 4096): fresh wraps in Phi geometry, `x(4096)→host_in→c(64)→
+adapter_up→u(4096)→frozen core→v(4096)→adapter_down→c'(64)→host_out→δ(4096)`
+= **1,048,576 trainable adapters** around the same frozen 11.8M donor cores
+(door25/door6 geometry logic, new host widths). Sites depth-matched to the
+donor layers on the 32L spine (L13, L24, L6, L19, L27 — one plug-in row per
+site, distinct layers).
+
+**Assembly facts (fit lane, in-sample CE on home windows, masked → additive
+plugged → forced solo):**
+- **code (L13 e8)**: CE **0.841 → 0.296 → 0.175** (quality sub-gate PASS,
+  the door25 pattern on the Phi host); base CE 1.626→1.640 (Δ+0.014); row
+  recal p(home) 0.986→0.973, p(base) 0.986→**0.012**.
+- **mem_pet (L6 e3)**: episode CE 3.72 → **0.03** by step 60 of 150 — the
+  wrap memorizes its episode home (the door25 memorization caveat, here the
+  FEATURE: episodic memory is supposed to recall the episode).
+- **math (L24 e4)**: lr 3e-3 **NaN at step ~150** (|y| collapsed to 7e-6
+  first — FAILURES `grafted-spine-v0-math-nan`); refit at lr 1e-3 healthy
+  (ce0 3.71→3.07 @75, |y|→5e-3, no NaN).
+
+**Chat test protocol** (`--phase assemble`): 7-turn conversation each for
+BARE (stock router) and GRAFTED (registry + all plugs, learned λ), greedy +
+temperature-0.8 sampling: 2 general turns (converse parity), code turn
+(Fibonacci), math turn (product rule), 3 memory turns (cat name / editor /
+2+2 word form). Numeric: bare-vs-grafted next-token KL + logit cosine over
+the chat contexts (chat-level parity), CE of reference answers (specialty
+visibility), taught-token logprob margins (memory visibility), membership
+per plug on home/base, reply substring flags. Full transcripts in
+`/data/tliao/grafted_spine_v0_out/v0_results.json` (untracked); report
+quotes truncated snippets only.
+
+**Ops:** detached `setsid` lanes, incremental JSON, train bs4×512=2048 (memory
+wraps bs1×512=512 — both gfx906-safe; holes {256,768,1024,4096}), eval bs2,
+NaN guard on every saved plugin (skip-and-continue, the lr 3e-3 NaN aborted
+lane B's first math fit — recovery refit at 1e-3 on GPU 6). Free-GPU map moved
+under us again: launch took GPU 1 + 4 (clean), recovery GPU 6; GPU 0 had a
+15.9GB idle allocation, GPUs 2/3/5/7 busy (user + CE-distill lanes).
+
+**CHAT TEST RESULT — see the finalized numbers below (detached assemble run
+in flight at section-draft time; box JSON is authoritative).**
+
+**Read the live results:** box `/data/tliao/grafted_spine_v0_out/` (fit_A.json,
+fit_B2.json, v0_results.json + launcher/fit/assemble logs) / home
+`lab/imported/grafted_spine_v0/` (untracked). Next rungs: multi-slice
+calibration for the held-out gap, more memories (N-scaling is the §8.4 G3
+question at chat level), second donor family, and cross-scale wraps (10.1).
+
 ## 2026-10-12 — vk-base pretrain **LAUNCHED** (~10B tokens through the 470m_k lineage + fixed vesperk mix, one MI300X, user-approved)
 
 **RUN STATE:** droplet id **608325412** `vesper-vk-base-ttl3480m-1791789171`,
