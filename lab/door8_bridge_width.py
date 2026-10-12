@@ -1121,6 +1121,488 @@ def run_bank_test(model, blocks, data, args, out, device, d_model,
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Multi-core standing-in (the freeze confirmation): N wrapped cores at the
+# masked site, additive per-core lam
+# ---------------------------------------------------------------------------
+
+
+class MultiWrapMerge:
+    """Masked stock + sum_i (force_gain * gains[i] * e_i(h)) — N wrapped cores
+    standing in for a masked expert SET at one site (the bank shape: one
+    graft per native slot, here compressed onto one block).  Same mask
+    semantics as MaskedPluginMerge (exact slot zeroing under
+    norm_topk_prob=false); `membership_gated` limits delivery to tokens
+    whose routed slots hit the mask.  gains[i] are the per-core delivery
+    scales (fitted); force_gain is the common scale d1.set_plugin_mode sets
+    (1.0 during per-core fitting)."""
+
+    def __init__(self, stock_forward, wraps, num_stock: int,
+                 mask_set=None, membership_gated: bool = False):
+        self.stock = stock_forward
+        self.wraps = list(wraps)
+        self.gains = [1.0] * len(self.wraps)
+        self.num_stock = num_stock
+        if mask_set is None:
+            self.mask_set = []
+        elif isinstance(mask_set, int):
+            self.mask_set = [int(mask_set)]
+        else:
+            self.mask_set = [int(e) for e in mask_set]
+        self.mask_active = bool(self.mask_set)
+        self.membership_gated = bool(membership_gated)
+        self.mode = "off"
+        self.force_gain = 1.0
+        self.last_new_outs = None
+
+    def _slot_mask(self, top_k_index) -> torch.Tensor:
+        m = torch.zeros_like(top_k_index, dtype=torch.bool)
+        for e in self.mask_set:
+            m |= (top_k_index == e)
+        return m
+
+    def __call__(self, hidden_states, top_k_index, top_k_weights):
+        w = top_k_weights
+        hit = None
+        if self.mask_active and self.mask_set:
+            hit = self._slot_mask(top_k_index)
+            w = torch.where(hit, torch.zeros_like(top_k_weights),
+                            top_k_weights)
+        if self.mode == "off":
+            return self.stock(hidden_states, top_k_index, w)
+        is_new = top_k_index == self.num_stock
+        stock_idx = torch.where(is_new, torch.zeros_like(top_k_index),
+                                top_k_index)
+        stock_w = torch.where(is_new, torch.zeros_like(w), w)
+        with torch.no_grad():
+            y = self.stock(hidden_states, stock_idx, stock_w)
+        if self.mode != "forced":
+            return y
+        outs = [wrap(hidden_states) for wrap in self.wraps]
+        self.last_new_outs = outs
+        m = None
+        if self.membership_gated and hit is not None:
+            m = hit.any(dim=-1).to(outs[0].dtype).unsqueeze(-1)
+        total = y
+        for g, ne in zip(self.gains, outs):
+            if self.force_gain == 0.0 or g == 0.0:
+                continue
+            add = (self.force_gain * g) * ne
+            if m is not None:
+                add = add * m
+            total = total + add
+        return total
+
+
+def install_multiwrap_plugin(blocks, host_i: int, wraps, mask_set=None,
+                             membership_gated: bool = False) -> list:
+    blk = blocks[host_i]
+    stock_forward = blk.experts.forward
+    num_stock = getattr(blk.experts, "num_experts", blk.gate.weight.shape[0])
+    pm = MultiWrapMerge(stock_forward, wraps, num_stock, mask_set,
+                        membership_gated=membership_gated)
+    blk._plugin_merge = pm
+
+    def make_fwd(pm=pm):
+        def fwd(hidden_states, top_k_index, top_k_weights):
+            return pm(hidden_states, top_k_index, top_k_weights)
+        return fwd
+
+    blk.experts.forward = make_fwd()
+    return [(blk, stock_forward)]
+
+
+def train_multiwrap_masked(model, wraps, handles, train_batches, steps, lr,
+                           device, out_pen: float = 0.0,
+                           grad_clip: float = 1.0,
+                           weight_decay: float = 0.0) -> dict:
+    """Joint task-loss fit of ALL wrap adapters under forced additive
+    delivery with the mask live (the composition being measured).  NaN guard
+    aborts the arm (never fit a poisoned multi-wrap)."""
+    params = [p for wrap in wraps for p in wrap.parameters()]
+    d1.freeze_all_except(model, params)
+    opt = torch.optim.Adam(params, lr=lr, weight_decay=weight_decay)
+    hist = []
+    t0 = time.time()
+    fixed = train_batches[0][0].to(device)
+    aborted = None
+    for step in range(steps):
+        toks, _ = train_batches[step % len(train_batches)]
+        toks = toks.to(device)
+        d1.set_plugin_mode(handles, "forced", 1.0)
+        logits = d0.model_logits(model, toks)
+        v = logits.shape[-1]
+        loss = F.cross_entropy(logits[:, :-1].reshape(-1, v).float(),
+                               toks[:, 1:].reshape(-1))
+        out_norm2 = torch.zeros((), device=device)
+        if out_pen > 0:
+            d1.set_plugin_mode(handles, "forced", 1.0)
+            d0.model_logits(model, train_batches[(step + 1) %
+                                                 len(train_batches)][0].to(device))
+            outs = [o for blk, _ in handles
+                    for o in (getattr(blk, "_plugin_merge", None).last_new_outs
+                              or [])]
+            if outs:
+                out_norm2 = torch.stack(
+                    [t.float().pow(2).mean() for t in outs]).mean()
+        total = loss + out_pen * out_norm2
+        if not torch.isfinite(total):
+            aborted = {"step": step, "loss": float(loss.detach()),
+                       "reason": "non-finite loss"}
+            print(f"  [NaN guard] aborting multi-wrap arm at step {step}: "
+                  f"{aborted}", flush=True)
+            break
+        opt.zero_grad()
+        total.backward()
+        if grad_clip:
+            torch.nn.utils.clip_grad_norm_(params, grad_clip)
+        opt.step()
+        if step % max(1, steps // 10) == 0 or step == steps - 1:
+            with torch.no_grad():
+                d1.set_plugin_mode(handles, "forced", 1.0)
+                lg0 = d0.model_logits(model, fixed)
+                ce0 = float(F.cross_entropy(
+                    lg0[:, :-1].reshape(-1, v).float(),
+                    fixed[:, 1:].reshape(-1)))
+                outs = [o for blk, _ in handles
+                        for o in (getattr(blk, "_plugin_merge", None).last_new_outs
+                                  or [])]
+                yabs = (torch.stack([t.float().abs().mean()
+                                     for t in outs]).mean()
+                        if outs else torch.zeros((), device=device))
+                pl2 = math.sqrt(sum(float(p.detach().pow(2).sum())
+                                    for p in params))
+            hist.append({"step": step, "ce_batch": float(loss.detach()),
+                         "ce_batch0": ce0, "mean_abs_y": float(yabs),
+                         "param_l2": pl2})
+            print(f"  [mtrain {step:4d}] ce {float(loss.detach()):.4f}  "
+                  f"ce0 {ce0:.4f}  |y| {float(yabs):.3e}  |W| {pl2:.2f}",
+                  flush=True)
+    return {"steps": steps, "lr": lr, "out_pen": out_pen,
+            "grad_clip": grad_clip, "weight_decay": weight_decay,
+            "n_cores": len(wraps), "history": hist, "aborted": aborted,
+            "completed_steps": hist[-1]["step"] if hist else 0,
+            "wall_s": round(time.time() - t0, 2)}
+
+
+@torch.no_grad()
+def _ce_multi(model, blocks, batches, device, handles, gains) -> float:
+    pm = getattr(handles[0][0], "_plugin_merge", None)
+    old = list(pm.gains)
+    pm.gains = [float(g) for g in gains]
+    pm.force_gain = 1.0
+    d1.set_plugin_mode(handles, "forced", 1.0)
+    pm.gains = [float(g) for g in gains]
+    try:
+        tot, n = 0.0, 0
+        for tokens, _ in batches:
+            tokens = tokens.to(device)
+            lg = d0.model_logits(model, tokens)
+            tot += d0.next_token_ce(lg, tokens) * tokens.shape[0]
+            n += tokens.shape[0]
+        return tot / max(1, n)
+    finally:
+        d1.set_plugin_mode(handles, "off")
+        pm.gains = old
+
+
+def fit_gains(model, blocks, handles, batches, device, n_cores: int,
+              grid=(0.05, 0.1, 0.15, 0.25, 0.3, 0.5, 1.0),
+              max_batches: int = 6) -> dict:
+    """Per-core delivery scales: common-scale coarse grid, then one round of
+    per-core coordinate descent (grid extended below 0.25 per the door8
+    note; starts from the trained composition gains=[1]*n)."""
+    sub = batches[:max_batches]
+    t0 = time.time()
+    curve = []
+    for s in grid:
+        curve.append((f"common:{s}", _ce_multi(model, blocks, sub, device,
+                                               handles, [s] * n_cores)))
+    best_s = min(curve, key=lambda p: p[1])[0].split(":")[1]
+    gains = [float(best_s)] * n_cores
+    for i in range(n_cores):
+        local = []
+        for g in grid:
+            trial = list(gains)
+            trial[i] = g
+            local.append((g, _ce_multi(model, blocks, sub, device, handles,
+                                       trial)))
+        gains[i] = min(local, key=lambda p: p[1])[0]
+        curve.append((f"core{i}:{gains[i]}",
+                      min(local, key=lambda p: p[1])[1]))
+    ce = _ce_multi(model, blocks, sub, device, handles, gains)
+    return {"gains": [round(g, 4) for g in gains],
+            "best_common_scale": float(best_s),
+            "curve": [{"where": w, "ce": round(c, 5)} for w, c in curve],
+            "ce_at_fit": round(ce, 5),
+            "wall_s": round(time.time() - t0, 2)}
+
+
+def run_multicore_test(model, blocks, data, args, out, device, d_model,
+                       cores, t_run) -> int:
+    """The freeze confirmation: N wrapped cores stand in for the FULL layer
+    demand (all experts of --bank-layer masked, exact slot zeroing), additive
+    per-core lam.  Cores = DIFFERENT donor cores (mushy Phi generalists),
+    one wrap each at the masked site (width-norm init, rank 64); independent
+    adapter seeds.  Bar: recovery >= 80% of the demand=all mask cost at
+    2-3 cores => v2 format FREEZE."""
+    host_i = args.bank_layer
+    n_exp = int(blocks[host_i].gate.weight.shape[0])
+    counts = [int(x) for x in args.multicore_counts.split(",") if x.strip()]
+    print(f"\n=== MULTI-CORE STANDING-IN at layer {host_i} "
+          f"(counts {counts}, {len(cores)} cores available) ===", flush=True)
+
+    mask_set, shares = top_experts_at_layer(model, blocks,
+                                            data["eval_batches"][:6],
+                                            device, host_i, None)
+    print(f"  demand=all: mask {len(mask_set)} experts", flush=True)
+    out["multicore_test"] = {
+        "host_layer": host_i, "n_experts": n_exp, "mask_set": mask_set,
+        "cores": [{"path": c["path"], "layer": c["layer"],
+                   "expert": c["expert"]} for c in cores],
+        "core_choice": "different donor cores (top-mushiness Phi "
+                       "generalists), same masked site — product-faithful "
+                       "to the heterogeneous all-grafted bank; count is the "
+                       "only variable (same rank/recipe/seed offset)",
+        "counts_order": counts,
+        "bars": {"freeze": 0.80},
+    }
+    out["phase"] = "multicore_chosen"
+    d25.dump_json(out, args.out)
+
+    # baselines (recomputed — self-contained)
+    t0 = time.time()
+    baselines = {}
+    for set_name, batches in (("gen_heldout", data["eval_batches"]),
+                              ("val_mixed", data["val_batches"])):
+        if not batches:
+            continue
+        pb_s = ce_per_batch_stock_or_masked(model, blocks, batches, device,
+                                            host_i, None)
+        pb_m = ce_per_batch_stock_or_masked(model, blocks, batches, device,
+                                            host_i, mask_set)
+        ce_s = sum(pb_s) / max(1, len(pb_s))
+        ce_m = sum(pb_m) / max(1, len(pb_m))
+        baselines[set_name] = {
+            "ce_stock": round(ce_s, 4), "ce_masked": round(ce_m, 4),
+            "mask_cost": round(ce_m - ce_s, 4),
+            "per_batch": {"stock": [round(x, 5) for x in pb_s],
+                          "masked": [round(x, 5) for x in pb_m]}}
+        print(f"  baseline {set_name}: stock {ce_s:.4f}  masked {ce_m:.4f}  "
+              f"cost {ce_m - ce_s:+.4f}", flush=True)
+    out["multicore_test"]["baselines"] = baselines
+    out["multicore_test"]["baselines_wall_s"] = round(time.time() - t0, 2)
+    out["phase"] = "multicore_baselines_done"
+    d25.dump_json(out, args.out)
+
+    # arms: n = 1, 2, 3 (prefix of the core list)
+    out["multicore_test"]["arms"] = {}
+    for n in counts:
+        tag = f"n{n}"
+        wraps = [make_wrap(d_model, 64, cores[i]["w_gu"], cores[i]["w_down"],
+                           seed=args.seed + 17 * i, ref_rank=args.ref_rank)
+                 for i in range(n)]
+        for w in wraps:
+            w.to(device)
+        arm = {"n_cores": n, "d_canon": 64,
+               "trainable_params": sum(w.adapter_param_count() for w in wraps),
+               "core_params_frozen": sum(w.core_param_count() for w in wraps),
+               "wraps": [w.wrap_spec() for w in wraps]}
+        print(f"\n=== MULTI-CORE n={n} ({arm['trainable_params']} trainable) ===",
+              flush=True)
+        handles = install_multiwrap_plugin(blocks, host_i, wraps, mask_set,
+                                           membership_gated=False)
+        try:
+            lr = args.expert_lr
+            pa = train_multiwrap_masked(
+                model, wraps, handles, data["train_batches"],
+                args.expert_steps, lr, device, out_pen=args.out_pen,
+                grad_clip=args.grad_clip, weight_decay=args.weight_decay)
+            arm["phase_a"] = pa
+            if pa["aborted"] is not None:
+                print(f"  multi arm aborted at lr {lr}; fresh reinit + "
+                      f"retry at {lr / 2}", flush=True)
+                d1.uninstall_plugin(handles)
+                for i, w in enumerate(wraps):
+                    reinit_wrap(w, seed=args.seed + 17 * i,
+                                ref_rank=args.ref_rank)
+                handles = install_multiwrap_plugin(blocks, host_i, wraps,
+                                                   mask_set)
+                pa2 = train_multiwrap_masked(
+                    model, wraps, handles, data["train_batches"],
+                    args.expert_steps, lr / 2, device, out_pen=args.out_pen,
+                    grad_clip=args.grad_clip, weight_decay=args.weight_decay)
+                pa2["fallback_from_lr"] = lr
+                arm["phase_a"] = pa2
+            if arm["phase_a"]["aborted"] is not None:
+                arm["status"] = "nan_abort"
+                out["multicore_test"]["arms"][tag] = arm
+                d25.dump_json(out, args.out)
+                continue
+
+            lam = fit_gains(model, blocks, handles, data["train_batches"],
+                            device, n)
+            arm["lam_fit"] = lam
+            gains = lam["gains"]
+
+            pm = getattr(handles[0][0], "_plugin_merge", None)
+            reads = {}
+            for set_name, batches in (("gen_heldout", data["eval_batches"]),
+                                      ("val_mixed", data["val_batches"])):
+                if not batches:
+                    continue
+                pb = _ce_multi_per_batch(model, blocks, batches, device,
+                                         handles, gains)
+                pb1 = _ce_multi_per_batch(model, blocks, batches, device,
+                                          handles, [1.0] * n)
+                reads[set_name] = {
+                    "ce_graft_lam": round(sum(pb) / max(1, len(pb)), 4),
+                    "ce_graft_lam1": round(sum(pb1) / max(1, len(pb1)), 4),
+                    "per_batch": {"graft_lam": [round(x, 5) for x in pb],
+                                  "graft_lam1": [round(x, 5) for x in pb1]}}
+            if pm is not None:
+                pm.membership_gated = True
+                pbm = _ce_multi_per_batch(model, blocks,
+                                          data["eval_batches"], device,
+                                          handles, gains)
+                pm.membership_gated = False
+                reads["gen_heldout"]["ce_graft_lam_membership"] = round(
+                    sum(pbm) / max(1, len(pbm)), 4)
+                reads["gen_heldout"]["per_batch"]["graft_lam_membership"] = \
+                    [round(x, 5) for x in pbm]
+            arm["ce"] = reads
+
+            rec, rec_stats = {}, {}
+            for set_name in ("gen_heldout", "val_mixed"):
+                if set_name not in reads:
+                    continue
+                b = baselines[set_name]
+                keys = ["graft_lam", "graft_lam1"]
+                if "graft_lam_membership" in reads[set_name]["per_batch"]:
+                    keys.append("graft_lam_membership")
+                for key in keys:
+                    st = paired_recovery(b["per_batch"]["masked"],
+                                         b["per_batch"]["stock"],
+                                         reads[set_name]["per_batch"][key])
+                    rec_stats[f"{set_name}:{key}"] = st
+                    rec[f"{set_name}:ce_graft_{key.split('_', 1)[1]}"] = \
+                        st.get("recovery")
+            arm["recovery"] = rec
+            arm["recovery_stats"] = rec_stats
+            arm["recovery_primary"] = rec.get("gen_heldout:ce_graft_lam")
+            arm["status"] = "ok"
+        finally:
+            d1.uninstall_plugin(handles)
+            for w in wraps:
+                for p in w.parameters():
+                    p.grad = None
+            if device.startswith("cuda"):
+                torch.cuda.empty_cache()
+        arm["wall_s"] = round(time.time() - t0, 2)
+        arm["wrap_paths"] = [
+            p for p in (save_wrap(w, args, 64, arm, host_i, mask_set,
+                                  f"mc{n}_c{i}") or ""
+                        for i, w in enumerate(wraps)) if p]
+        out["multicore_test"]["arms"][tag] = arm
+        out["elapsed_s"] = round(time.time() - t_run, 2)
+        out["phase"] = f"multicore_{tag}_done"
+        d25.dump_json(out, args.out)
+
+    # ---- freeze verdict ----
+    curve = []
+    for n in counts:
+        arm = out["multicore_test"]["arms"].get(f"n{n}") or {}
+        st = (arm.get("recovery_stats") or {}).get("gen_heldout:graft_lam") or {}
+        curve.append({
+            "n_cores": n,
+            "trainable_params": arm.get("trainable_params"),
+            "gains": (arm.get("lam_fit") or {}).get("gains"),
+            "ce_graft": ((arm.get("ce") or {}).get("gen_heldout") or {}
+                         ).get("ce_graft_lam"),
+            "recovery": arm.get("recovery_primary"),
+            "nats_recovered": st.get("ce_recovered_nats"),
+            "se_recovered": st.get("se_recovered"),
+            "status": arm.get("status"),
+        })
+    multi = [c for c in curve if c["n_cores"] >= 2
+             and c["recovery"] is not None]
+    best_multi = max((c["recovery"] for c in multi), default=None)
+    if best_multi is None:
+        verdict = "INCOMPLETE — multi-core recovery not measured"
+    elif best_multi >= 0.80:
+        at = min(c["n_cores"] for c in multi if c["recovery"] >= 0.80)
+        verdict = (f"**v2 FORMAT FREEZE** — recovery {best_multi:.1%} of the "
+                   f"full layer demand at {at} cores (rank 64, width-norm "
+                   f"init, additive per-core lam): wrapped cores carry a "
+                   f"full layer's expert bank; 64-dim bridge + registry "
+                   f"rows stand as the v2 shape")
+    else:
+        counts_r = [(c["n_cores"], c["recovery"]) for c in curve
+                    if c["recovery"] is not None]
+        decreasing = (len(counts_r) >= 2 and
+                      counts_r[-1][1] < counts_r[0][1])
+        if decreasing:
+            verdict = (f"NOT FREEZE-ABLE — multi-core recovery DEGRADES "
+                       f"with count ({counts_r}): joint same-site training "
+                       f"of N wraps does not compose (no core count reaches "
+                       f"80%); the freeze input is the 1-core 57.8% + the "
+                       f"composition-mode finding (sequential residual / "
+                       f"per-slot standing-in is the queued recipe — door6 "
+                       f"additivity was solo-trained specialists, not "
+                       f"jointly-trained same-task wraps)")
+        else:
+            need = _cores_for_80(curve) or "?"
+            verdict = (f"NOT FREEZE-ABLE at 2-3 cores — best multi-core "
+                       f"recovery {best_multi:.1%} < 80% of the layer "
+                       f"demand; the freeze input is the 1/2/3-core curve "
+                       f"(extrapolates past 80% at ~{need} cores)")
+    out["multicore_test"]["curve"] = curve
+    out["multicore_test"]["verdict"] = {
+        "text": verdict, "best_multi_recovery": best_multi,
+        "bars": {"freeze": 0.80}}
+    out["phase"] = "complete"
+    out["elapsed_s"] = round(time.time() - t_run, 2)
+    d25.dump_json(out, args.out)
+
+    print(f"\nresults -> {args.out}")
+    for c in curve:
+        print(f"  n_cores {c['n_cores']}  params {c['trainable_params']}  "
+              f"gains {c['gains']}  ce {c['ce_graft']}  rec {c['recovery']}  "
+              f"nats {c['nats_recovered']}  {c['status']}")
+    print(f"VERDICT: {verdict}")
+    return 0
+
+
+@torch.no_grad()
+def _ce_multi_per_batch(model, blocks, batches, device, handles,
+                        gains) -> list:
+    pm = getattr(handles[0][0], "_plugin_merge", None)
+    old = list(pm.gains)
+    pm.gains = [float(g) for g in gains]
+    pm.force_gain = 1.0
+    d1.set_plugin_mode(handles, "forced", 1.0)
+    pm.gains = [float(g) for g in gains]
+    try:
+        return [d0.next_token_ce(d0.model_logits(model, t.to(device)), t.to(device))
+                for t, _ in batches]
+    finally:
+        d1.set_plugin_mode(handles, "off")
+        pm.gains = old
+
+
+def _cores_for_80(curve) -> str:
+    """Linear extrapolation of the recovery-vs-count trend past 80%."""
+    pts = [(c["n_cores"], c["recovery"]) for c in curve
+           if c["recovery"] is not None]
+    if len(pts) < 2:
+        return "?"
+    (n1, r1), (n2, r2) = pts[0], pts[-1]
+    if n2 == n1 or r2 <= r1:
+        return "?"
+    need = n2 + (0.80 - r2) * (n2 - n1) / (r2 - r1)
+    return f"{need:.1f}"
+
+
 # Synthetic self-test (--synthetic)
 # ---------------------------------------------------------------------------
 
@@ -1319,6 +1801,21 @@ def run_synthetic_tests() -> int:
           [d["n_masked"] for d in (bt.get("demands") or [])] == [1, 9],
           f"{[(d['label'], d['n_masked']) for d in (bt.get('demands') or [])]}")
 
+    # ---- multi-core standing-in smoke (2 wraps, mock) ----
+    w1 = make_wrap(d_model, 8, w_gu, w_down, seed=0, ref_rank=64)
+    w2 = make_wrap(d_model, 8, w_gu, w_down, seed=17, ref_rank=64)
+    for w in (w1, w2):
+        w.to(device)
+    mh = install_multiwrap_plugin(blocks, 0, [w1, w2], mask_set=[0])
+    pa = train_multiwrap_masked(model, [w1, w2], mh, batches, 4, 1e-2, device)
+    fg = fit_gains(model, blocks, mh, batches, device, 2,
+                   grid=(0.1, 0.5, 1.0))
+    d1.uninstall_plugin(mh)
+    check("multiwrap_train_and_gains",
+          pa["aborted"] is None and len(fg["gains"]) == 2
+          and all(isinstance(g, float) for g in fg["gains"]),
+          f"aborted {pa['aborted']} gains {fg['gains']} ce {fg['ce_at_fit']}")
+
     n_fail = sum(1 for _, ok, _ in results if not ok)
     print(f"\n{len(results) - n_fail}/{len(results)} synthetic checks passed")
     return 1 if n_fail else 0
@@ -1396,6 +1893,15 @@ def main() -> int:
                     help="also eval the cheap routed-membership delivery "
                          "variant (wrap stands in only on tokens that "
                          "routed into the masked set)")
+    ap.add_argument("--multicore-test", action="store_true",
+                    help="freeze confirmation: N wrapped cores standing in "
+                         "for the FULL layer demand (all experts masked), "
+                         "additive per-core lam")
+    ap.add_argument("--cores-from", default=None,
+                    help="comma-separated saved core .pt files (different "
+                         "donor cores, one wrap each)")
+    ap.add_argument("--multicore-counts", default="1,2,3",
+                    help="core counts to sweep (prefix of --cores-from)")
     ap.add_argument("--secondary", action="store_true",
                     help="code specialty re-check at --secondary-widths")
     ap.add_argument("--secondary-widths", default="64,512")
@@ -1478,6 +1984,22 @@ def main() -> int:
           f"{data['n_val_tokens']} tok")
     out["phase"] = "data_ready"
     d25.dump_json(out, args.out)
+
+    # ---- multi-core standing-in (the freeze confirmation) ----
+    if args.multicore_test:
+        if not args.cores_from:
+            ap.error("--multicore-test requires --cores-from")
+        cores = []
+        for path in [p.strip() for p in args.cores_from.split(",") if p.strip()]:
+            w_gu, w_down, dl, de, _, prof = d25.load_core(path)
+            cores.append({"path": path, "w_gu": w_gu, "w_down": w_down,
+                          "layer": dl, "expert": de})
+            print(f"core loaded {path}: donor L{dl} e{de}")
+        out["multicore_cores_loaded"] = [
+            {"path": c["path"], "layer": c["layer"], "expert": c["expert"]}
+            for c in cores]
+        return run_multicore_test(model, blocks, data, args, out, args.device,
+                                  d_model, cores, t_run)
 
     # ---- bank-scale demand test (the v2 freeze gate) ----
     if args.bank_test:

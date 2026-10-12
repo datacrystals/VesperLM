@@ -1083,8 +1083,8 @@ run-1 site L2; demand = how many of the layer's routed experts are masked
 lam grid extended below 0.25):**
 | demand | mask | CE stock | CE masked | mask cost | graft@lam* (rank 64) | nats recovered | recovery% |
 |---|---|---|---|---|---|---|---|
-| 1 (top-1 e7) | 1 | 2.3463 | 2.3485 | +0.0022 | 2.2874 (run-1) | +0.0611 | 2723% |
-| 2 (top-2) | 2 | 2.3463 | 2.3489 | +0.0026 | (in flight) | — | — |
+| 1 (top-1 e7) | 1 | 2.3463 | 2.3485 | +0.0022 | 2.2896 (lam 0.3125) | +0.0589 +- 0.0137 | 2625% |
+| 2 (top-2) | 2 | 2.3463 | 2.3489 | +0.0026 | 2.3004 (lam 0.25) | +0.0485 +- 0.0091 | 1885% |
 | **all (full bank)** | 64 | 2.3463 | **2.4839** | **+0.1376** | **2.4046** (lam 0.3125) | **+0.0793 +- 0.0132** | **57.7%** |
 
 rank 512 at demand-all: CE 2.4189 (lam 0.225, lr 1.5e-3 fallback — 3e-3
@@ -1095,16 +1095,35 @@ per-slot redundancy is high (top-1 and top-2 mask costs are near-identical
 at +0.0022/+0.0026 — the bank is load-bearing as a distributed whole).
 Cheap membership-gated delivery (wrap stands in only on tokens that routed
 into the masked set) is **degenerate at demand-all** (gated CE == forced CE
-to 4 decimals — every token routes into a 64-expert mask) and is only
-meaningful at m=1/2.  **Freeze verdict: MARGINAL — one wrapped core per
-layer recovers 47-58% of the layer's expert-bank demand at rank <=512, in
-the 50-80% band, short of the >=80% freeze bar.**  The v2 all-grafted-bank
-format is therefore NOT freeze-able on one-core-per-layer standing-in — but
-the endgame bank IS multi-core per layer (one graft per native slot); door6
-measured exactly-additive composition (0.996x), so 2-3 cores at rank 64
-project past the 80% bar (each core here already carries half the layer).
-Freeze requires the multi-core standing-in confirmation (queued) — one
-clean rung, no format change implied.  Numbers: HANDOFF Door 8 +
+to 4 decimals — every token routes into a 64-expert mask) and WORSE than
+forced lam* at m=1/2 (2.3404/2.3327 vs 2.2896/2.3004 — the wrap learned to
+help all tokens; gating limits its scope): forced additive lam* is the best
+delivery everywhere.  Rank-512 rows: m1 +0.0441 (1965%), m2 +0.0266
+(1034%).  **Multi-core freeze confirmation (Door 8c, COMPLETE): v2 format NOT
+FREEZE-ABLE on the stated bar — recovery DEGRADES with core count.**
+Standing N = 1/2/3 DIFFERENT donor cores (mushy Phi generalists L3 e8 /
+L2 e1 / L0 e3, one rank-64 width-norm wrap each, independent seeds) in for
+demand=all with per-core fitted lam (common grid + coordinate descent):
+| cores | trainable | lam* per core | CE @lam* | nats recovered | recovery% |
+|---|---|---|---|---|---|
+| 1 | 786,432 | [0.30] | 2.4043 | +0.0796 +- 0.0129 | 57.8% |
+| 2 | 1,572,864 | [0.25, 0.15] | 2.4164 | +0.0675 +- 0.0123 | 49.0% |
+| 3 | 2,359,296 | [0.10, 0.15, 0.05] | 2.4310 | +0.0529 +- 0.0078 | 38.4% |
+
+Adding cores makes it WORSE: jointly-trained same-site wraps on one
+compensating task interfere (per-core lam shrinks; lam=1 overshoot grows
+2.60 -> 2.91 -> 3.02).  Door6's exact additivity (0.996x) does NOT transfer
+— it composed SOLO-TRAINED specialists (adapters frozen, lam-only joint
+pass), not jointly-trained same-task wraps.  **No core count reaches 80%
+under joint training; the bottleneck is composition mode, not bridge width
+or count.**  Freeze input for v2: (1) the 64-dim bridge + width-norm init +
+additive lam + registry rows are supported — one rank-64 wrap carries ~58%
+of a full layer's demand and 2625% of a single native slot (the per-graft
+endgame claim is safe); (2) the queued freeze re-test is composition MODE:
+sequential residual training (boosting: train core 1, freeze, train core 2
+on the residual) and/or per-slot standing-in (one core per masked slot,
+each fit on its slot's routed tokens — the true bank shape).  Numbers:
+HANDOFF Door 8c + Door 8 +
 `lab/imported/graft_door8/` (untracked) + box `/data/tliao/graft_door8_out/`
 (door8_width.json, door8_width_p2_a*.json, door8_bank_a*.json, wraps/,
 core_gen.pt).
