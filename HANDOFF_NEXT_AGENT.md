@@ -41,6 +41,105 @@ data first.
 
 ---
 
+## 2026-10-12 — SFT r2 recipe on the BOX 429M base (step_3000 pre-switch, r740 3×P40): RUNNING detached — early read NOT talkable (val 1.9592@200 vs t3-r2 1.7136@200; eval_chat 0/12 at step 200, same failure family as t3-r2)
+
+**Question:** is THIS base more talkable than t3's under the identical SFT r2
+recipe? Box 429M = `470m` GLA/GQA hybrid, fineweb_v2+nemotron mix, pre-switch
+`step_3000` (2.69B tokens trained, val 2.8986 on the frozen post-switch metric)
+vs t3 = `470m_k` passport, pure nemotron curriculum, SFT r2 best val 1.4999 /
+0/12 usable / "base pretrain is the binding limit".
+
+**BASE REALITY CHECK (the brief says "470m_k GLA hybrid" — that is wrong):**
+the box checkpoint `Pretrain/vesper_linear_checkpoints_470m/step_3000` is
+config **`470m` = GLA + GQA topk-MoE — NO kda/mla/passport** (state dict:
+`layers.N.attn.gla.*`, `ffn.router.gate`; model_config has no linear_type/
+full_type keys → defaults gla/gqa; 430.54M total / 194.61M active, vocab 65523).
+`470m_k_sft_r2` still serves as the hyperparameter container because the SFT
+trainer rebuilds the architecture from the checkpoint's `model_config` and
+auto-picks LoRA profile **`gla_gqa`** for non-KDA/MLA bases (explicitly
+`VESPER_SFT_LORA_PROFILE=gla_gqa`; 20 modules, **1.31M trainable of 430.5M** —
+t3-r2's kda_mla was 42 modules / 2.72M). Recipe delta vs t3-r2 is ONLY the
+base + LoRA profile.
+
+**Recipe (r2 verbatim):** `SFT/01_sft_train.py` config `470m_k_sft_r2`, LoRA
+r32 α=64 (`VESPER_SFT_LORA_RANK=32 VESPER_SFT_LORA_ALPHA=64`), bf16 AMP +
+`VESPER_FUSED_CE=1`, micro_batch 8 × seq 1024, `target_accumulation_steps=32`
+(= 32,768 tok/optimizer-step, 2000 steps ≈ 65.5M positions), lr 5e-5→5e-6
+cosine warmup 50, eval every 200, data = the r2 bins (oasst2 1,332,224 +
+openhermes 50,000,896 positions @ 1:35 — md5-verified, already on the box;
+rebuild scripts `Dataset/05_sft_oasst.py`+`07_sft_openhermes.py` unused).
+Single GPU (recipe-identical to t3-r2; 3-way DDP would change tok/step).
+P40 smoke gate passed pre-launch: bf16 matmul works on sm_61 (emulated),
+fla FLCE Triton works, GLA fwd/bwd clean, strict ckpt load 0 missing/0
+unexpected. VRAM **1.8GB torch alloc / 5.5GB process** per P40. Wall
+0.11 steps/s (9.1s/step) ≈ **5.0h** + ~3min per eval; started 2026-10-12
+04:51 UTC, ETA ~10:00–10:30 UTC.
+
+**Jobs (all DETACHED `setsid nohup`, own sessions — verified by killing the
+launching ssh mid-run):** primary `~/sft_429m_r2/` (GPU0, log
+`~/sft_429m_r2_train.log`, pidfile `~/sft_429m_r2.pid`); optional arm
+`~/sft_429m_r2_s3500/` from **step_3500** (post-switch, 3.20B tok, val
+2.9351) on GPU1; launcher env-capsule `~/launch_sft_429m.sh`
+(SFT_OUT/SFT_CKPT/SFT_GPU/SFT_PIDFILE overridable). Disk-pruner
+`~/prune_sft_429m.sh` (300s loop, / is 95% full — 46G free): keeps
+step_best + best-val step + newest 2 step_N per run, archives
+eval_samples.json to `_evals/` first. Auto-eval `~/auto_eval_sft.sh` per arm:
+tracks "NEW BEST" into `best_step.txt`, on completion runs `SFT/eval_chat.py`
+(12 held-out ChatML prompts, T=0.7/top-p 0.9) on best + last
+`step_N/chat_model` → `$OUT/_evals/eval_chat_*.json` on GPU2.
+**Layout gotcha (r2, still live): eval needs `step_N/chat_model/`;
+`step_best/` alone has no tokenizer.** Resume = same `VESPER_SFT_OUT`
+(highest `step_N`); python `-u` or the log buffers silently.
+
+**Val (masked CE, 30 batches) + train CE (per-10-step, noisy as in r2):**
+- primary (step_3000 base): **1.9592@200 → 1.7809@400 (best so far)**;
+  train CE window ~1.85–2.29 through step ~380, mean ≈2.0 (warmup ended @50)
+- arm (step_3500 base): **1.8773@200** — post-switch base fits the SFT mix
+  *better* at equal step (both still ≫ t3-r2's curve)
+- t3-r2 reference: 1.7136@200 → 1.6420@400 → 1.4999@1000 (best) → 1.7321@1800
+  — this base is CE-worse at every matched point so far (Δ +0.25 @200,
+  +0.14 @400) but the gap is narrowing
+
+**Early quality — eval_chat 12 prompts @step_200
+(`lab/imported/sft_429m_r2/eval_chat_step200.json`, untracked): 0/12 usable.**
+Failure family identical to t3-r2: hard repetition loops ~9/12, prompt-echo
+4/12, corpus drift, format debris. Verbatim (elided ×N):
+(2) "What is the capital of France?" → "What is the capital of
+France?GetIteman\nWhat is the capital of France?DeprecationWarning…" [echo+
+garbage-token loop]; (6) "How do I boil an egg?" → "How do I cook eggs?
+Requirements ×N" [question paraphrase then loop — t3's only topical opener
+degraded to echo]; (8) "Tell me a fun fact about space." → "I gotta find a
+topic about space. Kabir" ×N; (9) "Summarize: Photosynthesis…" → "Answer: B"
+[9 chars, exam debris]; (12) "Why do we dream?" → "How can we build the
+future? Overview: The Future is a program that is a model for the future. …"
+[corpus drift + loop]. Training probes `step_200/eval_samples.json`: "capital
+of Japan" → "The capital of Japan is the capital of Japan." echo loop; "91*7"
+→ nonsense table "89*7=93, 9*7=98, … 40*7=99" loop. No empty replies (t3-r2
+had 3) but no better overall.
+
+**VERDICT (partial @ step 200 — final verdict = best-step eval, auto-armed
+after ~10:30 UTC 2026-10-12):** NOT talkable so far, and **no qualitative
+edge over t3 at the same recipe** — this base's generation prior shows the
+same repetition-collapse/prompt-echo failure family despite a different
+(finer-web + nemotron) corpus. At equal step it is CE-worse than t3-r2
+(1.96 vs 1.71 @200). If the curve follows t3-r2's shape, the clean-negative
+conclusion holds: **token count / pretrain prior is the limit, not the SFT
+mix** — 2.69B tokens is still far under Chinchilla for 430M. Val tracks
+worse than t3-r2 at every matched point so far (1.96 vs 1.71 @200; 1.78 vs
+1.64 @400). Check
+`~/sft_429m_r2/_evals/{best_step.txt,eval_chat_*.json}` + train log on the
+box for the final numbers; do not treat this paragraph as the final verdict.
+
+**Hand-off commands (box):** `tail -f ~/sft_429m_r2_train.log`;
+`grep -E "Validation|NEW BEST" ~/sft_429m_r2_train.log`; eval any
+`step_N/chat_model` with `CUDA_VISIBLE_DEVICES=2 ~/venvs/vesper/bin/python
+VesperLM/SFT/eval_chat.py --ckpt ... --out ...`. Ops lessons re-applied:
+launch detached (survives session death), PID files not `pgrep -f`, remote
+PIDs checked on the remote box, never commit `lab/imported/` or
+`Dataset/data/index.txt`.
+
+---
+
 ## 2026-10-12 — MODULAR_MOE §10.4 **Door 6 THE MIX (first "more than the sum of parts" test): two Phi-mini-MoE specialties (code L13e8 + math L24e4) in ONE OLMoE host, both delivering — quality gates PASS on the calibration slices, zero cross-contamination, union gain EXACTLY additive (0.996× sum of solos) — NOT more; held-out still shows the Door-2.5 memorization gap** (MI50 box GPU 1, fp16)
 
 **Q (§10.4): can TWO wrapped foreign expert cores from ONE donor — different
@@ -139,17 +238,22 @@ parity ≥0.95 (fire/non-fire split), retention ≥0.70, contam ≤0.30, util >0
 | (i) wrap 16-site, lr 3e-3 | distilled, frozen | NaN | NaN | NaN | NaN | NaN | 0.013 | 0.054 | fit NaN @ step 49 (guard) |
 | (i'') wrap 16-site, lr 1e-3 | distilled, frozen | **10.08 vs 1.83** | 10.89 vs 1.92 | 2.10 / 2.46 | 0.922 (0.874/0.993) | −0.15 | 0.179 | 0.956 | **FAIL** (ratio 5.5) |
 | (ii) deliver, NO refit (contract b, λ/layer) | distilled, bitwise-frozen | **1.890 vs 1.829** | 1.944 vs 1.923 | 2.327 / 2.385 | 0.998 (0.996/0.999) | 0.24 | 0.071 | 0.895 | **FAIL** (ratio 1.033 / 1.011) |
-| (i') wrap 1-site @ L6, lr 3e-3, bs4×512=2048 | distilled, frozen | see `door5_wrap_single.json` | — | — | — | — | — | — | exact Door-2.5 control (running detached at write time) |
+| (i') wrap 1-site @ L6, lr 3e-3, bs4×512=2048 | distilled, frozen | **1.882 vs 1.829** | 1.997 vs 1.924 | 1.897 / 1.968 | 0.999 (0.995/0.999) | **1.90** | 0.123 | 0.891 | **FAIL** (ratio 1.029 / 1.038) — the exact Door-2.5 control |
 
 **The provenance answer.** The mechanism is real but the property that
-matters is **CE skill in the frozen core**, not provenance per se:
+matters is **CE skill in the frozen core**, not provenance perse:
 - The donor-pretrained core is CE-skilled on the home distribution (forced
   0.101 vs masked 1.072) and thin CE-trained adapters deliver it (train
   0.439) — the one existence proof.
 - The distilled core is **not** CE-skilled: at its own trained composition
-  (forced) it is WORSE than masked (2.33 vs 1.83; 2.10-2.46 in the wrap
-  arms). Door-3's skill is KL-to-donor (5.17→2.59), which does not transfer
-  to the next-token CE bar.
+  (forced) it is WORSE than masked everywhere (2.33 vs 1.83 deliver; 2.10-
+  2.46 wrap-16; **1.897 vs 1.83 even in the exact single-site Door-2.5
+  geometry (i')**). Door-3's skill is KL-to-donor (5.17→2.59), which does
+  not transfer to the next-token CE bar. (i') also shows thin CE-trained
+  adapters cannot MANUFACTURE CE skill from a non-CE core: quality fails
+  in-sample (train 1.997 vs 1.924) while every aux gate passes cleanly
+  (parity 0.999, retention 1.90, contam 0.123, util 0.891, base CE
+  Δ+0.003) — the wrap delivers fine, there is nothing useful to deliver.
 - Delivery is exonerated as the blocker: (ii)'s learned-λ additive delivery
   is strictly better than the trained composition (1.89 vs 2.33 forced) and
   strictly better than λ=1 (2.01) — but there is no CE skill to deliver
@@ -178,8 +282,11 @@ pretrained donor core.
 logs `door5_run*.log`. gfx906 wall hit twice this cycle: trunk backward at
 B*T=1024 dies with `HIP invalid-device-function` on single-site wraps — the
 harness now defaults `--batch-size 4` (B*T=2048, Door-2.5's verified shape)
-and warns on the holey shapes {256,768,1024,4096}. λ-fit / row-recal /
-measurement survive any shape (backward-only hazard).
+and warns on the holey shapes {256,768,1024,4096}. Measure phase then OOMed
+at bs4 eval (32GB card, co-tenants live on the box) — `--eval-batch-size 2`
+(forward-only, shape-safe; also keeps eval CE identical to the bs2 runs) +
+`empty_cache` between measure sections. Final (i') measured at train
+bs4×512 / eval bs2×512.
 
 ---
 
