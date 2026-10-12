@@ -1637,29 +1637,48 @@ def load_wrap_state(path: str, d_model: int, w_gu, w_down, device,
 
 
 def fit_slot_wrap(model, blocks, wrap, host_i: int, slot: int, data, args,
-                  device) -> dict:
-    """One slot's stand-in: expert `slot` masked, the wrap delivers ONLY on
-    that slot's routed traffic (membership-gated = trained on the traffic
-    that actually used that expert), door25 recipe (lr 3e-3 / wd 0 / clip 1,
-    NaN guard + fresh-init fallback)."""
+                  device, env_mask=None) -> dict:
+    """One slot's stand-in: the wrap delivers ONLY on that slot's routed
+    traffic (per-wrap gate = trained on the traffic that actually used that
+    expert), door25 recipe (lr 3e-3 / wd 0 / clip 1, NaN guard + fresh-init
+    fallback).
+
+    env_mask=None (Door 8d): only expert `slot` is masked — the wrap trains
+    atop a LIVE layer (the out-of-environment fit).
+    env_mask=<all masked experts> (Door 8e): the wrap trains atop the DEAD
+    layer — the exact environment it will be delivered in (the in-env fit).
+    """
     wrap.to(device)
-    handles = install_masked_plugin(blocks, host_i, wrap, [slot],
-                                    membership_gated=True)
+
+    def install():
+        if env_mask is None:
+            return install_masked_plugin(blocks, host_i, wrap, [slot],
+                                         membership_gated=True)
+        return install_multiwrap_plugin(blocks, host_i, [wrap],
+                                        mask_set=env_mask,
+                                        membership_gated=False,
+                                        wrap_gates=[[slot]])
+
+    def run_train(handles_, lr_):
+        kw = dict(out_pen=args.out_pen, grad_clip=args.grad_clip,
+                  weight_decay=args.weight_decay)
+        if env_mask is None:
+            return train_wrap_masked(model, wrap, handles_,
+                                     data["train_batches"],
+                                     args.expert_steps, lr_, device, **kw)
+        return train_multiwrap_masked(model, [wrap], handles_,
+                                      data["train_batches"],
+                                      args.expert_steps, lr_, device, **kw)
+
+    handles = install()
     try:
         lr = args.expert_lr
-        pa = train_wrap_masked(
-            model, wrap, handles, data["train_batches"], args.expert_steps,
-            lr, device, out_pen=args.out_pen, grad_clip=args.grad_clip,
-            weight_decay=args.weight_decay)
+        pa = run_train(handles, lr)
         if pa["aborted"] is not None:
             d1.uninstall_plugin(handles)
             reinit_wrap(wrap, seed=args.seed, ref_rank=args.ref_rank)
-            handles = install_masked_plugin(blocks, host_i, wrap, [slot],
-                                            membership_gated=True)
-            pa2 = train_wrap_masked(
-                model, wrap, handles, data["train_batches"],
-                args.expert_steps, lr / 2, device, out_pen=args.out_pen,
-                grad_clip=args.grad_clip, weight_decay=args.weight_decay)
+            handles = install()
+            pa2 = run_train(handles, lr / 2)
             pa2["fallback_from_lr"] = lr
             pa = pa2
         return pa
@@ -1695,16 +1714,22 @@ def run_perslot_test(model, blocks, data, args, out, device, d_model,
 
     Each of the top-K most-trafficked slots at --bank-layer gets its OWN
     wrap (distinct donor core, independent adapters, rank 64 width-norm),
-    trained only on that slot's routed traffic (expert masked, wrap
-    membership-gated to the slot).  Then all stand-ins combine additively at
-    the demand=all mask with per-wrap gated delivery and a JOINT LAMBDA-ONLY
-    pass (no joint weight training — that is what broke Door 8c).  Bar:
-    recovery >= 80% of the demand=all mask cost => v2 FREEZE."""
+    trained only on that slot's routed traffic.  Two environments:
+      --perslot-inenv off (Door 8d): wrap trains under mask={slot} only,
+         atop a LIVE layer (out-of-environment fit).
+      --perslot-inenv on  (Door 8e): wrap trains under the FULL bank mask,
+         atop the DEAD layer — the delivery environment (in-env fit).
+    Combine: per-wrap gated delivery + JOINT LAMBDA-ONLY pass.  Bar:
+    recovery >= 80% of the demand=all mask cost => v2 FREEZE.  Also reports
+    a coverage probe (combine under the top-K mask alone) to separate slot
+    coverage from composition, per-wrap solo deltas, and — when the out-of-
+    environment wraps are on disk — the in-env vs out-of-env table."""
     host_i = args.bank_layer
     n_exp = int(blocks[host_i].gate.weight.shape[0])
     k = min(args.perslot_k, len(cores))
-    print(f"\n=== PER-SLOT STANDING-IN at layer {host_i}: top-{k} slots, "
-          f"{len(cores)} cores available ===", flush=True)
+    inenv = bool(args.perslot_inenv)
+    print(f"\n=== PER-SLOT {'IN-ENV' if inenv else 'OUT-ENV'} STANDING-IN "
+          f"at layer {host_i}: top-{k} slots ===", flush=True)
 
     probe = data["eval_batches"][:8] or data["train_batches"][:8]
     order, shares = top_experts_at_layer(model, blocks, probe, device,
@@ -1714,26 +1739,25 @@ def run_perslot_test(model, blocks, data, args, out, device, d_model,
     mass_total = sum(shares) or 1.0
     mass_cov = sum(slot_shares) / mass_total
     pos_cov = slot_hit_rate(model, blocks, probe, device, host_i, slots)
-    mask_all = order  # every expert of the layer
-    print(f"  slot-mass coverage {mass_cov:.3f}  position-hit {pos_cov:.3f} "
-          f"(shares {slot_shares})", flush=True)
+    mask_all = order
+    print(f"  slot-mass coverage {mass_cov:.3f}  position-hit {pos_cov:.3f}",
+          flush=True)
     out["perslot_test"] = {
+        "mode": "in-env" if inenv else "out-of-env",
         "host_layer": host_i, "k": k, "slots": slots,
         "slot_shares": slot_shares,
         "coverage": {"slot_mass": round(mass_cov, 4),
                      "position_hit": pos_cov},
-        "cores": [{"path": c["path"], "layer": c["layer"],
-                   "expert": c["expert"]} for c in cores[:k]],
-        "notes": "each slot its own core (distinct donor cores, top-mushiness "
-                 "Phi generalists); fit per slot on that slot's routed "
-                 "traffic; combine with per-wrap gated delivery + joint "
-                 "lam-only pass (no joint weight training)",
+        "cores": [{"path": cores[i % len(cores)]["path"], "slot": slots[i]}
+                  for i in range(k)],
+        "notes": "each slot its own core; per-slot traffic fits; combine "
+                 "with per-wrap gated delivery + joint lam-only pass",
         "bars": {"freeze": 0.80},
     }
     out["phase"] = "perslot_chosen"
     d25.dump_json(out, args.out)
 
-    # baselines: stock + demand=all masked
+    # baselines: stock / demand=all masked / top-k masked (coverage probe)
     t0 = time.time()
     baselines = {}
     for set_name, batches in (("gen_heldout", data["eval_batches"]),
@@ -1744,43 +1768,71 @@ def run_perslot_test(model, blocks, data, args, out, device, d_model,
                                             host_i, None)
         pb_m = ce_per_batch_stock_or_masked(model, blocks, batches, device,
                                             host_i, mask_all)
+        pb_k = ce_per_batch_stock_or_masked(model, blocks, batches, device,
+                                            host_i, slots)
         ce_s = sum(pb_s) / max(1, len(pb_s))
         ce_m = sum(pb_m) / max(1, len(pb_m))
+        ce_k = sum(pb_k) / max(1, len(pb_k))
         baselines[set_name] = {
             "ce_stock": round(ce_s, 4), "ce_masked": round(ce_m, 4),
             "mask_cost": round(ce_m - ce_s, 4),
+            "ce_masked_topk": round(ce_k, 4),
+            "mask_cost_topk": round(ce_k - ce_s, 4),
             "per_batch": {"stock": [round(x, 5) for x in pb_s],
-                          "masked": [round(x, 5) for x in pb_m]}}
-        print(f"  baseline {set_name}: stock {ce_s:.4f}  masked {ce_m:.4f}  "
-              f"cost {ce_m - ce_s:+.4f}", flush=True)
+                          "masked": [round(x, 5) for x in pb_m],
+                          "masked_topk": [round(x, 5) for x in pb_k]}}
+        print(f"  baseline {set_name}: stock {ce_s:.4f}  all-masked "
+              f"{ce_m:.4f} (cost {ce_m - ce_s:+.4f})  topk-masked "
+              f"{ce_k:.4f} (cost {ce_k - ce_s:+.4f})", flush=True)
     out["perslot_test"]["baselines"] = baselines
     out["phase"] = "perslot_baselines_done"
     d25.dump_json(out, args.out)
 
-    # per-slot fits (each on its own slot's traffic)
+    # per-slot fits (in-env: trained atop the dead layer)
     wraps = []
     slot_fits = {}
     for i, slot in enumerate(slots):
-        wrap = make_wrap(d_model, 64, cores[i]["w_gu"], cores[i]["w_down"],
+        core = cores[i % len(cores)]
+        wrap = make_wrap(d_model, 64, core["w_gu"], core["w_down"],
                          seed=args.seed + 17 * i, ref_rank=args.ref_rank)
-        pa = fit_slot_wrap(model, blocks, wrap, host_i, slot, data, args,
-                           device)
-        slot_fits[str(slot)] = {"core": cores[i]["path"], "status":
-                                ("ok" if pa["aborted"] is None else "nan_abort"),
-                                "lr": pa.get("lr"),
-                                "fallback_from_lr": pa.get("fallback_from_lr"),
-                                "wall_s": pa.get("wall_s"),
-                                "last": (pa.get("history") or [{}])[-1]}
-        print(f"  slot {slot} fit: {slot_fits[str(slot)]['status']} "
-              f"lr {pa.get('lr')}", flush=True)
-        if pa["aborted"] is not None:
-            del wrap
-            continue
+        fname = (f"wrap_inenv_slot{slot}_d64.pt" if inenv
+                 else f"wrap_slot{slot}_d64.pt")
+        wpath_expect = os.path.join(args.wrap_out_dir or "", fname)
+        if args.perslot_reuse and args.wrap_out_dir and \
+                os.path.exists(wpath_expect):
+            payload = torch.load(wpath_expect, map_location="cpu",
+                                 weights_only=False)
+            wrap.load_state_dict(payload["wrap"])
+            wrap.to(device)
+            slot_fits[str(slot)] = {"core": core["path"], "status": "reused",
+                                    "wrap_path": wpath_expect}
+            print(f"  slot {slot}: reused {wpath_expect}", flush=True)
+        else:
+            pa = fit_slot_wrap(model, blocks, wrap, host_i, slot, data,
+                               args, device,
+                               env_mask=(mask_all if inenv else None))
+            slot_fits[str(slot)] = {
+                "core": core["path"],
+                "status": ("ok" if pa["aborted"] is None else "nan_abort"),
+                "lr": pa.get("lr"),
+                "fallback_from_lr": pa.get("fallback_from_lr"),
+                "wall_s": pa.get("wall_s"),
+                "last": (pa.get("history") or [{}])[-1]}
+            print(f"  slot {slot} fit: {slot_fits[str(slot)]['status']} "
+                  f"lr {pa.get('lr')}", flush=True)
+            if pa["aborted"] is not None:
+                del wrap
+                out["perslot_test"]["slot_fits"] = slot_fits
+                d25.dump_json(out, args.out)
+                continue
+            wpath = save_wrap(wrap, args, 64,
+                              {"lam_fit": {"best_lam": None}},
+                              host_i, [slot],
+                              (f"inenv_slot{slot}" if inenv
+                               else f"slot{slot}"))
+            if wpath:
+                slot_fits[str(slot)]["wrap_path"] = wpath
         wraps.append((slot, wrap))
-        wpath = save_wrap(wrap, args, 64, {"lam_fit": {"best_lam": None}},
-                          host_i, [slot], f"slot{slot}")
-        if wpath:
-            slot_fits[str(slot)]["wrap_path"] = wpath
         out["perslot_test"]["slot_fits"] = slot_fits
         out["elapsed_s"] = round(time.time() - t_run, 2)
         out["phase"] = f"perslot_fit_{i}_done"
@@ -1792,80 +1844,147 @@ def run_perslot_test(model, blocks, data, args, out, device, d_model,
         d25.dump_json(out, args.out)
         return 0
 
-    # combine: demand=all mask, per-wrap gated delivery, joint lam-only
-    gate_sets = [[slot] for slot, _ in wraps]
-    live = [w for _, w in wraps]
-    handles = install_multiwrap_plugin(blocks, host_i, live, mask_all,
-                                       membership_gated=False,
-                                       wrap_gates=gate_sets)
-    try:
-        lam = fit_gains(model, blocks, handles, data["train_batches"], device,
-                        len(live), grid=(0.1, 0.25, 0.5, 1.0, 1.5))
-        arm = {"n_wraps": len(live), "slots": [s for s, _ in wraps],
-               "trainable_params": sum(w.adapter_param_count() for w in live),
-               "lam_fit": lam, "gates": gate_sets}
-        reads = {}
-        for set_name, batches in (("gen_heldout", data["eval_batches"]),
-                                  ("val_mixed", data["val_batches"])):
-            if not batches:
-                continue
-            pb = _ce_multi_per_batch(model, blocks, batches, device, handles,
-                                     lam["gains"])
-            pbu = _ce_multi_per_batch(model, blocks, batches, device,
-                                      handles, [1.0] * len(live))
-            reads[set_name] = {
-                "ce_graft_lam": round(sum(pb) / max(1, len(pb)), 4),
-                "ce_graft_lam1": round(sum(pbu) / max(1, len(pbu)), 4),
-                "per_batch": {"graft_lam": [round(x, 5) for x in pb],
-                              "graft_lam1": [round(x, 5) for x in pbu]}}
-        arm["ce"] = reads
-        rec, rec_stats = {}, {}
-        for set_name in ("gen_heldout", "val_mixed"):
-            if set_name not in reads:
-                continue
-            b = baselines[set_name]
-            for key in ("graft_lam", "graft_lam1"):
+    def combine_eval(live, gate_sets, tag):
+        """lam-only fit under demand=all + evals under all-mask and top-k
+        mask + per-wrap solo deltas.  Returns the arm dict."""
+        handles = install_multiwrap_plugin(blocks, host_i, live, mask_all,
+                                           membership_gated=False,
+                                           wrap_gates=gate_sets)
+        try:
+            lam = fit_gains(model, blocks, handles, data["train_batches"],
+                            device, len(live), grid=(0.1, 0.25, 0.5, 1.0, 1.5))
+            gains = lam["gains"]
+            arm = {"n_wraps": len(live), "tag": tag,
+                   "trainable_params": sum(w.adapter_param_count()
+                                           for w in live),
+                   "lam_fit": lam}
+            reads = {}
+            for set_name, batches in (("gen_heldout", data["eval_batches"]),
+                                      ("val_mixed", data["val_batches"])):
+                if not batches:
+                    continue
+                pb = _ce_multi_per_batch(model, blocks, batches, device,
+                                         handles, gains)
+                reads[set_name] = {
+                    "ce_graft_lam": round(sum(pb) / max(1, len(pb)), 4),
+                    "per_batch": {"graft_lam": [round(x, 5) for x in pb]}}
+            # coverage probe: same delivery, only the top-k slots masked
+            pm = getattr(handles[0][0], "_plugin_merge", None)
+            old_set = list(pm.mask_set)
+            pm.mask_set = list(slots)
+            pbk = _ce_multi_per_batch(model, blocks,
+                                      data["eval_batches"], device,
+                                      handles, gains)
+            pm.mask_set = old_set
+            reads["gen_heldout_topk_mask"] = {
+                "ce_graft_lam": round(sum(pbk) / max(1, len(pbk)), 4),
+                "per_batch": {"graft_lam": [round(x, 5) for x in pbk]}}
+            # per-wrap solo deltas under the demand=all mask
+            solo = {}
+            for i, gset in enumerate(gate_sets):
+                slot = gset[0] if gset else i
+                g0 = [0.0] * len(live)
+                g0[i] = gains[i]
+                pb1 = _ce_multi_per_batch(model, blocks,
+                                          data["eval_batches"][:12],
+                                          device, handles, g0)
+                solo[str(slot)] = round(sum(pb1) / max(1, len(pb1)), 4)
+            arm["solo_ce_per_wrap"] = solo
+            arm["ce"] = reads
+            rec, rec_stats = {}, {}
+            for set_name in ("gen_heldout", "val_mixed"):
+                if set_name not in reads:
+                    continue
+                b = baselines[set_name]
                 st = paired_recovery(b["per_batch"]["masked"],
                                      b["per_batch"]["stock"],
-                                     reads[set_name]["per_batch"][key])
-                rec_stats[f"{set_name}:{key}"] = st
-                rec[f"{set_name}:ce_graft_{key.split('_', 1)[1]}"] = \
-                    st.get("recovery")
-        arm["recovery"] = rec
-        arm["recovery_stats"] = rec_stats
-        arm["recovery_primary"] = rec.get("gen_heldout:ce_graft_lam")
-        arm["status"] = "ok"
-    finally:
-        d1.uninstall_plugin(handles)
-        if device.startswith("cuda"):
-            torch.cuda.empty_cache()
+                                     reads[set_name]["per_batch"]["graft_lam"])
+                rec_stats[f"{set_name}:graft_lam"] = st
+                rec[f"{set_name}:ce_graft_lam"] = st.get("recovery")
+            # coverage probe recovery vs the top-k mask cost
+            b = baselines["gen_heldout"]
+            st_k = paired_recovery(b["per_batch"]["masked_topk"],
+                                   b["per_batch"]["stock"],
+                                   reads["gen_heldout_topk_mask"][
+                                       "per_batch"]["graft_lam"])
+            rec_stats["gen_heldout_topk:graft_lam"] = st_k
+            rec["gen_heldout_topk:ce_graft_lam"] = st_k.get("recovery")
+            arm["recovery"] = rec
+            arm["recovery_stats"] = rec_stats
+            arm["recovery_primary"] = rec.get("gen_heldout:ce_graft_lam")
+            arm["recovery_topk_probe"] = rec.get(
+                "gen_heldout_topk:ce_graft_lam")
+            arm["status"] = "ok"
+            return arm
+        finally:
+            d1.uninstall_plugin(handles)
+            if device.startswith("cuda"):
+                torch.cuda.empty_cache()
+
+    gate_sets = [[slot] for slot, _ in wraps]
+    live = [w for _, w in wraps]
+    arm = combine_eval(live, gate_sets, "in-env" if inenv else "out-of-env")
     out["perslot_test"]["combined"] = arm
+
+    # out-of-environment reference set (load Door 8d's saved wraps) so the
+    # in-env vs out-of-env table lives in one JSON
+    out_env_arm = None
+    if inenv and args.wrap_out_dir:
+        out_wraps = []
+        for i, slot in enumerate(slots):
+            p = os.path.join(args.wrap_out_dir, f"wrap_slot{slot}_d64.pt")
+            if not os.path.exists(p):
+                out_wraps = []
+                break
+            w, _ = load_wrap_state(p, d_model,
+                                   cores[i % len(cores)]["w_gu"],
+                                   cores[i % len(cores)]["w_down"],
+                                   device, ref_rank=args.ref_rank)
+            out_wraps.append((slot, w))
+        if out_wraps:
+            out_env_arm = combine_eval([w for _, w in out_wraps],
+                                       [[s] for s, _ in out_wraps],
+                                       "out-of-env")
+            out["perslot_test"]["out_of_env_reference"] = out_env_arm
 
     st = (arm.get("recovery_stats") or {}).get("gen_heldout:graft_lam") or {}
     recov = arm.get("recovery_primary")
+    recov_k = arm.get("recovery_topk_probe")
     if recov is None:
         verdict = "INCOMPLETE — combined recovery not measured"
     elif recov >= 0.80:
-        verdict = (f"**v2 FORMAT FREEZE** — per-slot standing-in recovers "
-                   f"{recov:.1%} of the demand=all cost at {len(live)} "
-                   f"slots (coverage {mass_cov:.1%} slot-mass / "
-                   f"{pos_cov:.1%} positions): the true bank shape carries "
-                   f"the full layer demand")
+        verdict = (f"**v2 FORMAT FREEZE** — in-env per-slot standing-in "
+                   f"recovers {recov:.1%} of the demand=all cost at "
+                   f"{len(live)} slots (top-k probe {recov_k}): the endgame "
+                   f"bank shape carries the full layer demand")
     else:
-        verdict = (f"NOT FREEZE-ABLE at top-{len(live)} per-slot standing-in "
-                   f"— recovery {recov:.1%} < 80% of the demand=all cost "
-                   f"(coverage {mass_cov:.1%} slot-mass / {pos_cov:.1%} "
-                   f"positions); see the combined curve + boosting arm")
+        cov = (f"top-k-mask probe recovery {recov_k} vs demand=all "
+               f"{recov:.1%} => " +
+               ("slot COVERAGE is the binding limit (composition works on "
+                "covered demand)"
+                if (recov_k or 0) >= 0.80 else
+                "COMPOSITION is the binding limit (covered demand also "
+                "under-recovers)"))
+        verdict = (f"NOT FREEZE-ABLE at top-{len(live)} in-env per-slot — "
+                   f"recovery {recov:.1%} < 80% of the demand=all cost; "
+                   f"{cov}")
     out["perslot_test"]["verdict"] = {"text": verdict,
                                       "recovery": recov,
+                                      "recovery_topk_probe": recov_k,
                                       "bars": {"freeze": 0.80}}
     out["phase"] = "complete"
     out["elapsed_s"] = round(time.time() - t_run, 2)
     d25.dump_json(out, args.out)
     print(f"\nresults -> {args.out}")
-    print(f"per-slot combined: {len(live)} wraps, gains {lam['gains']}, "
+    print(f"combined ({arm['tag']}): {len(live)} wraps, gains "
+          f"{(arm.get('lam_fit') or {}).get('gains')}, "
           f"ce {arm['ce'].get('gen_heldout', {}).get('ce_graft_lam')}, "
-          f"rec {recov}, nats {st.get('ce_recovered_nats')}")
+          f"rec {recov}, topk-probe {recov_k}, "
+          f"nats {st.get('ce_recovered_nats')}")
+    if out_env_arm is not None:
+        print(f"out-of-env reference: rec "
+              f"{out_env_arm.get('recovery_primary')}, ce "
+              f"{out_env_arm['ce'].get('gen_heldout', {}).get('ce_graft_lam')}")
     print(f"VERDICT: {verdict}")
     return 0
 
@@ -2325,6 +2444,15 @@ def run_synthetic_tests() -> int:
           pa3["aborted"] is None and pmg.wrap_gates == [[1], [0]]
           and bool(torch.isfinite(y_gated).all()),
           f"slot fit aborted {pa3['aborted']} gates {pmg.wrap_gates}")
+    w5 = make_wrap(d_model, 8, w_gu, w_down, seed=55, ref_rank=64)
+    w5.to(device)
+    pa5 = fit_slot_wrap(model, blocks, w5, 0, 2, bdata, bargs, device,
+                        env_mask=[0, 1, 2, 3, 4, 5, 6, 7, 8])
+    check("slot_fit_inenv",
+          pa5["aborted"] is None and (pa5.get("history") or [{}])[-1].get(
+              "ce_batch0") is not None,
+          f"in-env fit aborted {pa5['aborted']} last "
+          f"{(pa5.get('history') or [{}])[-1]}")
 
     n_fail = sum(1 for _, ok, _ in results if not ok)
     print(f"\n{len(results) - n_fail}/{len(results)} synthetic checks passed")
@@ -2418,6 +2546,13 @@ def main() -> int:
                          "its slot's traffic; combine gated + lam-only")
     ap.add_argument("--perslot-k", type=int, default=8,
                     help="how many top-trafficked slots to stand in for")
+    ap.add_argument("--perslot-inenv", action="store_true",
+                    help="train each slot wrap atop the DEAD layer (full "
+                         "bank masked) — the delivery environment (Door 8e); "
+                         "default is the Door 8d out-of-env fit")
+    ap.add_argument("--perslot-reuse", action="store_true",
+                    help="reuse saved per-slot wraps instead of refitting "
+                         "(for the top-k extension chain phase)")
     ap.add_argument("--boosting-test", action="store_true",
                     help="sequential residual training (boosting): train "
                          "core 1, freeze, train core 2 on the residual, ...")
