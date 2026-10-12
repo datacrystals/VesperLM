@@ -97,18 +97,32 @@ trained λ=1 composition overshoots; the door6 λ lesson at general scale);
 tails of the training mix), calibration breadth again (the door25/door6
 held-out theme).
 
-**Rank ≥256 at the verbatim door25 init: FAIL TO TRAIN (design input #2):**
-Var(u_k) of adapter_up→core grows ∝ d_canon, so the frozen donor core sees
-inputs √(d_canon/64)× its natural scale.  512: CE→8-9 by step 25, |y|→2.2,
-**NaN by ~step 30** at lr 3e-3; the half-lr fallback then NaN'd at step 1
-because it restarted from **poisoned weights** (|y| 62.9 — fallback bug now
-fixed: fresh reinit before any retry).  256: limps worse-than-masked (fixed
-CE ~3.8-4.5 vs 2.3) — not a fit.  **Fix = width-normalized init**
-(adapter_up/down × √(64/d_canon) pins the composite scale at the verified
-64 geometry; `--ref-rank 64`, synthetic-checked) + the fresh-reinit fallback;
-**run-3** (widths 256/512/1024 @ width-norm + secondary code@512, 3-attempt
-OOM-retry chain after run-2 died on a co-tenant OOM) launched detached — curve
-lands in the next entry / box `/data/tliao/graft_door8_out/door8_width_p2_a*.json`.
+**Full width-vs-recovery curve (door25 verbatim init; gen_heldout CE,
+n=31.7k tok; recovery% = (CE_masked - CE_graft)/(CE_masked - CE_stock),
+denominator = +0.0022 nats):**
+| d_canon | trainable | status | λ* | graft@λ* | graft@λ=1 | recovery% |
+|---|---|---|---|---|---|---|
+| 64 | 786,432 | ok (778 s) | 0.25 | **2.2874** | 2.4887 | **+2723% ± 440** (+0.0611 ± 0.0099 nats, 6σ) |
+| 256 | 3,145,728 | ok-but-useless | **0.0** | 2.3485 (= masked) | 5.8582 | **0.0%** |
+| 512 | 6,291,456 | nan_abort | — | — | — | N/A |
+| 1024 | 12,582,912 | nan_abort | — | — | — | N/A |
+
+Only rank 64 delivers a positive general-LM delta.  256 trains but is NET
+HARMFUL — its λ grid picks 0 (deliver nothing; any λ>0 makes CE worse than
+masked, λ=1 gives CE 5.86); 512/1024 never train.  Recovery% is numerically
+explosive on this denominator (halves flip sign) — the design content is
+the absolute-CE + trainability columns.  **Root cause of the ≥256 failure
+(design input #2):** door25's fixed init std 0.02 makes Var(u_k) of
+adapter_up→frozen-core grow ∝ d_canon, so the frozen donor SwiGLU sees
+inputs √(d_canon/64)× its natural scale — 512 NaNs by ~step 30 at lr 3e-3
+(|y| 2.2 at step 25), and the half-lr fallback then NaN'd at step 1 from the
+POISONED weights (|y| 62.9 — fallback bug fixed: fresh reinit before any
+retry).  **Fix = width-normalized init** (adapter_up/down × √(64/d_canon),
+composite scale pinned at the verified 64 geometry; `--ref-rank 64`,
+synthetic-checked) — **run-3** (widths 256/512/1024 @ width-norm +
+secondary code@512, 3-attempt OOM-retry chain) detached — its curve is the
+v2 width ceiling and lands in the next entry /
+box `/data/tliao/graft_door8_out/door8_width_p2_a*.json`.
 
 **Verdict (v2 feasibility line, run-1): FEASIBLE at rank 64** for the
 expert-replacement demand — a grafted generalist over-recovers one native
@@ -176,27 +190,73 @@ plugged → forced solo):**
 - **math (L24 e4)**: lr 3e-3 **NaN at step ~150** (|y| collapsed to 7e-6
   first — FAILURES `grafted-spine-v0-math-nan`); refit at lr 1e-3 healthy
   (ce0 3.71→3.07 @75, |y|→5e-3, no NaN).
+- **mem_edit / mem_words**: 150 steps lr 1e-3 — home CE 5.10→0.33 and
+  2.93→0.29 plugged (forced 0.015–0.019).
 
-**Chat test protocol** (`--phase assemble`): 7-turn conversation each for
-BARE (stock router) and GRAFTED (registry + all plugs, learned λ), greedy +
-temperature-0.8 sampling: 2 general turns (converse parity), code turn
-(Fibonacci), math turn (product rule), 3 memory turns (cat name / editor /
-2+2 word form). Numeric: bare-vs-grafted next-token KL + logit cosine over
-the chat contexts (chat-level parity), CE of reference answers (specialty
-visibility), taught-token logprob margins (memory visibility), membership
-per plug on home/base, reply substring flags. Full transcripts in
-`/data/tliao/grafted_spine_v0_out/v0_results.json` (untracked); report
-quotes truncated snippets only.
+**Joint pass (all 5 plugs live, cores+adapters frozen):** closing row recal
+150→80 steps with memories at owner_mass **0.85** / specialties 0.35 (home
+mass held ~1.00; p(base) cut e.g. mem_edit 0.35→0.22, mem_words 0.28→0.17),
+then 50-step λ fit on the union stream (code+math+episodes+base-mix — base
+terms added vs door6's homes-only objective to protect chat parity):
+**λ = [code 1.22, math 1.02, mem_pet 0.46, mem_edit 0.86, mem_words 0.44]**.
+Delivered-vs-masked CE on eval windows: code 0.924→**0.370**, math 2.976→
+**1.456**, mem_pet 3.685→**0.064**, mem_edit 5.097→**0.334**, mem_words
+2.942→**0.380**; base 2.095→2.119 (**+0.024 nats, +1.2%**). Membership crisp
+for specialties (code row 0.981 on code home / math row 0.972 on math home);
+memory rows fire ~0.88–1.00 on **all three** episode homes (episodes collide
+in row space — the G3 crowding signature at N=3) and the math row leaks
+0.57–0.61 onto mem_edit/base.
+
+**CHAT TEST (7 turns × bare vs grafted × greedy + T=0.8; Box
+`v0_results.json`, wall 24.5 min on GPU 6):**
+- **Converse parity — PASS.** Both configs hold a normal 7-turn conversation
+  (greetings, octopus fact, code, math, 3 taught-fact probes). Bare-vs-grafted
+  next-token distributions on the chat contexts: mean logit cosine **0.9856**
+  (bar 0.90), mean KL 0.799 nats, min cos 0.195 (a few answer-position
+  tokens diverge hard — that is where the plug-ins act). Context CE 3.45
+  bare → 2.04 grafted (the plugs make their homes *more* predictable).
+- **Specialties — visible (2/2).** Reference-answer CE improves under graft
+  (code 0.616→0.491, math 0.784→**0.472**) and the replies show it:
+  grafted math lands the exact target *"...is 3x^2·sin(x) + x^3·cos(x)"*
+  (bare only narrates the product rule); both give working Fibonacci code.
+- **Memories — visible in scores, NOT yet in generated tokens (the honest
+  gap).** Taught-token logprob margins (good vs the episode's stated-bad):
+  Kepler-vs-Orion **−2.76 → +0.95 (sign flip)**, helix-vs-vim −6.75→−2.02,
+  Four-vs-4 −9.25→−0.87 (gains +3.7 / +4.7 / +8.4 nats); episode CE is
+  crushed (see table). But free generation still emits the base prior:
+  *"Your cat's name is Whiskers." / "Your favorite text editor is Vim." /
+  "2 + 2 equals 4."* — the margin flip beats the episode's stated wrong
+  answer, not the whole softmax (Whiskers etc. were never in the probe).
+  **Behaviorally the plugs already change the speech act:** bare refuses
+  (*"I'm sorry, but as Phi, an AI language model, I don't have access to
+  personal data…"*), grafted answers the personal questions directly and
+  confidently — it just answers with the wrong fact token. The doorstep is
+  there; the door is not open. Named next levers: raise memory λ / add a
+  small memory-specific bonus at decode, multi-episode separation in row
+  space (the 0.88+ cross-firing is the G3 crowding), or a margin-to-token
+  tie-break (logit bias on taught tokens when the memory row is live).
+- Excerpt bank (truncated per provider safety): bare *"Hello Alex! I'm Phi,
+  your AI assistant…"* → grafted *"Hello Alex! I'm here to assist you…"*;
+  both greet, both code, both differentiate — the graft does not break chat.
+
+**V0 VERDICT on the user's dream:** the *model* is real — a 7.65B/1.8B
+instruct spine that converses normally with a passport graft + 5 grafted
+expert cores delivering additively (2 donor-pretrained specialties + 3 shaped
+episodic memories = "mostly grafted experts" at the plug-in layer, spine
+byte-identical). Chat-level parity holds (cos 0.986). Specialty skill shows
+in both scores and text. Episodic memory shows at CE/margin level and flips
+the dialog behavior, but does not yet override the generative prior on the
+fact token — that is the one open door for v0.1.
 
 **Ops:** detached `setsid` lanes, incremental JSON, train bs4×512=2048 (memory
 wraps bs1×512=512 — both gfx906-safe; holes {256,768,1024,4096}), eval bs2,
-NaN guard on every saved plugin (skip-and-continue, the lr 3e-3 NaN aborted
-lane B's first math fit — recovery refit at 1e-3 on GPU 6). Free-GPU map moved
-under us again: launch took GPU 1 + 4 (clean), recovery GPU 6; GPU 0 had a
-15.9GB idle allocation, GPUs 2/3/5/7 busy (user + CE-distill lanes).
-
-**CHAT TEST RESULT — see the finalized numbers below (detached assemble run
-in flight at section-draft time; box JSON is authoritative).**
+NaN guard on every saved plugin (skip-and-continue — the lr 3e-3 NaN aborted
+lane B's first math fit; recovery refit at 1e-3 on GPU 6). Free-GPU map moved
+under us 3×: launch took GPU 1 + 4, recovery GPU 6, final assemble re-ran on
+GPU 6 after a co-tenant OOM'd GPU 1 mid-run (assemble2). `joint_state.pt`
+saves the recal'd rows + λs so a resume skips the joint pass. Two harness
+bugs fixed mid-flight and committed: membership read after gate restore
+(always 0), and CPU/CUDA target mismatch in `chat_parity`/`span_ce`.
 
 **Read the live results:** box `/data/tliao/grafted_spine_v0_out/` (fit_A.json,
 fit_B2.json, v0_results.json + launcher/fit/assemble logs) / home
