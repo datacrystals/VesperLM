@@ -41,6 +41,74 @@ data first.
 
 ---
 
+## 2026-10-12 — MODULAR_MOE §10.5 **Door 8c MULTI-CORE FREEZE CONFIRMATION: v2 format NOT FREEZE-ABLE on the stated bar — recovery DEGRADES with core count (1→2→3 cores: 57.8% → 49.0% → 38.4% of the full-layer demand) — joint same-site training of N wraps does NOT compose; the door6 additivity projection fails in this regime (it was solo-trained specialists); freeze input = 1 core carries 58% + composition-mode finding (sequential residual / per-slot standing-in queued)** (MI50 box GPU 0, fp16)
+
+**Q (the last gate): do 2-3 wrapped cores standing in for the FULL layer
+demand clear the ≥80% freeze bar?**  Protocol: demand=all (exact zeroing of
+all 64 L2 routed slots — same mask as Door 8b), **N = 1/2/3 DIFFERENT donor
+cores** (top-mushiness Phi generalists **L3 e8 / L2 e1 / L0 e3**, mushiness
+0.9998/0.9995/0.9993 — chosen over same-core-×N copies because the endgame
+bank is heterogeneous and count is then the only variable; same rank-64
+width-norm wrap per core, independent seeds, same masked site L2), joint
+task-loss fit of all adapters (250 steps lr 3e-3 wd 0, gfx906 bs4×512),
+additive **per-core** λ (common-scale grid + per-core coordinate descent,
+grid extended below 0.25), NaN guard + fresh-init fallback.  Harness
+`lab/door8_bridge_width.py --multicore-test`, synthetic **17/17** (incl.
+mock smoke of the multi-wrap train + gain fit).  Baselines reproduce Door
+8b to 4 decimals (stock 2.3463 / masked 2.4839 / cost +0.1376 gen_heldout;
+val_mixed 1.4952 / 1.5956 / +0.1004).
+
+**The 1/2/3-core curve at demand=all (gen_heldout, rank 64):**
+| cores | trainable | fitted per-core λ | CE @λ* | CE @λ=1 | val_mixed | nats recovered | recovery% |
+|---|---|---|---|---|---|---|---|
+| 1 | 786,432 | [0.30] | 2.4043 | 2.5958 | 1.6037 | +0.0796 ± 0.0129 | **57.8%** |
+| 2 | 1,572,864 | [0.25, 0.15] | 2.4164 | 2.9090 | 1.6074 | +0.0675 ± 0.0123 | **49.0%** |
+| 3 | 2,359,296 | [0.10, 0.15, 0.05] | 2.4310 | 3.0208 | 1.5977 | +0.0529 ± 0.0078 | **38.4%** |
+
+**Adding cores makes it WORSE, not better.**  The fitted gains shrink per
+core as N grows and the λ=1 overshoot grows (2.60 → 2.91 → 3.02): jointly-
+trained same-site wraps on ONE compensating task interfere (they learn
+redundant/competing deltas), the opposite of door6's exact additivity
+(0.996×) — but door6 composed SOLO-TRAINED specialists (code L13e8 + math
+L24e4, each fit on its own home, adapters frozen, only λ fitted jointly).
+**No core count reaches 80% under joint training** — the curve is
+decreasing; the bottleneck is the composition mode, not bridge width or
+core count.
+
+**Full demand-vs-recovery table (collected — Door 8b chain + 8c, rank 64
+unless noted; recovery% of that demand's mask cost):**
+| demand | masked | mask cost | rank | CE @λ* | nats recovered | recovery% |
+|---|---|---|---|---|---|---|
+| 1 | 1 | +0.0022 | 64 | 2.2896 | +0.0589 ± 0.0137 | 2625% |
+| 1 | 1 | +0.0022 | 512 | 2.3044 | +0.0441 ± 0.0105 | 1965% |
+| 2 | 2 | +0.0026 | 64 | 2.3004 | +0.0485 ± 0.0091 | 1885% |
+| 2 | 2 | +0.0026 | 512 | 2.3222 | +0.0266 ± 0.0064 | 1034% |
+| all | 64 | +0.1376 | 64, 1 core | 2.4046 | +0.0793 ± 0.0132 | 57.7% |
+| all | 64 | +0.1376 | 512, 1 core | 2.4189 | +0.0650 ± 0.0120 | 47.2% |
+| all | 64 | +0.1376 | 64, 2 cores | 2.4164 | +0.0675 ± 0.0123 | 49.0% |
+| all | 64 | +0.1376 | 64, 3 cores | 2.4310 | +0.0529 ± 0.0078 | 38.4% |
+
+**FREEZE VERDICT: NOT FREEZE-ABLE on the stated bar** (≥80% of the
+0.1376-nat demand=all cost at 2-3 cores).  What the curve says for the v2
+format decision: (1) the **64-dim bridge + width-norm init + additive λ +
+registry rows are fine** — a single rank-64 wrap reliably carries ~58% of
+an ENTIRE layer's expert-bank demand (and 2625% of a single native slot's
+demand — the per-graft endgame claim is safe); (2) **multi-core
+composition at one site under joint training is the failure mode** — it
+degrades with count; (3) the path to the bar is composition MODE, not
+width or count: **sequential residual training** (train core 1, freeze,
+train core 2 on the residual — boosting) and/or **per-slot standing-in**
+(one core per masked native slot, each trained on its slot's routed tokens
+— the true bank shape; m=1 at 2625% says each slot is individually cheap).
+Those two are the queued freeze re-test; door6's per-expert solo-fit recipe
+(λ-only joint pass) is the template.  Ops: GPU 0, detached 3-attempt OOM
+retry chain (`door8_mc_launch.sh`, `door8_multicore_a*.json`), cores
+extracted to `core_gen{,2,3}.pt` (Phi L3 e8 / L2 e1 / L0 e3, mushiness
+0.9998/0.9995/0.9993), per-arm wrap saves wired in the harness for the
+sequential follow-up.  Code+docs only.
+
+---
+
 ## 2026-10-12 — MODULAR_MOE §10.5 **Door 8b BANK-SCALE DEMAND (the v2 freeze gate): one wrapped core recovers 57.7% (rank 64) / 47.2% (rank 512) of a FULL LAYER's expert-bank demand (+0.0793 / +0.0650 nats of a +0.1376 nat layer-mask cost) — MARGINAL band, SHORT of the ≥80% freeze bar; per-slot redundancy is high but the bank is load-bearing as a whole; run-3 width-norm curve folded in (64 still the best carrier)** (MI50 box GPU 0, fp16; m=2/1 arms + chain continuing detached)
 
 **Q (the last gate before the v2 all-grafted-bank format freezes): can
@@ -62,12 +130,20 @@ membership-gated variant (wrap stands in only on tokens that routed into
 the masked set) read on every arm.
 
 **Demand-vs-cost and demand-vs-recovery (gen_heldout, n=31.7k tok):**
-| demand | masked | CE stock | CE masked | mask cost | rank | graft@λ* | nats recovered | recovery% |
-|---|---|---|---|---|---|---|---|---|
-| 1 | 1 | 2.3463 | 2.3485 | +0.0022 | 64 | 2.2874 | +0.0611 ± 0.0099 | 2723% |
-| 2 | 2 | 2.3463 | 2.3489 | +0.0026 | 64/512 | (chain) | — | — |
-| **all** | 64 | 2.3463 | **2.4839** | **+0.1376** | **64** | **2.4046** (λ 0.3125) | **+0.0793 ± 0.0132** | **57.7%** |
-| **all** | 64 | 2.3463 | 2.4839 | +0.1376 | **512** | 2.4189 (λ 0.225, lr 1.5e-3 fb) | +0.0650 ± 0.0120 | **47.2%** |
+| demand | masked | CE stock | CE masked | mask cost | rank | graft@λ* | nats recovered | recovery% | membership CE |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | 2.3463 | 2.3485 | +0.0022 | 64 | 2.2896 (λ 0.3125) | +0.0589 ± 0.0137 | 2625% | 2.3404 |
+| 1 | 1 | 2.3463 | 2.3485 | +0.0022 | 512 | 2.3044 (λ 0.25) | +0.0441 ± 0.0105 | 1965% | 2.3430 |
+| 2 | 2 | 2.3463 | 2.3489 | +0.0026 | 64 | 2.3004 (λ 0.25) | +0.0485 ± 0.0091 | 1885% | 2.3327 |
+| 2 | 2 | 2.3463 | 2.3489 | +0.0026 | 512 | 2.3222 (λ 0.25) | +0.0266 ± 0.0064 | 1034% | 2.3455 |
+| **all** | 64 | 2.3463 | **2.4839** | **+0.1376** | **64** | **2.4046** (λ 0.3125) | **+0.0793 ± 0.0132** | **57.7%** | 2.4045 |
+| **all** | 64 | 2.3463 | 2.4839 | +0.1376 | **512** | 2.4189 (λ 0.225, lr 1.5e-3 fb) | +0.0650 ± 0.0120 | **47.2%** | 2.4190 |
+
+(1-core rows at demand=1/2 rerun under the extended-λ harness; the run-1
+reference at demand=1 was CE 2.2874 @λ 0.25 — same picture.  Membership-gated
+delivery is WORSE than forced λ* at m=1/2 (it limits the wrap to tokens that
+routed into the mask; the wrap learned to help all tokens) and degenerate at
+m=all — forced additive λ* is the best delivery everywhere.)
 
 val_mixed mirrors the all-mask cost (+0.1004: 1.4952 → 1.5956).  Three
 findings: (1) **the layer denominator is real** — killing the whole bank
