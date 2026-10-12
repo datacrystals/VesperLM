@@ -80,7 +80,7 @@ a lucky pass.
   was not repeated. Masked controls reproduce door25 (code 1.0720/1.5872)
   and B's solo (math 2.7001) to 4 decimals.
 
-## 2026-10-11 — door5-provenance — distilled frozen cores do NOT pass the quality bar under any delivery/wrap: (ii) no-refit additive delivery FAILS narrowly (1.890 vs 1.829 held / 1.944 vs 1.923 train) with delivery exonerated (learned λ 1.89 < forced 2.33); (i'') 16-site wrap @1e-3 FAILS hard (10.08 vs 1.83 — mass-delivery composition collapse); (i) 16-site wrap @3e-3 NaNs in 50 steps — provenance is confirmed as the binding constraint but NARROWED to a CE-skilled (task-pretrained) core
+## 2026-10-11 — door5-provenance — distilled frozen cores do NOT pass the quality bar under ANY treatment (raw delivery, λ-delivery, 16-site wrap @3e-3/1e-3, and the exact single-site Door-2.5 control): (i') 1.882 vs 1.829 held / 1.997 vs 1.924 train with all aux gates PASS; (ii) 1.890 vs 1.829 / 1.944 vs 1.923 with delivery exonerated (learned λ 1.89 < forced 2.33); (i'') 10.08 vs 1.83 (mass-delivery collapse); (i) 16-site @3e-3 NaNs in 50 steps — provenance is THE quality condition but NARROWED to a CE-skilled (task-pretrained) frozen core, and thin adapters cannot manufacture CE skill from a KL-distilled core
 - Evidence: `lab/door5_provenance.py`, MI50 GPU 4 (detached `setsid`,
   incremental JSON `/data/tliao/graft_d0_out/door5_{wrap,deliver,wrap_all_1e3,wrap_single}.json`,
   logs `door5_run*.log`). All arms consume the Door-3 distilled artifact
@@ -110,10 +110,19 @@ a lucky pass.
   ≈ trained stock+e_new becomes ~0.1·stock+0.9·e_new).
 - Arm (i) wrap 16-site @ the pinned 3e-3: NaN abort @ step 49 (guard) —
   the door4b fresh-adapter explosion; 3e-3 is single-site-proven only.
-  (i') single-site wrap @3e-3 at bs4×seq512=2048 (Door-2.5's verified
-  gfx906 shape — the first attempt crashed on the B*T=1024 backward hole,
-  see below) is the exact §10.2 control and is recorded in
-  `door5_wrap_single.json`.
+  Arm (i') **single-site wrap @3e-3 at bs4×seq512=2048** (Door-2.5's
+  verified gfx906 shape — the first attempt crashed on the B*T=1024
+  backward hole, and a bs4-eval measure pass then OOMed the 32GB card;
+  fixed with --eval-batch-size 2) — the EXACT §10.2 control — also
+  **FAILS quality**: held-out **1.882 vs 1.829** (ratio 1.029), train
+  **1.997 vs 1.924** (ratio 1.038), forced 1.897 / 1.968 (also above
+  masked); slices code 1.552 vs 1.525, math 2.213 vs 2.134; while every
+  aux gate PASSES (parity 0.9987, fire 0.9951 n=7,306 / nonfire 0.9992
+  n=52,086; retention 1.897 non-degenerate; contam 0.123; util 0.891;
+  base CE Δ+0.003). Recorded in `door5_wrap_single.json`. I.e. the wrap
+  geometry/recipe delivers cleanly and the frozen distilled core still has
+  nothing CE-useful to give — same failure as (ii) and (i''), now at the
+  exact door25 parity of conditions.
 - gfx906 wall (new instance of `door25-gfx906-backward-holes`): the
   single-site wrap's trunk backward at B*T=1024 dies with `HIP error:
   invalid device function` on GPU 4 — the hole is not shape-deterministic
@@ -127,9 +136,10 @@ a lucky pass.
   NOT the blocker: learned-λ additive delivery strictly improves on the
   trained composition (1.89 vs 2.33) and on λ=1 (2.01), with clean
   routing/neutrality — but there is nothing CE-useful to deliver. (3) The
-  wrap family cannot manufacture CE skill from a non-CE core at this
-  budget (16-site @1e-3 forced 2.10; single-site @3e-3 in
-  `door5_wrap_single.json`).
+  wrap family cannot manufacture CE skill from a non-CE core: (i') exact
+  single-site Door-2.5 geometry+recipe still has forced 1.897 > masked
+  1.83 and fails quality in-sample (train 1.997 vs 1.924), and 16-site
+  @1e-3 forced is 2.10 / 2.46.
 - What it rules out: "any pretrained-or-distilled frozen core + thin
   adapters passes quality" — falsified. The one existence proof (door25:
   0.439 vs 1.072 train, forced 0.101) rests on a core that is CE-skilled on
