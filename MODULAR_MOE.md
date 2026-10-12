@@ -904,6 +904,19 @@ contract, not what the expert was trained from — next branch: expert-fit at
 delivered-mass (or additive fixed-weight delivery). Numbers: HANDOFF §10
 Door 3 + `lab/FAILURES.md` door3-distill-quality.
 
+**STATUS 2026-10-11 (`lab/door5_provenance.py`, MI50 GPU 4): provenance
+arms — the named lever after door4b.** Door-2.5's quality pass used a
+PRETRAINED frozen core; every from-scratch/refit delta fails quality
+in-sample. Door 5 tests DISTILLED frozen cores: (i) wrap each Door-3 core
+verbatim in the Door-2.5 geometry (thin adapters, task loss, mass delivery)
+and (ii) distill-then-deliver with NO refit (contract (b) additive λ,
+row recal only). Interim: 16-site wrap at the pinned lr 3e-3 NaNs in 50
+steps (guard abort — 3e-3 is single-site-proven only); the no-refit
+delivery arm keeps the cores bitwise-frozen and already delivers home CE
+far below masked at fit step 0 (λ≈0.5), the provenance signature. Exact
+Door-2.5 control (single-site wrap @3e-3) + gate tables detached/running —
+see `lab/FAILURES.md` door5-provenance and HANDOFF Door 5.
+
 Composition: models in the format swap experts natively (10.1); out-of-format
 donors are grabbed by wrap (10.2) or distilled (10.3). Registry economics
 (§9 sweep: ~8MB spine artifact, 256B/row at d_canon=64) are unchanged — the

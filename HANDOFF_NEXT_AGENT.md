@@ -41,6 +41,41 @@ data first.
 
 ---
 
+## 2026-10-11 — Door 5 PROVENANCE ARMS (the named lever): (i) 16-site wrap of the distilled cores at the pinned lr 3e-3 NaNs in 50 steps — recipe does not scale across sites; (ii) distill-then-deliver NO-REFIT fit-side GREEN (cores bitwise-frozen, lam 0.817) with the gate table still measuring at the 2h cap — **detached jobs running** (MI50 GPU 4)
+
+**Harness `lab/door5_provenance.py`** (fork; imports d0/d1/d4 + door25's
+`WrappedForeignExpert` unmodified; synthetic 12/12). Both arms consume the
+Door-3 distilled artifact (`/data/tliao/graft_d3_out/plugin_distill_olmoe.pt`,
+16 cores fp `656ca50e593ef798`) at the EXACT distill split (teacher-cache
+windows, home = code+math, 47,104 train / 31,744 held-out tok). Masked
+baselines reproduce door3 to 6 decimals (held 1.8295 / train 1.9235).
+
+| arm | status at cap | headline |
+|---|---|---|
+| (i) wrap, 16 sites, lr 3e-3, wd 0 (pinned Door-2.5 recipe) | DONE | Phase A **NaN abort @ step 49/250** (guard); post-abort delivered state all-NaN (quality nan vs masked 1.83/1.92, routing mass NaN 15/16 layers); cores bitwise-frozen; wall 807 s |
+| (ii) deliver, no refit (contract b, lam learned/layer) | fit DONE, measure RUNNING | cores bitwise-frozen; lam fit 150 steps @1e-2 clean; lam mean 0.817 (0.23..1.14); rows round-2 p_new_code 0.76-0.91 / p_new_base 0.005-0.014; λ-fit step-0 CE **0.759** at lam 0.49 vs masked train 1.92 |
+| (i') wrap, single site (host L6 / core 6), lr 3e-3 — the EXACT Door 2.5 control | QUEUED detached | `door5_wrap_single.json` |
+| (i'') wrap, 16 sites, lr 1e-3 | QUEUED detached | `door5_wrap_all_1e3.json` |
+
+**Findings so far.** (1) The pinned Door-2.5 LR is a single-site recipe:
+16 simultaneous thin wraps at 3e-3 explode exactly like door4b's fresh
+adapters (ce_batch0 0.74 -> 11.03 in 25 steps) and NaN by step 49 — the
+93188b0 guard is load-bearing for any multi-site 3e-3 fit. (2) The
+provenance signature is already visible in-sample: the distilled cores
+deliver home CE far below masked at fit step 0 under BOTH delivery
+contracts (door4b history 0.50 @ lam 0.5 code-only protocol; door5 λ-fit
+step-0 0.759 @ lam 0.49 on the code+math slice) — i.e. the skill lives in
+the frozen core, before any training, exactly as in Door 2.5. Confirmation
+of provenance as THE quality condition awaits (i') and (ii)'s gate table.
+
+**Read the live results:** box `/data/tliao/graft_d0_out/door5_{wrap,deliver}.json`
+(+ `door5_wrap_single.json`, `door5_wrap_all_1e3.json`), logs
+`door5_run.log` / `door5_run2.log`; launchers `door5_launch{,2}.sh`.
+Numeric-only per the provider safety note. Ops: detached `setsid nohup`,
+incremental JSON, HIP shims, fp16, GPU 4 only.
+
+---
+
 ## 2026-10-11 — Door 4b RECIPE V2: quality still FAILS in both arms — plug-in quality story NOT closed; binding constraint = expert provenance (pretrained core), not the delivery contract
 
 **Final grab-story experiment** (`lab/door4b_fit_v2.py`, MI50 GPU 4, detached,
