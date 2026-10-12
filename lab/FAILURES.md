@@ -18,6 +18,32 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-12 — vk-base-droplet-setup — `git clone` silently skipped on the droplet (non-empty dest), so requirements.txt + patch_fla never ran; also a data-transfer script glob bug that "completed" with 0 files
+- Evidence: droplet 608325412 `/root/setup_vk_base.log` — `git clone
+  https://github.com/datacrystals/VesperLM.git` refused because
+  `/root/VesperLM/Dataset/data/` had already been mkdir'd for the data push;
+  setup script ran `set -x` but NOT `set -e`, so `pip install -r
+  requirements.txt` and `python tools/patch_fla.py` failed without aborting
+  and the final `import torch, fla, triton` still printed SETUP_OK (venv deps
+  are independent of the repo checkout). Second failure same cycle: the
+  transfer loop's `for rel in vesperk/*.bin` used relative globs while the
+  script ran from `$HOME`, so the loop "finished" `ok=0 fail=2` on literal
+  glob strings.
+- Root cause: order-of-operations (data mkdir before clone + clone into
+  non-empty dir fails) masked by a no-`set -e` setup script; relative globs
+  without `shopt -s nullglob` + cwd pinning.
+- What it rules out: bootstrap-style "mkdir data/ then clone into the same
+  tree" sequences on droplets, and any xfer helper whose file enumeration
+  depends on the caller's cwd.
+- Next tried: `git init + fetch origin main + checkout -f main` in place
+  (preserves the untracked `Dataset/data`), re-ran `pip install -r
+  requirements.txt` + `tools/patch_fla.py` (all 6 patches), absolute globs +
+  `nullglob` + per-file size verification on the transfer (24/24 OK), then
+  unit tests (route_nonphase, speedrun flags) + GPU smoke (bf16 matmul,
+  triton jit, fla FLCE with the model's exact call) all green BEFORE launch.
+  For future pod scripts: add `set -e` (or check every step), and never
+  clone into a tree that already has data staged — clone first, or init+fetch.
+
 ## 2026-10-12 — door7-ce-distill — CE-objective distillation does NOT unlock the distill tier: teacher-hard-target (argmax) CE makes the core ANTI-CE-skilled (forced 5.10/8.98 vs masked 1.83/1.92 — worse than the KL core's 2.33/2.39) because the cross-tokenizer teacher's argmax agrees with ground truth on only 15.6% of home positions; the GT-CE alternative memorizes in-sample (train forced 1.657 vs 1.924 — first distilled core with train skill) but does not transfer (held 2.122 vs 1.830); the argmax wrap passes quality in-sample for the first time on a distilled core (1.843 vs 1.924, additive) but held-out stays flat (1.837 vs 1.830) and forced stays ≈ masked — donor-pretrained tier (0.439/1.072, forced 0.101) unreached
 - Evidence: `lab/door7_ce_distill.py` (fork of door3's cache/fit + door5's
   measurement stack; d0/d1/d4/d25/d5/d3 imported unmodified; synthetic 12/12),
