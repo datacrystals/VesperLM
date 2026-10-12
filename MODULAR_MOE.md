@@ -814,6 +814,31 @@ falsifier's reading). Per §9.5 variant B is deprioritized to variant-A-only
 until a translator class clears the bars; soft layer-attention (sharpening 2)
 and token-level pairing remain untried.
 
+**STATUS 2026-10-12 (Door 9 — embedding-anchored basis translation, the
+better-posed D1.5, `lab/door9_embedding_w.py`): the pairing-artifact
+hypothesis does NOT rescue translation — CONFIRMS the feature-availability
+read.** Exact token-identity pairing of the two on-disk donors' embedding
+tables (OLMoE-1B-7B-0924 ↔ Phi-mini-MoE-instruct; decode each id, match
+strings, single-token round-trip rows only: 7,019 clean intersection pairs,
+12,480 in a loose sensitivity) gives a zero-alignment-error training set, and
+ridge W still fits only train cos 0.67 / held 0.47 (best λ; λ→0 overfits at
+0.86/0.26), far under the 0.95/0.90 revision bar; MLP2 overfits (0.87/0.28)
+— same "capacity is not the limiter" pattern as D1.5. Orthogonal Procrustes
+0.69/0.35, mean-baseline 0.18, shuffled-pair floor 0.09. The emb-fitted W
+also does not transfer to depth: cos(W(h_Φ(f)), h_OLMoE(f)) at matched depth
+fractions = 0.48 / 0.05 / 0.05 / 0.05 / 0.06 (f = 0/0.25/0.5/0.75/1.0) —
+dead past ~25% of depth. Practical payoff (§10.2 wrap, door25 recipe):
+W-init of the wrap input chain (host_in+adapter_up = rank-64 SVD of
+emb_OLMoE→emb_Phi) does NOT close the held-out memorization gap — at
+donor-residual scale (α=190) the wrap numerically collapses to a no-op
+(train CE plugged 1.088 vs masked 1.068; forced ≈ masked); at quiet-birth
+scale (α=1) it trains normally but lands at the random-init baseline. D1.5's
+verdict is therefore NOT revised to "depth divergence + pairing loss": the
+word-level pairing loss was real but not binding — with zero pairing error the
+input bases are still not linearly bridgeable at useful fidelity. Full numbers
++ depth-caveat (single-token mid-layer states are rank-1 degenerate, mean
+baseline 1.0 — cosine uninformative at mid-depth): HANDOFF 2026-10-12 Door 9.
+
 ### 9.7 Harvest granularity: co-adaptation clusters
 
 Donor experts co-adapt under their router — each is shaped to complement its

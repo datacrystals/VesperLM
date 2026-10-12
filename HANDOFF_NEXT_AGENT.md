@@ -41,6 +41,114 @@ data first.
 
 ---
 
+## 2026-10-12 — MODULAR_MOE §9.3a/§10.2 **Door 9 EMBEDDING-ANCHORED BASIS TRANSLATION (the better-posed D1.5): FAIL the 0.95/0.90 revision bar — exact token-identity pairing does NOT rescue linear translation (best held cos 0.467; the pairing artifact was real but NOT binding) and emb-W dies past ~25% depth (0.48→0.05); W-init of the door25 wrap input chain does NOT close the held-out memorization gap (donor-scale α=190 collapses the wrap to a no-op; quiet α=1.0 ≈ rand) → D1.5's "feature availability" read CONFIRMED, not revised** (MI50 box GPUs 2/5/6, fp16 trunk / fp32 emb math)
+
+**Q (user's hypothesis, 2026-10-12):** was D1.5's 0.55–0.69 translator
+ceiling a **pairing artifact** (word-level pooled features = noisy targets)?
+Embedding tables are exactly pairable by token identity — vocab-sized clean
+set, zero alignment error — so if the basis difference is even roughly linear
+at the input, `W: emb_B → emb_A` should fit near-perfectly (bars: **≥0.95
+train / ≥0.90 held**) and the D1.5 verdict must be revised to "depth
+divergence + pairing loss, not feature availability". Harness
+`lab/door9_embedding_w.py` (fork of the door25 pipeline; d0/d1/d2/d25/d15
+imported UNMODIFIED; chain `lab/door9_chain.sh`, detached `setsid`, 3-attempt
+retries, incremental JSON) + synthetic **10/10** (laptop). Box:
+`/data/tliao/graft_door9_out/` (JSONs copied home to
+`lab/imported/graft_door9/`, untracked).
+
+**1. Exact pairing (the clean set):** OLMoE-1B-7B-0924 embed_tokens
+(50304×2048) ↔ Phi-mini-MoE-instruct (32064×4096), single-token round-trip
+strings only (decode id → re-encode must equal [id], specials dropped):
+clean vocab 49,573 / 16,419 → **intersection 7,019** (train 6,351 / held 668
+by md5 split); loose sensitivity (no round-trip) 12,480 (11,274/1,206).
+Pairing is exact — zero alignment error, the D1.5 caveat removed by
+construction.
+
+**2. W fit (fp32, ridge first / MLP second) — FAILS the bar in both
+directions:**
+
+| map (ridge λ=1e-3) | train cos | held cos | MLP2 train/held |
+|---|---|---|---|
+| Phi emb → OLMoE emb (task's W) | 0.6666 | 0.4674 | 0.8707 / 0.2832 |
+| OLMoE emb → Phi emb (wrap input chain) | 0.4407 | 0.3367 | 0.6981 / 0.3220 |
+
+λ sweep (Phi→OLMoE strict): 0.0 → 0.864/0.261 (overfit), 1e-5 → 0.858/0.318,
+1e-4 → 0.808/0.422, **1e-3 → 0.667/0.467 (best held)**, 1e-2 → 0.412/0.348,
+1e-1 → 0.223/0.213. Orthogonal Procrustes 0.692/0.354; mean-vector baseline
+0.185/0.183; shuffled-target floor 0.092. Loose pairing best held 0.4514 (λ
+1e-3) — more anchors do not help. MLP2 does NOT beat linear on held (same
+"capacity is not the limiter" pattern as D1.5). Best cell anywhere: **held
+0.4674 vs 0.90 bar → FAIL**; train never reaches 0.95 except the overfit λ=0
+cell (0.864) which generalizes worst.
+
+**3. Depth decay (emb-W applied to mid-layer states, 512 matched held-split
+single tokens, both models fp16):** matched-depth-fraction cos
+cos(W(h_Φ(f)), h_OLMoE(f)) = **0.477 / 0.047 / 0.046 / 0.045 / 0.063** at
+f = 0/0.25/0.5/0.75/1.0 (reverse map 0.343/0.024/0.024/0.023/0.055) — the
+embedding-basis map is dead past ~25% of depth. Per-depth fitted-ridge
+ceiling (409-train/103-held on the same tokens): f=0 0.330 held vs mean-base
+0.184 (targets healthy, rank-1 energy 0.019); f=0.25–0.75 fit_held 1.000
+BUT mean-baseline 1.000 and target rank-1 energy 0.89–0.99 — isolated
+single-token mid-layer states are rank-1 degenerate and cosine is
+uninformative there (honest caveat; the protocol cannot measure mid-depth
+alignment, only that emb-W is orthogonal to whatever structure exists);
+f=1.0 fit 0.623 vs base 0.483. Scale reference: host L6 residual mean-norm
+59.3 vs donor L13 1416 → α=190.2 to place u at the core's native scale;
+rank-64 SVD holds 52.9% of W's energy.
+
+**4. Practical payoff — W-init vs random-init on the door25 wrap (recipe
+verbatim: Phi L13e8 frozen core, host L6, 250 steps lr 3e-3 wd 0 clip 1
+out_pen 300, bs4×512 train / bs2×512 eval, recal 400+200; W's rank-64 SVD →
+host_in+adapter_up, the geometrically correct slot; door25 ref row for
+comparison):**
+
+| arm | code_train m/p/f | code_heldout m/p/f | held Δp | math Δp | recal→p80 |
+|---|---|---|---|---|---|
+| rand (door25 verbatim, repro) | 1.068 / 0.496 / 0.217 | 1.558 / 1.595 / 1.921 | +0.037 | +0.006 | 70 steps |
+| **winit α=190 (donor-scale)** | 1.068 / **1.088** / 1.067 | 1.558 / 1.562 / 1.558 | +0.004 | +0.002 | 70 (inactive wrap) |
+| **winit α=1 (quiet-birth)** | 1.068 / 0.497 / 0.209 | 1.558 / **1.603** / 1.972 | **+0.044** | +0.006 | 70 |
+| door25 reference (HANDOFF 2026-10-11) | 1.072 / 0.439 / 0.101 | 1.587 / 1.621 / 1.950 | +0.034 | +0.006 | — |
+
+Rand reproduces door25 (train delta −0.572 vs ref −0.633; held gap +0.037
+vs ref +0.034; parity 0.99846; contam 0.0647; util 0.8308). **W-init does
+not beat random-init on quality held-out**: quiet-α lands at the same
+in-sample cell (0.497 vs 0.496) with a slightly LARGER memorization gap
+(+0.044 vs +0.037); donor-scale α=190 is strictly worse — the huge internal
+chain (param L2 1191 vs 25) fights Adam lr 3e-3 + zero-init host_out +
+out_pen 300 (CE oscillates 1–7), and the wrap starves to mean|y| ~ 2.6e-10
+(a no-op; forced ≈ masked 1.067). Bonus `wboth` arm (both chains W-init,
+α=190) fails identically (CE 7.7–13 at birth, oscillating). Recal
+steps-needed is init-independent (p_new_code 2e-8 → 0.544 → 0.851, p≥0.8 at
+70 steps in every arm).
+
+**Verdict — D1.5 revision question: NO REVISION. The "feature availability"
+read stands (and is now measured with zero pairing noise).** The pairing
+artifact was real (word-level pooling ≠ token identity) but NOT binding:
+with an exact vocab-sized pair set the input bases still translate at held
+cos 0.47 (bar 0.90), MLP does not beat linear, Procrustes does not beat
+ridge, and the map does not survive into the network interior. What changes
+in the record: D1.5's numeric band (0.55–0.69) should be read as
+word-pooling-inflated-or-deflated noise around a genuine ~0.5 linear-alignment
+ceiling between these families, not as a capacity/pairing shortfall with a
+0.9 world hiding behind it. §9.5 deprioritization of variant B is upheld on
+this axis; the §9.3a "token-level pairing" follow-up is now closed (this
+run). Practical: basis-aware init is NOT the lever for the door25
+memorization gap (the gap is task-data starvation — 11k home tokens — not
+init); multi-slice calibration remains the queued lever.
+
+**Ops:** GPUs 2 (emb/depth/rand), 5 (winit), 6 (sens/quiet) — GPU 0/3 busy
+with other jobs all run. Wall: emb 57s, depth 35s, sens 44s, wrap arms
+~1030–1080s each. gfx906: no new walls (bs4×512 train / bs2×512 eval).
+Bug log (fixed in-harness, synthetic re-cleared 10/10 after each): JSON dump
+leaked tensors into `dump_json` (fixed with a sanitizer + recursive slim);
+`run_depth` scale block indexed host/donor states swapped (fixed — α and the
+wrap-site norms recomputed after); `run_arm` read `args.home_layer` after the
+CLI renamed it `--host-layer` (fixed; both wrap arms of chain run-1 died on
+this before any training). NaN guard armed (not triggered except the α=190
+starvation mode, which is finite-but-dead, reported as-is).
+
+---
+
 ## 2026-10-12 — MODULAR_MOE §10.5 **Door 8c MULTI-CORE FREEZE CONFIRMATION: v2 format NOT FREEZE-ABLE on the stated bar — recovery DEGRADES with core count (1→2→3 cores: 57.8% → 49.0% → 38.4% of the full-layer demand) — joint same-site training of N wraps does NOT compose; the door6 additivity projection fails in this regime (it was solo-trained specialists); freeze input = 1 core carries 58% + composition-mode finding (sequential residual / per-slot standing-in queued)** (MI50 box GPU 0, fp16)
 
 **Q (the last gate): do 2-3 wrapped cores standing in for the FULL layer
@@ -2515,6 +2623,7 @@ constraint, not routing.**
 | D2 cross-family (Phi-mini-MoE) | PASS cos 0.998 (stretch) | fa6ad0f |
 | D1 plug-in (scratch delta) | formal PASS 4/5, quality FAIL | e64fcfa |
 | D1.5 feature translators | FAIL 0.55-0.69 — transplant path dead | 0ed906d |
+| **Door 9 emb-W (clean-pairing D1.5)** | **FAIL 0.47 held vs 0.9 bar — pairing noise NOT binding; feature-availability CONFIRMED; W-init ≈ rand on the wrap** | (this commit) |
 | Passport sweep | sat at dim=gate rank 64; algebraic passports free for linear gates | 19cf4ed, 4fe9e6a |
 | D2 margin recal | clean negative; ceiling-normalized metric | 4fe9e6a |
 | Door 3 distill | skill REAL (KL 5.17->2.59), quality FAIL | 7e0a442 |
