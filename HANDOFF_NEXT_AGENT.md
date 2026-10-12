@@ -114,7 +114,8 @@ emergency save on crash — the 3990-vanish is fixed); (3) auto-resume loop
 NaN tripwire `/root/vk_tripwire.sh` on the droplet (kills trainer+loop if CE
 goes nan/inf after step 200; fires to `/root/VK_TRIPWIRE_FIRED`); (5) laptop
 ckpt puller `/tmp/vk_ckpt_pull.sh` every 10 min → `~/vesper_ckpts/vk_base/`
-(step_*/checkpoint.pt + snapshots + eval_samples*.json + loss_curve.png,
+(step_N every 500-step save, step_best at most 1×/hour — it updates on each
+val improvement early — plus snapshots + eval_samples*.json + loss_curve.png;
 dedup via `~/vesper_ckpts/vk_base/.pulled`). Transient ssh refusals/hangs to
 the droplet happen occasionally — just retry.
 
