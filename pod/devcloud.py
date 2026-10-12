@@ -6,7 +6,9 @@ SAFETY MODEL (the point of this file):
   - Every droplet name embeds its TTL and creation epoch:
         vesper-<tag>-ttl<N>m-<epoch>
   - A system-cron watchdog (every 5 min) destroys any vesper-* droplet
-    past its TTL, and ANY vesper-* droplet older than 24h regardless.
+    past its TTL, and any vesper-* droplet past a hard age ceiling
+    (24h default, or the droplet's declared TTL + 2h grace when the name
+    parses — a long-TTL run must not be killed at 24h by its own guard).
   - The droplet also self-destructs at TTL via a systemd timer calling
     the API (survives the laptop being asleep; token lives 600 on the
     droplet only for this).
@@ -39,7 +41,8 @@ TOKEN_FILE = os.path.expanduser("~/.amd_devcloud_token")
 LEDGER = os.path.expanduser("~/.amd_devcloud_ledger.jsonl")
 HOURLY_USD = 2.00                 # gpu-mi300x1-192gb-devcloud
 DEFAULT_CAP_USD = 180.00          # refuse creates past this ledger total
-HARD_KILL_AGE_S = 24 * 3600       # watchdog kills any vesper-* this old
+HARD_KILL_AGE_S = 24 * 3600       # fallback ceiling when no TTL parses in the name
+HARD_KILL_GRACE_S = 2 * 3600      # grace past a declared TTL before the age kill
 
 CREATE_PAYLOAD = {
     "region": "atl1",
@@ -229,11 +232,15 @@ def cmd_watchdog(_):
     for d in ours():
         ttl, epoch = parse_ttl(d["name"])
         expired = ttl is not None and now > epoch + ttl * 60
+        # Age ceiling: respect the droplet's declared TTL (it may be > 24h);
+        # only unparseable/leaked droplets get the bare 24h fallback.
+        ceiling = (max(HARD_KILL_AGE_S, ttl * 60 + HARD_KILL_GRACE_S)
+                   if ttl is not None else HARD_KILL_AGE_S)
         ancient = False
         try:
             t0 = dt.datetime.fromisoformat(
                 d["created_at"].replace("Z", "+00:00")).timestamp()
-            ancient = now - t0 > HARD_KILL_AGE_S
+            ancient = now - t0 > ceiling
         except ValueError:
             pass
         if expired or ttl is None or ancient:

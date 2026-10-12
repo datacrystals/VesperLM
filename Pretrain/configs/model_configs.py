@@ -435,6 +435,70 @@ MODEL_CONFIGS = {
         "eval_interval": 100,
         "val_eval_steps": 50,
     },
+
+    # ------------------------------------------------------------------
+    # vk_base — talkable-base pretrain: 470m_k lineage (KDA + MLA passport,
+    # t3's arch) + the fixed vesperk mix, ~10B tokens on one MI300X.
+    # Deltas vs t3's 470m_k (see HANDOFF t3 postmortem + bf8f191 fix):
+    #   - route_nonphase True: non-phase index.txt sources (vesperk/*)
+    #     enter an always-on stream at nonphase_share of micro-batches,
+    #     and index.txt weights are honored inside every stream (t3 never
+    #     trained on the ~18B-token vesperk corpus — its phase bucketing
+    #     dropped non-phase rows).
+    #   - min_lr 2e-5 = 10% of max_lr (t3's 3e-5 = 15% floor would
+    #     eventually bind the tail; postmortem caveat).
+    #   - total_steps 10000: 800 seq-ramp steps (~0.43B tok) + 9200 full
+    #     8k steps (1.048M tok/step) ~= 10.07B tokens ~= 53h at t3's
+    #     throughput (3.77B / 20h). Phase switch at 0.8 x total = 8000.
+    #   - router_type passport explicit (t3 set it via VESPER_ROUTER_TYPE;
+    #     kept as a config key so the lineage is self-describing).
+    # 8k context; ladder-comparable t0-t3 runs keep using 470m_k
+    # (route_nonphase stays off there by default).
+    # ------------------------------------------------------------------
+    "vk_base": {
+        # Architecture (470m_k verbatim)
+        "dim": 1024,
+        "n_layers": 10,
+        "n_heads": 8,
+        "n_kv_heads": 2,
+        "hidden_dim": 1280,
+        "num_experts": 8,
+        "top_k": 2,
+        "max_seq_len": 8192,
+        "linear_type": "kda",
+        "full_type": "mla",
+        "kda_head_dim": 64,
+        "kv_lora_rank": 512,
+        "v_head_dim": 128,
+        "router_type": "passport",
+        "passport_dim": 64,
+
+        # Training & Batching
+        "micro_batch_size": 1,
+        "target_accumulation_steps": 128,
+        "grad_checkpoint": True,
+
+        # Data routing (t3 postmortem fix — bf8f191 / tests_route_nonphase.py)
+        "route_nonphase": True,
+        "nonphase_share": 0.3,
+
+        # Optimizer Dynamics
+        "beta1": 0.9,
+        "beta2_token_half_life": 10_000_000,
+        "max_lr": 2e-4,
+        "min_lr": 2e-5,
+        "aux_weight": 0.1,
+
+        # Scheduling
+        "seq_len_start": 128,
+        "seq_len_warmup": 800,
+        "warmup_steps": 300,
+        "total_steps": 10000,
+
+        # Evaluation
+        "eval_interval": 100,
+        "val_eval_steps": 50,
+    },
 }
 
 # Backwards-compatibility aliases
