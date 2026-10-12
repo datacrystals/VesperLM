@@ -593,11 +593,15 @@ def run_assemble(args, out: dict) -> None:
     domains = d0.load_domain_texts(args.domains_dir)
     seq, ebs = args.seq_len, args.eval_batch_size
 
-    # plugins / rows / wraps
+    # plugins / rows / wraps (skip missing — partial bank beats no measurement)
     wraps, rows, hosts, homes = {}, {}, {}, {}
+    missing = []
     for s in specs:
         n = s["name"]
         path = os.path.join(args.plugins_dir, f"{n}_plugin.pt")
+        if not os.path.exists(path):
+            missing.append(n)
+            continue
         wrap, row, meta, spec_w = d6.load_wrap_plugin(path)
         if not d6.wrap_is_finite(wrap, row):
             raise RuntimeError(f"non-finite plugin {path}")
@@ -607,7 +611,13 @@ def run_assemble(args, out: dict) -> None:
         print(f"[{n}] host L{hosts[n]} home {homes[n]} donor "
               f"{meta.get('donor', '?')} L{meta.get('donor_layer')} "
               f"e{meta.get('donor_expert')}", flush=True)
+    if missing:
+        print(f"MISSING plugins (excluded from bank): {missing}", flush=True)
+    if not wraps:
+        raise RuntimeError("no plugins at all — nothing to assemble")
+    names = list(wraps.keys())
     out["bank"] = {n: {"host": hosts[n], "home": homes[n]} for n in names}
+    out["missing_plugins"] = missing
 
     # site layout
     site_rows, site_entries = {}, {}
@@ -679,28 +689,48 @@ def run_assemble(args, out: dict) -> None:
                           "home_label": home_label, "tag": n,
                           "owner_target": BAR_OWNER})
     frozen = d6.freeze_wraps(list(wraps.values()))
-    pairs_raw = run_state(
-        model, blocks, fam, p_gates, p_handles, "dispatch",
-        lambda: g0.collect_pairs_fam(model, blocks, fam, joint, args.device,
-                                     args.max_cal_pairs,
-                                     lambda _i, b: b[1]))
-    recal = []
-    for si in site_info:
-        h, dom = pairs_raw[si["host_i"]]
-        lab = (dom == float(si["home_label"])).float()
-        rep = d6.train_rows_one(si["bank"], (h, lab), si["row_idx"],
-                                args.recal_steps, args.recal_lr, args.device,
-                                reject_w=args.reject_w, mass_w=args.mass_w,
-                                owner_target=si["owner_target"])
-        rep.update({"host_i": si["host_i"], "tag": si["tag"]})
-        recal.append(rep)
-        print(f"  [recal {si['tag']} L{si['host_i']}] p_home "
-              f"{rep['first']['p_new_code']:.3f} -> {rep['last']['p_new_code']:.3f}"
-              f"  p_base {rep['first']['p_new_base']:.4f} -> "
-              f"{rep['last']['p_new_base']:.4f}", flush=True)
-        # push the recal'd row back so every later rebuild sees it
-        rows[si["tag"]] = si["bank"].P.data[si["row_idx"]].detach().clone()
-    out["closing_recal"] = {"steps": args.recal_steps, "per_site": recal}
+    js_path = os.path.join(args.plugins_dir, "bank2n_rows.pt")
+    prev = {}
+    if args.out and os.path.exists(args.out):
+        try:
+            prev = json.load(open(args.out))
+        except Exception:
+            prev = {}
+    if os.path.exists(js_path) and prev.get("closing_recal"):
+        js = torch.load(js_path, map_location="cpu", weights_only=False)
+        with torch.no_grad():
+            for n, r in js["rows"].items():
+                if n in rows:
+                    rows[n] = r.to(args.device)
+        print("== closing recal restored from bank2n_rows.pt (skipped) ==",
+              flush=True)
+        out["closing_recal"] = prev["closing_recal"]
+    else:
+        pairs_raw = run_state(
+            model, blocks, fam, p_gates, p_handles, "dispatch",
+            lambda: g0.collect_pairs_fam(model, blocks, fam, joint,
+                                         args.device, args.max_cal_pairs,
+                                         lambda _i, b: b[1]))
+        recal = []
+        for si in site_info:
+            h, dom = pairs_raw[si["host_i"]]
+            lab = (dom == float(si["home_label"])).float()
+            rep = d6.train_rows_one(si["bank"], (h, lab), si["row_idx"],
+                                    args.recal_steps, args.recal_lr,
+                                    args.device, reject_w=args.reject_w,
+                                    mass_w=args.mass_w,
+                                    owner_target=si["owner_target"])
+            rep.update({"host_i": si["host_i"], "tag": si["tag"]})
+            recal.append(rep)
+            print(f"  [recal {si['tag']} L{si['host_i']}] p_home "
+                  f"{rep['first']['p_new_code']:.3f} -> "
+                  f"{rep['last']['p_new_code']:.3f}"
+                  f"  p_base {rep['first']['p_new_base']:.4f} -> "
+                  f"{rep['last']['p_new_base']:.4f}", flush=True)
+            # push the recal'd row back so every later rebuild sees it
+            rows[si["tag"]] = si["bank"].P.data[si["row_idx"]].detach().clone()
+        out["closing_recal"] = {"steps": args.recal_steps, "per_site": recal}
+        torch.save({"rows": {n: rows[n].cpu() for n in rows}}, js_path)
     dump_json(out, args.out)
     # rebuild so the gate banks see the recal'd rows
     teardown(p_handles)
@@ -739,34 +769,56 @@ def run_assemble(args, out: dict) -> None:
               flush=True)
         return rec
 
-    states = {}
+    states = dict(prev.get("states") or {})
+    if states:
+        print(f"== resuming: {len(states)} states already measured ==", flush=True)
+
+    def state_or_measure(key, gates_fn, mode, tag_name):
+        if key in states:
+            print(f"  [{tag_name}] (cached)", flush=True)
+            return states[key]
+        g, h = gates_fn() if gates_fn else (None, None)
+        rec = measure(g, h, mode, tag_name)
+        if h is not None:
+            teardown(h)
+        states[key] = rec
+        out["states"] = states
+        dump_json(out, args.out)
+        return rec
+
     print("== states: bare / masked / partition-full / overlay =="
           f" (+ {len(names)} solos + {len(names)} leave-one-out) ==", flush=True)
-    states["bare"] = measure(None, None, "off", "bare")
-    # masked = passport selection on stock rows only, zero delivery
-    m_rows = {i: [rows[n] for n in tags_at[i]] for i in site_rows}
-    m_gates, _ = g0.build_gates(blocks, banks_reg, fam, m_rows)
-    m_handles = g0.install_mix(blocks, fam, {
-        i: [{"expert": wraps[n], "tag": n,
-             "lam": nn.Parameter(torch.zeros((), device=args.device)),
-             "num_stock": banks_reg[i].num_experts}
-            for n in tags_at[i]] for i in site_rows}, mode="off")
-    states["masked"] = measure(m_gates, m_handles, "additive", "masked")
-    teardown(m_handles)
-    states["partition_full"] = measure(p_gates, p_handles, "dispatch",
-                                       "partition-full")
-    o_gates, o_banks, o_handles = build_overlay(lam_params)
-    states["overlay_full"] = measure(o_gates, o_handles, "additive",
-                                     "overlay-full(lam=1)")
-    teardown(o_handles)
+    state_or_measure("bare", None, "off", "bare")
+
+    def mk_masked():
+        m_rows = {i: [rows[n] for n in tags_at[i]] for i in site_rows}
+        m_gates, _ = g0.build_gates(blocks, banks_reg, fam, m_rows)
+        m_handles = g0.install_mix(blocks, fam, {
+            i: [{"expert": wraps[n], "tag": n,
+                 "lam": nn.Parameter(torch.zeros((), device=args.device)),
+                 "num_stock": banks_reg[i].num_experts}
+                for n in tags_at[i]] for i in site_rows}, mode="off")
+        return m_gates, m_handles
+
+    def mk_partition():
+        return build_live(set(names))   # disposable handles; outer pair stays
+
+    def mk_overlay():
+        return build_overlay(lam_params)
+
+    state_or_measure("masked", mk_masked, "additive", "masked")
+    state_or_measure("partition_full", mk_partition, "dispatch",
+                     "partition-full")
+    state_or_measure("overlay_full", mk_overlay, "additive",
+                     "overlay-full(lam=1)")
     for n in names:
-        g_s, b_s, h_s = build_live({n})
-        states[f"solo_{n}"] = measure(g_s, h_s, "dispatch", f"solo {n}")
-        teardown(h_s)
+        def mk_solo(n=n):
+            return build_live({n})
+        state_or_measure(f"solo_{n}", mk_solo, "dispatch", f"solo {n}")
     for n in names:
-        g_m, b_m, h_m = build_live(set(names) - {n})
-        states[f"minus_{n}"] = measure(g_m, h_m, "dispatch", f"minus {n}")
-        teardown(h_m)
+        def mk_minus(n=n):
+            return build_live(set(names) - {n})
+        state_or_measure(f"minus_{n}", mk_minus, "dispatch", f"minus {n}")
     out["states"] = states
 
     # cross-fire (routed-share) matrix: rows=graft, cols=domain of tokens

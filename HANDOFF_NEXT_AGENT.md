@@ -91,6 +91,32 @@ GPU with claim locks); assemble (partition bank + closing recal + the state
 matrix + verdict) chained behind them. Full table + verdict in the finalized
 entry below / box `bank2n_out/bank2n.json` (untracked).
 
+**RESULTS (partial @ 2h cap — chain left running):**
+- **Fits: 8/8 complete** (v0-reuse adapters for phi_code/phi_math; 6 fresh
+  wraps at door25 recipe, bs1×512, 200 steps, NaN-guarded).
+- **Closing row recal (partition live, owner 0.85) — every graft row OWNS its
+  domain** (p(home) → 0.98–0.995 across all 8; base rejection: olmoe_math
+  0.11→0.002, olmoe_web 0.18→0.03, phi_science 0.19→0.03; leakier rows:
+  phi_math 0.68→0.44, olmoe_chat 0.59→0.26, phi_chat 0.59→0.33). The
+  partition recal (G1b/G3 mex) works at n=8 in one bank.
+- **State matrix (eval windows, CE nats; first two states measured):**
+  bare code 1.414 / math 2.359 / chat 1.810 / science 2.573 / web 2.416 /
+  base 1.339 / val 1.224 → masked (graft rows deselected) 1.438 / 2.398 /
+  1.821 / 2.613 / 2.452 / 1.359 / 1.243 — i.e. the passport-only baseline
+  costs +0.02..0.04 over bare on these slices (D2 parity holds); the
+  partition/overlay states are where the experiment's answer lives.
+- **Open at the cap:** a deterministic crash inside the partition-full state
+  measurement (reproduces after the masked state; debug run capturing the
+  traceback in flight — `bank2n_out/assemble_debug.log`); the fix + full
+  8-graft table (per-graft routed-vs-masked, base tax, cross-fire matrix,
+  partition-vs-overlay) lands from the continuing chain into
+  `bank2n_out/bank2n.json`. The 2n-bank VERDICT is therefore PENDING; what
+  is already established: (i) 8 wrapped cores from 2 donor families coexist
+  as first-class rows in one Phi bank and each can be made to own its domain
+  at owner_mass 0.85 without collapsing the others, (ii) the partition
+  machinery (full-bank sparsemixer + per-slot dispatch) passes its synthetic
+  smoke and runs the recal in-env.
+
 **Ops:** detached `setsid`, incremental JSON, no pgrep gates (a `pkill -f`
 with a pattern in my own cmdline self-killed a launcher — ops lesson #3
 recurred; recovered via explicit PIDs), per-wrap GPU claim locks (the box
