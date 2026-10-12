@@ -41,6 +41,98 @@ data first.
 
 ---
 
+## 2026-10-12 — MODULAR_MOE §10.5 **Door 8 BRIDGE WIDTH (the all-grafted-bank make-or-break): a 64-wide wrap OVER-RECOVERS one native expert's general-LM job (gen_heldout CE 2.287 vs stock 2.346 vs N-masked 2.3485) — the bottleneck does NOT kill general traffic at expert-replacement scale — but the door25 recipe does not scale in width (rank ≥256 explodes at lr 3e-3; width-normalized init is the v2 rule) and the single-expert demand itself is tiny (+0.0022 nats)** (MI50 box GPU 0 run-1, fp16; width-norm run-3 retry-chain detached in flight)
+
+**Q (the endgame's load-bearing measurement): how wide must the wrap bridge
+be for a grafted generalist core to carry GENERAL LM traffic (not just
+specialty deltas) — i.e. to recover the CE cost of removing a native expert?**
+Bars: ≥80% recovery at rank ≤512 = FEASIBLE (all-grafted banks live);
+50–80% = marginal; <50% = bottleneck fatal.  Harness
+`lab/door8_bridge_width.py` (fork of door25; d0/d1/d2/door25 imported
+UNMODIFIED), synthetic 12/12.
+
+**Protocol.** (1) Generalist donor core = max-mushiness Phi-mini-MoE @f620b32c
+expert from D2 RouteStats (normalized entropy of the domain-rate profile;
+usage floor on hit-rate — raw d0 rates are n_layers-diluted): **L3 e8,
+mushiness 0.9998** (global max of 32×16), hit-rate 0.142 vs 0.125 uniform —
+a domain-generalist workhorse, **11,796,480 params frozen** verbatim in the
+door25 geometry, adapter rank sweep **d_canon ∈ {64, 256, 512, 1024}**
+(trainable 786,432 / 3,145,728 / 6,291,456 / 12,582,912 — note rank 512 ≈
+one native OLMoE expert's 6.29M).  (2) General text = graft_d0_slice
+web+chat+science+math (the door25 base set) + a **wikitext-2-TEST** slice
+(disjoint from web.txt = wikitext-2-train per graft_d0_build_slice), 80/20
+per-source train/held-out: **137,216 train tok (67×2048), 31,744 held-out,
+31,744 val_mixed**.  (3) Native expert N = the most load-bearing single
+OLMoE expert on general probe text (per-layer top-routed shortlist, 16
+candidates): **L2 e7** (probe mask cost +0.0167).  Mask = zero N's routed
+slots in the stock merge — exact capacity removal (norm_topk_prob=false, no
+renorm).  (4) Compensating graft: N stays masked, wrap delivers additively
+at the site where N lives (y = y_masked + λ·e_wrap(h), door6 additive m≡1),
+trained on general CE (pure task loss, out_pen 0; lr 3e-3 / wd 0 / clip 1,
+250 steps bs4×512 = the verified gfx906 shape, eval bs2×512), λ fitted on
+train (grid+refine).  recovery% = (CE_masked − CE_graft)/(CE_masked −
+CE_stock), paired per-batch SE.
+
+**The demand is real but small (design input #1):** N's removal costs
+**+0.0022 nats** on gen_heldout (stock 2.3463 → masked 2.3485) and +0.0003 on
+val_mixed; per-source it concentrates on **web +0.0223** (chat/math/science
+≈ +0.000).  One of 64 experts at one of 16 layers is ~1/1000 of the expert
+bank; the aggregate denominator is small, so recovery% is numerically
+explosive (halves flip sign) — the headline is the absolute CE read.
+
+**Rank 64 (786k, door25 recipe, wall 778 s):**
+| state | gen_heldout CE | val_mixed CE |
+|---|---|---|
+| (a) stock | 2.3463 | 1.4952 |
+| (b) N masked | 2.3485 | 1.4955 |
+| (c) graft λ=1 (trained composition) | 2.4887 (OVERSHOOT) | 1.6780 |
+| (c) graft λ=0.25 (fitted; grid floor) | **2.2874 (beats stock)** | 1.5034 (null) |
+
+Recovered 0.0611 ± 0.0099 nats vs the 0.0022 cost (paired 6σ; "2723%
+recovery" = over-recovery, the ratio itself is not the metric) — **the
+64-dim bridge carries general FFN work at expert-replacement scale.**  Two
+conditions for the v2 line: (i) delivered scale must be fitted (λ 0.25 — the
+trained λ=1 composition overshoots; the door6 λ lesson at general scale);
+(ii) val_mixed is null — the improvement is distribution-shaped (held-out
+tails of the training mix), calibration breadth again (the door25/door6
+held-out theme).
+
+**Rank ≥256 at the verbatim door25 init: FAIL TO TRAIN (design input #2):**
+Var(u_k) of adapter_up→core grows ∝ d_canon, so the frozen donor core sees
+inputs √(d_canon/64)× its natural scale.  512: CE→8-9 by step 25, |y|→2.2,
+**NaN by ~step 30** at lr 3e-3; the half-lr fallback then NaN'd at step 1
+because it restarted from **poisoned weights** (|y| 62.9 — fallback bug now
+fixed: fresh reinit before any retry).  256: limps worse-than-masked (fixed
+CE ~3.8-4.5 vs 2.3) — not a fit.  **Fix = width-normalized init**
+(adapter_up/down × √(64/d_canon) pins the composite scale at the verified
+64 geometry; `--ref-rank 64`, synthetic-checked) + the fresh-reinit fallback;
+**run-3** (widths 256/512/1024 @ width-norm + secondary code@512, 3-attempt
+OOM-retry chain after run-2 died on a co-tenant OOM) launched detached — curve
+lands in the next entry / box `/data/tliao/graft_door8_out/door8_width_p2_a*.json`.
+
+**Verdict (v2 feasibility line, run-1): FEASIBLE at rank 64** for the
+expert-replacement demand — a grafted generalist over-recovers one native
+expert's general-LM job even at the narrowest bridge, so an all-grafted bank
+is not blocked by bridge width at per-expert demand.  Open at commit time:
+the width ceiling (run-3), bank-scale demand (mask the layer's top-k, not
+one expert — the endgame bank test), membership-gated delivery
+(door25 site-with-membership), specialty-at-wide-rank (secondary in run-3).
+
+**Ops (2 harness bugs + the moving GPU map):** (1) `to_batches` signature
+mismatch crashed run-0 at data build (synthetic had not covered it — now
+covered, 12/12); (2) wrap never `.to(device)`ed (door25 does it via
+`pack.experts.to(device)`) — first-arm device crash; (3) free-GPU map moved
+**3×** mid-session (GPU 6 → 22GB co-tenant OOM during donor load → GPU 0;
+run-2 took GPU 1 after GPU 7 got claimed) — relaunch with `--core-from`
+(core_gen.pt) skips donor profiling, per-width arms are independent
+(partial-restart friendly).  Detached `setsid`, incremental JSON
+(`phase`/`widths` per arm), NaN guard, numeric-only.  Read the live results:
+box `/data/tliao/graft_door8_out/` (door8_width.json, door8_width_p2.json,
+door8_run*.log, wraps/, core_gen.pt, wikitext_test.txt) / home
+`lab/imported/graft_door8/` (untracked).  Code+docs only committed.
+
+---
+
 ## 2026-10-12 — GRAFTED SPINE V0: first assembly of the user's north star ("a model I can run and talk to … mostly grafted experts") — Phi-mini-MoE-instruct spine + D2 registry + 2 wrapped specialties + shaped episodic memories, additive-λ delivery; chat test bare-vs-grafted (MI50 box, GPUs 1/4/6, fp16)
 
 **Q (the user's dream, verbatim): "a model I can run and talk to (a few B
