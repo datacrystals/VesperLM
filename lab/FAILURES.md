@@ -18,49 +18,128 @@ a lucky pass.
 
 ## Failure log
 
-## 2026-10-11 — door5-provenance — provenance arm (i) 16-site wrap of the Door-3 distilled cores at the pinned Door-2.5 LR NaNs within 50 steps (guard abort; delivered state all-NaN) — 3e-3 is proven only for a SINGLE thin wrap, not 16 simultaneous ones; arm (ii) distill-then-deliver-noref measured after the session cap (jobs detached)
+## 2026-10-12 — door6-expert-mix — the two-expert MIX: composition PASS (both specialties deliver simultaneously, zero cross-contamination) but "more than the sum of parts" NOT shown (union gain 1.491 vs sum-of-solos 1.497 = 0.996×) and held-out quality FAILS on both homes (the Door-2.5 memorization gap, unchanged by going multi-expert)
+- Evidence: `lab/door6_expert_mix.py` (fork; d0/d1/d4/door25/graft_d2
+  imported unmodified), MI50 box GPU 1, fp16, detached `setsid`, incremental
+  JSON `/data/tliao/graft_door6_out/door6_mix.json` (home copy
+  `lab/imported/graft_door6/`, untracked). Host = OLMoE graft
+  (`registry_olmoe_6d84c485.pt`); plug-in A = Door 2.5 winner artifact
+  verbatim (Phi-mini-MoE @f620b32c L13 e8 code, host L6); plug-in B = D2
+  RouteStats math pick (donor L24 e4, math lift 3.693), identical door25
+  wrap + fit on math, host L12 (two host layers via the depth-match rule).
+  Delivery = Door 4 additive: y = stock + λ_A·m_A·e_A + λ_B·m_B·e_B.
+  2×2 CE (nats; fit / held / base):
+
+  | state | code_fit | code_held | math_fit | math_held | base |
+  |---|---|---|---|---|---|
+  | neither | 1.0720 | 1.5872 | 2.7001 | 2.1042 | 2.3447 |
+  | A-only | 0.2214 | 1.6615 | 2.7102 | 2.1217 | 2.3583 |
+  | B-only | 1.0720 | 1.5902 | 0.6536 | 2.4067 | 2.3529 |
+  | both | 0.2310 | 1.6639 | 0.6676 | 2.4395 | 2.3685 |
+
+  Bars: code quality PASS (both 0.231 < 1.072; A-only 0.221 additive beats
+  Door 2.5's mass-delivered 0.439 on the same trained wrap); math quality
+  PASS (both 0.668 < 2.700; B solo Door-2.5 table 2.700→1.070→0.452);
+  cross-contamination PASS (both−B on math +0.014, both−A on code +0.010,
+  both inside the 0.02 noise band; solo neutrality A-on-math +0.010,
+  B-on-code −0.000); parity 0.99636 PASS, contamination 0.068 (L6) / 0.082
+  (L12) PASS; union 1.960 → 0.469 both-on PASS. Mix read: gain_both 1.4909
+  vs gain_A 0.3812 + gain_B 1.1163 = 1.4974 (ratio **0.9957**) — exactly
+  additive, not super-additive. Held-out FAILS as a skill claim on both
+  homes (code_held 1.587→1.664 both-on, math_held 2.104→2.439).
+- Root cause: (composition) nothing to explain — under additive delivery at
+  two depth-separated layers the plug-ins do not compete: in-situ util is
+  crisp (code A 0.911 / B 0.085; math A 0.042 / B 0.908) and the union gain
+  is the sum of the solos to within 0.4% — the "sum of parts" holds but
+  gives no emergent bonus at this scale; (held-out) the same calibration
+  memorization as door25 (10-12k fit tokens per home; each wrap sharpens its
+  fit slice and slightly regresses its probe half) — going multi-expert
+  neither fixes nor worsens it (both-on cross-talk is +0.01 nats).
+- What it rules out: (1) "two plug-ins fight for the host" as a failure mode
+  under the additive contract (the softmax-mass competition of D1/Door-3
+  cannot arise here by construction, and empirically the solos are
+  reproduced to ~0.01 nats when the other is live); (2) "the mix is MORE
+  than the sum of parts" as an emergent claim at 2 experts / 1 donor /
+  ~11k calibration tokens — composition is linear, not synergistic;
+  (3) additive λ·m delivery being weaker than mass delivery — for a
+  trained wrap it is strictly better (0.221 vs 0.439 A-only on code).
+- Next tried/queued: larger/multi-slice calibration for the wrap
+  generalization rung (the real open bar — both quality gates are
+  in-sample); same-layer-different-rows mix (implemented `--layout
+  same-layer`, not yet run — two-layers was the natural depth match);
+  second donor family in the mix (the long-term GLM/K3/Mimo product claim);
+  higher λ budget / joint adapter fine-tune if held-out parity is wanted
+  (out of scope of "light joint pass").
+- Ops (2 failures this cycle, both recovered): (a) run-1 OOM at Phase A —
+  the box's free-GPU map moved under us (the user's hackathon jobs claimed
+  GPUs 0/2/3/5/6/7; the assigned GPU 5 was no longer free and the GPU 4
+  door5 rerun had finished) — rerun on unclaimed GPU 1;
+  (b) run-2 crashed in the joint row-recal (CPU cached-h vs CUDA nll
+  target in `train_rows_one`) after B's solo fit completed — fixed; run-3
+  resumed with `--skip-wrap-b` from the saved plugin so the 250-step fit
+  was not repeated. Masked controls reproduce door25 (code 1.0720/1.5872)
+  and B's solo (math 2.7001) to 4 decimals.
+
+## 2026-10-11 — door5-provenance — distilled frozen cores do NOT pass the quality bar under any delivery/wrap: (ii) no-refit additive delivery FAILS narrowly (1.890 vs 1.829 held / 1.944 vs 1.923 train) with delivery exonerated (learned λ 1.89 < forced 2.33); (i'') 16-site wrap @1e-3 FAILS hard (10.08 vs 1.83 — mass-delivery composition collapse); (i) 16-site wrap @3e-3 NaNs in 50 steps — provenance is confirmed as the binding constraint but NARROWED to a CE-skilled (task-pretrained) core
 - Evidence: `lab/door5_provenance.py`, MI50 GPU 4 (detached `setsid`,
-  incremental JSON `/data/tliao/graft_d0_out/door5_wrap.json` +
-  `door5_deliver.json`; launcher `door5_launch.sh`, follow-up chain
-  `door5_launch2.sh` + `door5_run2.log`). Both arms consume the Door-3
-  distilled artifact (`graft_d3_out/plugin_distill_olmoe.pt`, cores
-  16x gate_up(2048,2048)/down(2048,1024), fp `656ca50e593ef798`) at its
-  EXACT train/held-out split (teacher-cache student_ids, home = code+math,
-  47,104 / 31,744 tok — masked CE 1.8295 held / 1.9235 train matches the
-  door3 run to 6 decimals, so the data contract holds).
-- Arm (i) `--arm wrap --wrap-layout all` (every distilled core frozen
-  verbatim in the Door-2.5 `WrappedForeignExpert` geometry
-  host_in->c(64)->adapter_up->CORE->adapter_down->host_out; 8,388,608
-  trainable adapters / 100,663,296 frozen core params; forced task-CE +
-  out_pen 300, **lr 3e-3, wd 0**, then owner_mass 0.35 / reject_w 10
-  recal): Phase A **aborted non-finite at step 49/250** (the 93188b0 guard).
-  Curve: ce_batch0 0.7424 (step 0) -> 11.03 (step 25), |y| 0 -> 2.7e-2,
-  |W| 50.3 -> 60.7 — the door4b fresh-adapter explosion shape. Post-abort
-  measurement is all-NaN through delivery (routing mass NaN on 15/16
-  layers; quality nan vs masked 1.83/1.92; only contam 0.0128 readable).
-  Cores stayed bitwise-frozen (fp pre == post). Wall 807 s.
-- What it rules out: "the pinned Door-2.5 recipe (lr 3e-3) scales from one
-  wrap site to sixteen" — falsified; a NaN guard is mandatory at this LR
-  for multi-site wraps. It does NOT falsify the provenance mechanism
-  (single-site wrap of a distilled core at 3e-3, and 16-site at 1e-3, are
-  queued in `door5_launch2.sh`).
-- Arm (ii) `--arm deliver` (cores bit-identical frozen, contract (b)
-  `y = y_stock + lam*m*e_new`, lam-only delivery fit + mass-cal row recal,
-  NO core refit): fit-side evidence complete at the cap — cores frozen
-  bitwise, lam fit 150 steps @1e-2 clean (no NaN), lam mean 0.817
-  (per-layer 0.23..1.14), rows round-2 on-trajectory p_new_code 0.76-0.91
-  / p_new_base 0.005-0.014. The five-gate measurement was still running at
-  the 2h session cap — job left DETACHED; read `door5_deliver.json`
-  `result` + `door5_run.log` for the gate table. λ-fit step-0 CE 0.759 at
-  lam 0.49 (vs masked train 1.92) echoes door4b's step-0 read (0.50 under
-  its code-only protocol): the distilled skill delivers in-sample BEFORE
-  any fit, which is the provenance signature.
-- Next (running detached): (i') single-site wrap at host layer 6 / distilled
-  core 6, lr 3e-3 — the exact Door 2.5 control that answers "same quality
-  pass as the donor-pretrained core?"; (i'') 16-site wrap at lr 1e-3
-  (NaN-safe budget). If (i') reproduces door25's quality pass pattern and
-  (ii) clears the delivered<masked bar, expert provenance (pretrained-or-
-  distilled frozen cores) is confirmed as THE quality condition.
+  incremental JSON `/data/tliao/graft_d0_out/door5_{wrap,deliver,wrap_all_1e3,wrap_single}.json`,
+  logs `door5_run*.log`). All arms consume the Door-3 distilled artifact
+  (`graft_d3_out/plugin_distill_olmoe.pt`, cores fp `656ca50e593ef798`) at
+  the EXACT distill split (teacher-cache windows, home = code+math,
+  47,104 / 31,744 tok — masked CE 1.8295 held / 1.9235 train matches door3
+  to 6 decimals).
+- Arm (ii) distill-then-deliver NO refit (contract (b), λ learned/layer,
+  cores bitwise-frozen, mass-cal row recal only): quality **1.890 vs
+  1.829** held-out / **1.944 vs 1.923** train (ratio 1.033 / 1.011) FAIL;
+  λ=1 control worse (2.008 / 2.172); **forced/solo 2.327 / 2.385 — the
+  frozen distilled core is WORSE than masked at its own trained
+  composition**; parity 0.9978 (fire 0.9956 n=25,790 / nonfire 0.9994
+  n=33,602) PASS; retention 0.2425 (gain_solo 0.276 / gain_lib 0.067) FAIL;
+  contam 0.0711 PASS; util 0.8952 PASS; base CE Δ+0.0004 clean; λ mean
+  0.817 (0.23..1.14, L15=0.0); rows p_new_code 0.76-0.91 / p_new_base
+  0.005-0.014. Wall 1115 s. The step-0 "0.50/0.759 vs masked" reads that
+  motivated this arm were SINGLE-BATCH fits' CE, not full-slice — the
+  full-slice truth is the measured table (door4b's step-0 0.50 has the same
+  caveat).
+- Arm (i'') wrap 16-site @1e-3 (Door-2.5 geometry + recipe, LR lowered to
+  dodge the 3e-3 explosion): Phase A completes 250 steps clean, but quality
+  **10.08 vs 1.83** held / 10.89 vs 1.92 train (forced 2.10 / 2.46), parity
+  0.9219 (fire 0.874 / nonfire 0.993) FAIL, retention −0.15 FAIL, contam
+  0.179 PASS, util 0.956 PASS, base CE Δ+1.41. The 16-site mass delivery
+  reproduces door3's composition collapse (~0.9 in-situ mass × 16 layers
+  ≈ trained stock+e_new becomes ~0.1·stock+0.9·e_new).
+- Arm (i) wrap 16-site @ the pinned 3e-3: NaN abort @ step 49 (guard) —
+  the door4b fresh-adapter explosion; 3e-3 is single-site-proven only.
+  (i') single-site wrap @3e-3 at bs4×seq512=2048 (Door-2.5's verified
+  gfx906 shape — the first attempt crashed on the B*T=1024 backward hole,
+  see below) is the exact §10.2 control and is recorded in
+  `door5_wrap_single.json`.
+- gfx906 wall (new instance of `door25-gfx906-backward-holes`): the
+  single-site wrap's trunk backward at B*T=1024 dies with `HIP error:
+  invalid device function` on GPU 4 — the hole is not shape-deterministic
+  per run class (16-site fits ran 1024 fine the same night). Harness fixed:
+  `--batch-size` default 4 (B*T=2048) + explicit warning on the holey shapes
+  {256,768,1024,4096}; batch_tokens recorded in the result JSON.
+- Root cause (evidence-ranked): (1) **the distilled core has no next-token-
+  CE skill** — forced composition is worse than masked on both slices (code
+  1.53→2.00 forced, math 2.13→2.19); door3's objective (KL to donor + 0.3·
+  GT-CE) transfers KL-to-teacher (5.17→2.59) but not CE. (2) Delivery is
+  NOT the blocker: learned-λ additive delivery strictly improves on the
+  trained composition (1.89 vs 2.33) and on λ=1 (2.01), with clean
+  routing/neutrality — but there is nothing CE-useful to deliver. (3) The
+  wrap family cannot manufacture CE skill from a non-CE core at this
+  budget (16-site @1e-3 forced 2.10; single-site @3e-3 in
+  `door5_wrap_single.json`).
+- What it rules out: "any pretrained-or-distilled frozen core + thin
+  adapters passes quality" — falsified. The one existence proof (door25:
+  0.439 vs 1.072 train, forced 0.101) rests on a core that is CE-skilled on
+  the target distribution. Together with 93188b0 (from-scratch/refit fail
+  in-sample, 3 contracts × 6 recipes; refit destroys distilled skill
+  0.50→5.14): plug-in quality requires a CE-skilled frozen core.
+- Next (named): CE-objective distillation (teacher's CE/argmax behavior on
+  our text — not KL over its distribution), multi-slice calibration for
+  door25's held-out memorization gap, or a larger CE-pretrained donor core
+  (multi-site pack with per-site composition-matched delivery).
 
 ## 2026-10-11 — door4b-fit-v2 — recipe v2 (contract b + Door-2.5 fit) FAILS quality in both arms: the binding constraint is EXPERT PROVENANCE, not the delivery contract
 - Evidence: `lab/door4b_fit_v2.py`, MI50 GPU 4, incremental JSON

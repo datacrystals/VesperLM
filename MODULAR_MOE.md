@@ -905,17 +905,59 @@ delivered-mass (or additive fixed-weight delivery). Numbers: HANDOFF §10
 Door 3 + `lab/FAILURES.md` door3-distill-quality.
 
 **STATUS 2026-10-11 (`lab/door5_provenance.py`, MI50 GPU 4): provenance
-arms — the named lever after door4b.** Door-2.5's quality pass used a
-PRETRAINED frozen core; every from-scratch/refit delta fails quality
-in-sample. Door 5 tests DISTILLED frozen cores: (i) wrap each Door-3 core
-verbatim in the Door-2.5 geometry (thin adapters, task loss, mass delivery)
-and (ii) distill-then-deliver with NO refit (contract (b) additive λ,
-row recal only). Interim: 16-site wrap at the pinned lr 3e-3 NaNs in 50
-steps (guard abort — 3e-3 is single-site-proven only); the no-refit
-delivery arm keeps the cores bitwise-frozen and already delivers home CE
-far below masked at fit step 0 (λ≈0.5), the provenance signature. Exact
-Door-2.5 control (single-site wrap @3e-3) + gate tables detached/running —
-see `lab/FAILURES.md` door5-provenance and HANDOFF Door 5.
+VERDICT — distilled frozen cores do NOT reproduce the donor-pretrained
+quality pass; the binding property is a CE-skilled frozen core.** Arms on
+the Door-3 distilled artifact (exact distill split; masked 1.8295/1.9235):
+(i'') 16-site Door-2.5 wrap @1e-3: quality 10.08 vs 1.83 held-out (mass
+delivery compounds the composition mismatch — the door3 8.07 failure mode);
+(ii) distill-then-deliver NO refit (contract (b), λ learned/layer, cores
+bitwise-frozen): quality **1.890 vs 1.829** held / 1.944 vs 1.923 train —
+FAIL, but delivery is exonerated (learned λ beats the trained composition:
+1.89 vs forced 2.33) — the distilled core simply has no next-token-CE skill
+to deliver (forced 2.33 vs masked 1.83; its skill is KL-to-donor, door3's
+5.17→2.59). (i) 16-site @3e-3 NaNs in 50 steps (guard). Donor-pretrained
+reference (10.2) remains the one existence proof: forced 0.101 vs masked
+1.072, train 0.439. Single-site distilled wrap (exact 10.2 control) in
+`door5_wrap_single.json`. Full table: HANDOFF Door 5 + FAILURES
+door5-provenance. Next lever if the grab is still wanted: CE-objective
+distillation (not KL), or a CE-pretrained donor core.
+
+### 10.4 Door 6 — the mix (two specialties, one host; the first "sum of parts" test)
+If wrap-verbatim (10.2) is the grab, the product claim needs MULTIPLE grabbed
+specialties coexisting in one spine without fighting — the step toward the
+long-term "mix experts from GLM/K3/Mimo" story, first tested here with two
+Phi-mini-MoE specialties on the OLMoE graft. Two plug-ins from ONE donor
+(@f620b32c), different homes by D2 RouteStats: code L13 e8 (lift 16.5, the
+10.2 winner, artifact reused verbatim) and math L24 e4 (lift 3.69 — math
+specialists are much mushier; profile mushiness 0.919). Each wrapped exactly
+as 10.2 (frozen core + thin task-loss adapters, lr 3e-3 / wd 0 / out_pen
+300) on its own home data, at TWO depth-matched host layers (donor L13/32→
+host L6, L24/32→host L12; `--layout same-layer` implements the
+same-layer-different-rows alternative). Delivery = Door 4's additive winner
+per expert per layer: y = y_stock + λ_A·m_A·e_A + λ_B·m_B·e_B (membership =
+score beats k-th stock score; no softmax-mass competition by construction).
+Joint = measurement + a light λ/recal pass only (cores and adapters frozen):
+on-trajectory row recal with both live + 120-step joint λ fit on code+math.
+
+**STATUS 2026-10-12 (`lab/door6_expert_mix.py`, MI50 GPU 1): MIX WORKS AS A
+COMPOSITION — both specialists deliver simultaneously with zero
+cross-contamination and the union gain is EXACTLY the sum of the solo gains
+(0.996×) — "more than the sum of parts" NOT shown; held-out still shows the
+10.2 memorization gap.** Calibration-slice CE: code 1.072 → 0.231 both-on
+(A-only 0.221 — additive λ·m is strictly better than 10.2's mass-delivered
+0.439 on the same trained wrap); math 2.700 → 0.668 (B-only 0.654; B's solo
+Door-2.5 table 2.700→1.070→0.452, parity 0.998, contam 0.059). Full 2×2
+cross reads within noise (both−solo +0.014 math / +0.010 code; solo
+neutrality A-on-math +0.010, B-on-code −0.000). Base parity 0.99636,
+contamination 0.068/0.082, in-situ routing separation crisp (code: A 0.911 /
+B 0.085; math: A 0.042 / B 0.908). Union CE 1.960→0.469 both-on; gain_both
+1.491 vs solos 0.381+1.116=1.497 (ratio 0.9957). Joint pass: rows recal
+(home mass 0.73→0.87 / 0.78→0.86, base 0.040→0.023 / 0.055→0.031), λ
+0.5→0.952 (A) / 1.053 (B). Held-out honesty: both-on is WORSE than masked on
+both probe halves (code 1.587→1.664, math 2.104→2.439) — the 10.2 caveat
+unchanged; **multi-specialty coexistence is not the blocker; calibration
+breadth is.** Numbers: HANDOFF Door 6 + FAILURES door6-expert-mix +
+`lab/imported/graft_door6/door6_mix.json` (untracked).
 
 Composition: models in the format swap experts natively (10.1); out-of-format
 donors are grabbed by wrap (10.2) or distilled (10.3). Registry economics
