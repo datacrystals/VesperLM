@@ -41,6 +41,87 @@ data first.
 
 ---
 
+## 2026-10-12 — Door 7 **CE-OBJECTIVE DISTILLATION (the named Door-5 lever): does NOT unlock the distill tier** — teacher-argmax CE makes the core ANTI-skilled (argmax ≠ GT on 84.4% of home positions), GT-CE gives in-sample skill only (memorization), and the winning-stack wrap of the argmax core passes quality IN-SAMPLE for the first time on a distilled core (1.843 vs 1.924) but held-out stays flat (1.837 vs 1.830) with forced ≈ masked (MI50 box, fp16)
+
+**Q (Door-5 verdict's named lever): KL-distilled cores fail the CE-quality
+bar because KL-to-donor skill doesn't transfer to next-token CE — does a
+CE-OBJECTIVE distillation (next-token CE toward the teacher's argmax, or CE
+on ground-truth text) produce a frozen core that CARRIES CE skill like the
+donor-pretrained core?**
+
+Harness `lab/door7_ce_distill.py` (fork of door3's teacher-cache/fit +
+door5's measurement stack; d0/d1/d4/d25/d5/d3 imported UNMODIFIED;
+synthetic 12/12). Same door3 data contract (teacher_cache windows, exact
+60/40 split: 47,104 train / 31,744 held tok; masked 1.8295 held / 1.9236
+train), same artifact format (`vesper-graft-plugin-distill-v1`, 16-layer
+SwiGLU 2048/2048/1024, cores frozen after), KL-arm budget (200 steps,
+lr 1e-4, wd 0.01, out_pen 300, bs2×512 = the d3_launch contract).
+
+**Target-rule measurement (the diagnostic of the cycle):** the teacher's
+shared-support argmax equals the ground-truth token on only **7,331/47,012
+home positions = 15.59%**; 84.41% of positions point at a non-GT id. So
+"CE toward the teacher's argmax" is mostly CE AWAY from the text's own next
+tokens — and the distilled core shows it.
+
+| arm | objective (200 steps) | raw-core forced CE train / held (vs masked 1.924/1.829) | skill-in-core |
+|---|---|---|---|
+| KL baseline (door5 ii) | KL + 0.3 GT-CE | 2.385 / 2.327 | **NO** |
+| **CE-argmax** (this) | CE(teacher argmax; GT where agree) | **8.977 / 5.104** | **NO — ANTI-skill** |
+| **CE-GT** (this) | pure GT next-token CE | **1.657 / 2.122** | train YES (−0.27) / held NO (+0.29) |
+| donor-pretrained (door25) | pretraining | 0.101 vs 1.072 (code slice) | **YES** |
+
+**Primary measurement = the winning recipe stack** (single-site Door-2.5
+wrap at host L6 of the CE-argmax core, 250 steps lr 3e-3 wd 0 out_pen 300
+(765.7s), mass-cal row recal 400+200, **Door-6 additive λ·m delivery**
+fitted 150 steps → λ 0.6855; i' protocol shapes bs4×512=2048 / eval-batch
+2; full slices):
+
+| core / delivery | quality train (vs masked 1.924) | quality held (vs masked 1.829) | forced train / held | parity / contam / util | verdict |
+|---|---|---|---|---|---|
+| **CE-argmax wrap, additive (primary)** | **1.843 (0.958×) PASS** | 1.837 (1.004×) FAIL | 1.893 / 1.867 (≈ masked) | 0.9993 / 0.123 / 0.891 | **FAIL** (held-out gate) |
+| CE-argmax wrap, mass (read) | 1.938 (1.008×) FAIL | 1.866 (1.020×) FAIL | same | 0.9987 / 0.123 / 0.891 | FAIL |
+| KL (i') wrap, mass (door5) | 1.997 (1.038×) FAIL | 1.882 (1.029×) FAIL | 1.968 / 1.897 | 0.999 / 0.123 / 0.891 | FAIL |
+| KL (ii) deliver-no-refit (door5) | 1.944 (1.011×) FAIL | 1.890 (1.033×) FAIL | 2.385 / 2.327 | 0.998 / 0.071 / 0.895 | FAIL |
+| donor-pretrained wrap (door25) | **0.439 (0.41×) PASS** | 1.621 (1.02×) neutral | 0.101 | 0.999 / 0.065 / 0.831 | in-sample PASS |
+
+Side reads: λ=1 control 1.847/1.887 (learned λ 0.6855 slightly better);
+additive beats mass on the same fitted wrap (re-confirming door6's
+0.221-vs-0.439 finding at a second site); base CE Δ+0.0009; retention
+margin 1.81; both home slices flat-to-worse held (code 1.533 vs 1.525,
+math 2.141 vs 2.134).
+
+**Verdict: CE-objective distillation does NOT unlock the distill tier.**
+The Door-5 narrowing stands and sharpens: what the quality bar needs is
+**CE skill in the frozen core**, and neither CE objective at door3's data
+budget can put it there — teacher-argmax CE actively distills the teacher's
+mistakes (the teacher disagrees with the text 84% of the time under the
+shared-support criterion), and pure GT CE produces memorized in-sample
+skill that does not transfer (held forced +0.29) — the door25 held-out
+caveat, one rung down, at core scale. The small real progress: the
+CE-argmax core + thin adapters is the **first distilled core to pass
+quality in-sample** (1.843 vs 1.924), and it is the closest held-out
+ratio of the line (1.004) — but it delivers nothing on held-out and forced
+stays ≈ masked. A CE-skilled frozen core still requires pretraining-like
+breadth (or a larger CE-pretrained donor core), not a loss change.
+
+**In flight at handoff** (chains detached `setsid`, survive session death;
+sentinels + resumable per-phase): argmax deliver-no-refit (secondary) and
+the GT-core wrap + deliver (does in-sample skill deliver through the
+winning stack?). Live JSON `/data/tliao/graft_d7_out/door7_{deliver,
+wrap_gt,deliver_gt}.json`, logs `d7_chain*.log`.
+
+**Ops (3 walls):** the free-GPU map moved 3× under us (user's hackathon
+shards claim momentarily-free cards within seconds — one OOM at the first
+fit step on a card that freed mid-load, 17.3+14.6 GB); chain = resumable
+OOM-retry (4 attempts/phase, re-picked GPU, per-phase sentinels, file-
+existence waits only — ops lesson #3); row recal ~20 min on contended
+cards vs door25's 201s free-card reference; `expandable_segments` not
+supported on this platform. Doubled-budget arm terminated on purpose after
+the step-200 skill probe showed anti-skill (continuing the failing
+objective was not worth the wall).
+
+---
+
 ## 2026-10-12 — SFT r2 recipe on the BOX 429M base (step_3000 pre-switch, r740 3×P40): RUNNING detached — early read NOT talkable (val 1.9592@200 vs t3-r2 1.7136@200; eval_chat 0/12 at step 200, same failure family as t3-r2)
 
 **Question:** is THIS base more talkable than t3's under the identical SFT r2
