@@ -658,7 +658,7 @@ def span_ce(logits_fn, tok, prompt, answer, device):
         start = max(1, len(pre) - 2)
     x = torch.tensor([ids], dtype=torch.long, device=device)
     logits = logits_fn(x)[0].float()
-    tgt = torch.tensor(ids[1:], dtype=torch.long)
+    tgt = torch.tensor(ids[1:], dtype=torch.long, device=logits.device)
     logp = F.log_softmax(logits[:-1], dim=-1)
     nll = -logp.gather(1, tgt.unsqueeze(1)).squeeze(1)
     seg = nll[start - 1:] if start - 1 < nll.shape[0] else nll[-1:]
@@ -708,7 +708,7 @@ def chat_parity(tok, fn_bare, fn_graft, device):
         sum_cos += float(cos.sum())
         cos_min = min(cos_min, float(cos.min()))
         n += kl.shape[0]
-        tgt = torch.tensor(ids[1:], dtype=torch.long)
+        tgt = torch.tensor(ids[1:], dtype=torch.long, device=lb.device)
         ce_b += float(F.cross_entropy(lb, tgt))
         ce_g += float(F.cross_entropy(lg, tgt))
     nctx = len(ctxs)
@@ -998,21 +998,48 @@ def run_assemble(args) -> dict:
             "owner_target": (BAR_OWNER_SPEC if kind in ("code", "math")
                              else BAR_OWNER_MEM)})
     frozen = d6.freeze_wraps(list(wraps.values()))
-    print("== closing row recal (all plugs live, memories owner 0.85) ==",
-          flush=True)
-    recal = closing_row_recal(model, blocks, fam, handles, gates, site_info,
-                              joint_batches, args.device, args.recal_steps,
-                              args.recal_lr, args)
-    out["joint"]["row_recal"] = recal
-    dump_json(out, args.out)
+    js_path = os.path.join(args.plugins_dir, "joint_state.pt")
+    prev_joint = prev.get("joint") or {}
+    if (os.path.exists(js_path) and prev_joint.get("lam_fit")
+            and not prev_joint["lam_fit"].get("aborted_nonfinite")
+            and prev_joint.get("lams_final")):
+        js = torch.load(js_path, map_location="cpu", weights_only=False)
+        with torch.no_grad():
+            for name, r in js["rows"].items():
+                lay = dict((n, l) for n, k, l, e, h, s in wrap_specs)[name]
+                site_banks[lay].P.data[row_idx[name]] = r.to(
+                    site_banks[lay].P.device).to(site_banks[lay].P.dtype)
+            for lam, v in zip(lams, js["lams"]):
+                lam.copy_(torch.tensor(float(v)))
+        out["joint"] = {**prev_joint, "row_idx": row_idx}
+        print("== joint pass restored from joint_state.pt (recal+lam "
+              "skipped) ==", flush=True)
+        dump_json(out, args.out)
+    else:
+        print("== closing row recal (all plugs live, memories owner 0.85) ==",
+              flush=True)
+        recal = closing_row_recal(model, blocks, fam, handles, gates, site_info,
+                                  joint_batches, args.device, args.recal_steps,
+                                  args.recal_lr, args)
+        out["joint"]["row_recal"] = recal
+        dump_json(out, args.out)
 
-    print("== lambda fit (additive contract, lam per expert per layer) ==",
-          flush=True)
-    lam_fit = fit_lams(model, blocks, fam, lams, handles, gates, joint_batches,
-                       args.lam_steps, args.lam_lr, args.device)
-    out["joint"]["lam_fit"] = lam_fit
-    out["joint"]["lams_final"] = [round(float(p.detach().clamp(min=0)), 4)
-                                  for p in lams]
+        print("== lambda fit (additive contract, lam per expert per layer) ==",
+              flush=True)
+        lam_fit = fit_lams(model, blocks, fam, lams, handles, gates,
+                           joint_batches, args.lam_steps, args.lam_lr,
+                           args.device)
+        out["joint"]["lam_fit"] = lam_fit
+        out["joint"]["lams_final"] = [round(float(p.detach().clamp(min=0)), 4)
+                                      for p in lams]
+        torch.save({
+            "rows": {n: site_banks[
+                dict((nn, l) for nn, k, l, e, h, s in wrap_specs)[n]]
+                .P.data[row_idx[n]].cpu() for n in row_idx},
+            "lams": [float(p.detach().clamp(min=0)) for p in lams],
+        }, js_path)
+        out["phase"] = "joint_done"
+        dump_json(out, args.out)
     for en_l in site_entries.values():
         for en in en_l:
             # keep a tensor lam: MixMerge calls .clamp(min=0) on it
