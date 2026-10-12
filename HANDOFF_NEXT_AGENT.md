@@ -119,10 +119,35 @@ inputs √(d_canon/64)× its natural scale — 512 NaNs by ~step 30 at lr 3e-3
 POISONED weights (|y| 62.9 — fallback bug fixed: fresh reinit before any
 retry).  **Fix = width-normalized init** (adapter_up/down × √(64/d_canon),
 composite scale pinned at the verified 64 geometry; `--ref-rank 64`,
-synthetic-checked) — **run-3** (widths 256/512/1024 @ width-norm +
-secondary code@512, 3-attempt OOM-retry chain) detached — its curve is the
-v2 width ceiling and lands in the next entry /
-box `/data/tliao/graft_door8_out/door8_width_p2_a*.json`.
+synthetic-checked) + fresh reinit before any lr fallback.
+
+**Run-1 secondary (specialty re-check) COMPLETE:** the SAME generalist core
+(L3 e8) on code at d_canon 64 fits the specialty — code train CE **0.1458**
+(λ=1), held-out **1.892** (vs door25's code-specialist L13 e8 forced
+0.101/1.950: comparable, same held-out memorization gap) — and code@512 at
+door25 init nan_aborts like the generalist arms.  Specialty quality is not
+lost by using a generalist core and is not limited by the 64-wide bridge.
+
+**Run-3 (width-norm) first points (in flight, attempts continue detached at
+box `/data/tliao/graft_door8_out/door8_width_p2_a*.json`):** d_canon 256
+trains to a **mildly positive** wrap (λ*=0.125, gen_heldout **2.3441** vs
+masked 2.3485 — recovery 197% = +0.0044 nats; the door25-init 256 was
+net-harmful with λ*=0), and d_canon 512 trains **healthy** past step 150 at
+lr 3e-3 (|y| ~8e-3, no explosion — the init fix removes the NaN family);
+1024 follows.  So the width-norm fix converts "untrainable/ harmful" into
+"trainable", while the best absolute general-LM delta still sits at rank 64
+(+0.061 nats at λ=0.25 vs +0.004 at 256) — wider bridges are not yet showing
+more general capacity at this recipe/step budget.
+
+**Final verdict (v2 feasibility line): FEASIBLE — ≥80% recovery at rank
+≤512 is met at rank 64 itself** (the run-1 in-harness verdict line:
+"FEASIBLE — ≥80% recovery at rank ≤512 (best thin rank meeting the bar:
+64); all-grafted banks live at reasonable width").  The bridge is NOT the
+binding constraint for carrying general traffic at per-expert demand; the
+binding constraints are (1) delivered-scale fitting (λ) and (2) recipe
+trainability at rank ≥256 (fixed by width-norm init; ceiling measured by
+run-3).  Bank-scale demand (mask the layer's top-k) remains the endgame
+read.
 
 **Verdict (v2 feasibility line, run-1): FEASIBLE at rank 64** for the
 expert-replacement demand — a grafted generalist over-recovers one native
