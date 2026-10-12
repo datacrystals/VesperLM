@@ -1743,3 +1743,10 @@ adapters ~786k params.
 **Open:** provenance arms (wrap-the-distilled-core) — the last rung;
 expert-fit budget scaling for scratch deltas; Door-2 expressiveness tax
 (needs fla GPU); wrap generalization beyond 11k calibration tokens.
+
+**OPS LESSON #3 (2026-10-12): never gate a launch on `pgrep -f <pattern>` when
+the pattern appears in an ANCESTOR cmdline — a heredoc that creates a script
+containing "door5_provenance.py" leaves a creating shell whose own cmdline
+contains that string forever, so the wait-loop never opens (door5 deciding
+runs sat idle ~2h behind this). Fix: match on PID files, or `pgrep -x`/exact
+argv, or just chain commands with && .**
