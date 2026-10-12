@@ -18,6 +18,55 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-12 — door7-ce-distill — CE-objective distillation does NOT unlock the distill tier: teacher-hard-target (argmax) CE makes the core ANTI-CE-skilled (forced 5.10/8.98 vs masked 1.83/1.92 — worse than the KL core's 2.33/2.39) because the cross-tokenizer teacher's argmax agrees with ground truth on only 15.6% of home positions; the GT-CE alternative memorizes in-sample (train forced 1.657 vs 1.924 — first distilled core with train skill) but does not transfer (held 2.122 vs 1.830); the argmax wrap passes quality in-sample for the first time on a distilled core (1.843 vs 1.924, additive) but held-out stays flat (1.837 vs 1.830) and forced stays ≈ masked — donor-pretrained tier (0.439/1.072, forced 0.101) unreached
+- Evidence: `lab/door7_ce_distill.py` (fork of door3's cache/fit + door5's
+  measurement stack; d0/d1/d4/d25/d5/d3 imported unmodified; synthetic 12/12),
+  MI50 box chains detached under `/data/tliao/d7_lab/`, incremental JSON +
+  artifacts `/data/tliao/graft_d7_out/` (door7_distill.json,
+  door7_wrap.json, door7_{deliver,wrap_gt,deliver_gt}.json in flight;
+  plugin_ce_step200.pt / plugin_gt_step200.pt). Same door3 data contract
+  (teacher_cache windows, 47,104 train / 31,744 held tok, masked 1.8295
+  held / 1.9236 train), KL-arm budget (200 steps, lr 1e-4, wd 0.01,
+  out_pen 300, bs2x512). (a) argmax arm = full-vocab next-token CE toward
+  teacher hard targets (shared-support argmax -> student id), GT id where
+  the teacher agrees or has no cached row: fit hard-target CE 8.15->1.84,
+  raw 16-pack skill probe (forced vs masked, full slices) held 5.1036 vs
+  1.8294 / train 8.9773 vs 1.9236 = ANTI-skill (KL core: 2.327/2.385).
+  (b) GT arm = pure ground-truth CE on home text, same budget: fit GT CE
+  8.15->0.44; skill probe train 1.6573 vs 1.9236 (PASS in-sample) / held
+  2.1219 vs 1.8295 (FAIL; code +0.307, math +0.278). (c) primary
+  measurement = single-site Door-2.5 wrap of the argmax core at host L6
+  (250 steps lr 3e-3 wd 0 out_pen 300, 765.7s) + Door-6 additive lam*m
+  delivery (lam 0.6855; row recal 400+200): quality held 1.8367 vs 1.8295
+  (ratio 1.0039) FAIL / train 1.8433 vs 1.9236 (0.9583) PASS — the first
+  in-sample quality pass on a DISTILLED core (KL (i') was 1.997/1.924
+  mass); forced 1.8669 held / 1.8929 train (≈ masked: no skill-in-core
+  through the wrap); parity 0.9993, contam 0.123, util 0.891, base CE
+  +0.0009; lam=1 control 1.8471/1.8869. Mass read of the same fitted
+  wrap (door5 (i') comparability): held 1.8662 / train 1.9380 — better
+  than KL's 1.882/1.997 but still FAIL; additive beats mass on the same
+  wrap (re-confirming door6).
+- Root cause: "CE toward the teacher's argmax" is NOT CE toward the ground
+  truth when the teacher disagrees — measured teacher-agree rate is
+  7,331/47,012 = 15.59% (84.41% of gradient mass points at non-GT token
+  ids), so the argmax objective trains the core away from the text's own
+  next tokens (KL + 0.3 GT-CE at least kept a GT anchor). Pure GT CE is
+  the right objective for the CE bar and does create in-sample skill, but
+  47k home tokens / 200 steps / 100.7M-param 16-core pack memorizes (the
+  door25 held-out caveat at core scale): held-out forced gets WORSE.
+  Distilled-core CE skill needs training breadth (pretraining-scale data),
+  not a change of loss on the same 47k tokens.
+- What it rules out: (i) teacher-hard-target CE as the fix for the door5
+  distill gap (clean falsification — anti-skill, worse than KL); (ii) GT-CE
+  on the home slice as a skill-in-core source that transfers (in-sample
+  only); (iii) the claim that ANY next-token-CE objective at door3's budget
+  reaches the donor-pretrained tier. The door5 narrowing stands unchanged:
+  a CE-skilled frozen core comes from task pretraining breadth.
+- Next tried: GT-core wrap + deliver arms (in flight — does in-sample
+  skill deliver through the winning stack?); if held-out breadth is the
+  binding constraint, the named lever becomes multi-slice / larger CE
+  pretraining of the core (or a larger CE-pretrained donor core).
+
 ## 2026-10-12 — door6-expert-mix — the two-expert MIX: composition PASS (both specialties deliver simultaneously, zero cross-contamination) but "more than the sum of parts" NOT shown (union gain 1.491 vs sum-of-solos 1.497 = 0.996×) and held-out quality FAILS on both homes (the Door-2.5 memorization gap, unchanged by going multi-expert)
 - Evidence: `lab/door6_expert_mix.py` (fork; d0/d1/d4/door25/graft_d2
   imported unmodified), MI50 box GPU 1, fp16, detached `setsid`, incremental

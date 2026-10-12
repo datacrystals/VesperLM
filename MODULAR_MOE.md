@@ -925,6 +925,28 @@ table: HANDOFF Door 5 + FAILURES door5-provenance. Next lever if the grab
 is still wanted: CE-objective distillation (not KL), or a CE-pretrained
 donor core.
 
+**STATUS 2026-10-12 (`lab/door7_ce_distill.py`, MI50 box): the named
+CE-objective distillation lever is TESTED and does NOT unlock the tier —
+the loss was never the binding constraint.** Two CE objectives at the KL
+arm's budget (200 steps / lr 1e-4 / out_pen 300 / same cache split):
+teacher hard targets (argmax; GT where the teacher agrees) → raw-core
+forced CE is ANTI-skill (5.10/8.98 vs masked 1.83/1.92 — worse than KL's
+2.33/2.39) because the cross-tokenizer teacher's argmax matches the ground
+truth on only 15.6% of home positions; pure GT CE → in-sample skill
+(train forced 1.657 vs 1.924 — the first distilled core with train
+forced<masked) but no transfer (held 2.122 vs 1.830). Primary measurement
+(single-site 10.2 wrap + Door-6 additive λ·m, the winning stack): argmax
+core quality train **1.843 vs 1.924 PASS in-sample** (a first for a
+distilled core; KL (i') 1.997/1.924) but held-out 1.837 vs 1.830 FAIL
+(ratio 1.004) and forced ≈ masked; parity 0.9993 / contam 0.123 / util
+0.891. Mass read of the same wrap: 1.866/1.938 (beats KL's 1.882/1.997,
+still fails). Donor-pretrained tier (0.439/1.072, forced 0.101) is not
+reached by any CE objective at this data budget — CE skill in a frozen
+core comes from pretraining breadth, not from the distill loss. GT-core
+wrap + deliver arms in flight (do they deliver the in-sample skill?).
+Numbers: HANDOFF Door 7 + FAILURES door7-ce-distill +
+`/data/tliao/graft_d7_out/door7_*.json` (untracked).
+
 ### 10.4 Door 6 — the mix (two specialties, one host; the first "sum of parts" test)
 If wrap-verbatim (10.2) is the grab, the product claim needs MULTIPLE grabbed
 specialties coexisting in one spine without fighting — the step toward the
