@@ -105,6 +105,30 @@ def _slim(o):
     return o
 
 
+def seat_hold(device, leave_gb: float = 18.8):
+    """Hold free VRAM at `leave_gb` for the whole run.
+
+    Co-tenant hazard on this box: launcher jobs start when >=19GiB (20.4GB
+    bytes) is free and non-claim jobs grab any empty card mid-load.  Leaving
+    18.8GiB free keeps us under their threshold while fitting our ~15.5GiB
+    work peak + CUDA context.  On a card already in that window this is a
+    no-op.  Seat is best-effort; the chain's OOM retry covers misses.
+    """
+    free, _total = torch.cuda.mem_get_info()
+    leave = int(leave_gb * 1024 ** 3)
+    seat_bytes = int(free) - leave
+    seat = None
+    if seat_bytes > 64 * 1024 ** 2:
+        try:
+            seat = torch.empty(seat_bytes, dtype=torch.uint8, device=device)
+            print(f"seat hold: {seat_bytes / 1024 ** 3:.1f} GiB "
+                  f"(leaving {leave_gb} GiB free)", flush=True)
+        except Exception as e:  # noqa: BLE001 — seat is best-effort
+            print(f"seat hold skipped: {e}", flush=True)
+            seat = None
+    return seat
+
+
 def dump_json(out: dict, path: str | None) -> None:
     if not path:
         return
@@ -491,6 +515,9 @@ def run_sweep(args, device) -> dict:
     w_gu, w_down, d_layer, d_expert, n_dl, prof = d25.load_core(args.core_from)
     out["donor"] = {"core_from": args.core_from, "core_layer": d_layer,
                     "core_expert": d_expert, "n_donor_layers": n_dl}
+    # grab the card's spare memory BEFORE loading so the co-tenant launchers
+    # (>=19GiB-free threshold) cannot pile in mid-load and OOM us
+    seat = None  # seat-hold self-OOMs (seat + 18.4GiB work > card); rely on claims+retry
     t_load = time.time()
     model, tok = d0.load_donor(args.model, args.device, args.dtype)
     blocks = d0.find_moe_blocks(model)
@@ -742,6 +769,8 @@ def main() -> int:
     ap.add_argument("--owner-mass", type=float, default=0.35)
     ap.add_argument("--max-cal-pairs", type=int, default=4096)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--seat-leave-gb", type=float, default=18.8,
+                    help="free VRAM to leave when holding the anti-vulture seat")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -784,6 +813,11 @@ def main() -> int:
           f"flipped budgets {v.get('flipped_budgets')}  "
           f"best {v.get('best_budget')}")
     print(f"\nresults -> {args.out}")
+    bad = [b for b, a in out.get("arms", {}).items()
+           if a.get("status") != "ok"]
+    if bad:
+        print(f"ARM FAILURES: {bad}")
+        return 1
     return 0
 
 
