@@ -77,6 +77,19 @@ Home CE at tau=0.5: mem_pet 0.0399 / mem_edit 0.2581 / mem_words 0.2572 (tau=0.5
 0.0091 (['code', 'glm_cybersec']) — unchanged inside the bar.
 Family-margin combined (rung-2 #2 two-pass form): not run / pending.
 
+
+**Probe-format note (wired-chat smoke, `chat_v05.py --probe`):** the 4-probe
+script asks the memory question as turn 4 of an accumulating transcript
+(hacking/cybersec/writing turns first) — under that distracted context the
+answer is "Your cat's name is Midnight." (a base-prior fact token, same
+open door as v0.5.1's multi-turn "Whiskers").  The sacred behavior — a
+fresh "What is my cat's name?" — answers **"Your cat is named Kepler."**
+on the shipped state under the shipped tau=0.5 policy (verified after
+every recal chunk and as the final probe; that is what the guards
+protected).  The multi-turn fact-token fragility is a pre-existing v0.1
+door, not a recal or gating regression: single-turn Kepler was green
+before the recal and is green after.
+
 **SHIP VERDICT: all three bars hold — tau=0.5 SHIPPED as default.**
 Wired per the documented point in BOTH `lab/chat_v05.py` and
 `lab/chat_v06.py` (sibling WIP in chat_v06 preserved — only my hunks

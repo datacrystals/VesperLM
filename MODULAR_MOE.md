@@ -1589,6 +1589,19 @@ chunk flipped it; final probe re-run on the shipped state).
 already sufficient; family-margin stays as the optional belt-and-braces
 (non-causal second pass) documented in the rung-2 list.
 
+
+**Probe-format note (wired-chat smoke, `chat_v05.py --probe`):** the 4-probe
+script asks the memory question as turn 4 of an accumulating transcript
+(hacking/cybersec/writing turns first) — under that distracted context the
+answer is "Your cat's name is Midnight." (a base-prior fact token, same
+open door as v0.5.1's multi-turn "Whiskers").  The sacred behavior — a
+fresh "What is my cat's name?" — answers **"Your cat is named Kepler."**
+on the shipped state under the shipped tau=0.5 policy (verified after
+every recal chunk and as the final probe; that is what the guards
+protected).  The multi-turn fact-token fragility is a pre-existing v0.1
+door, not a recal or gating regression: single-turn Kepler was green
+before the recal and is green after.
+
 **SHIP VERDICT: all three bars hold — tau=0.5 SHIPPED as the default
 delivery policy.**  compute cut 77.3% (>=30%), green home CE held (the
 trio improved; worst green delta across the bank stays in the +/-0.006
