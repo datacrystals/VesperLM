@@ -640,6 +640,14 @@ def home_stream(tok, home, args, seq):
         eps = g0.build_episodes()
         bl = g0.episode_batches(tok, [eps[home]], seq, 4)
         return [(t, b5.HOME_LABEL[home]) for t, _ in bl]
+    try:
+        import mem_pack as mp
+        if home in mp.homes():
+            eps = mp.episodes()
+            bl = g0.episode_batches(tok, [eps[home]], seq, 4)
+            return [(t, b5.HOME_LABEL[home]) for t, _ in bl]
+    except Exception:  # noqa: BLE001  pack unavailable -> specialty path
+        pass
     ids = b5.load_specialty_ids(
         tok, os.path.join(args.specialties_dir, home, "corpus.txt"),
         args.max_tokens)

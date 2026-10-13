@@ -46,10 +46,20 @@ import graft_d2_crossfamily as d2  # noqa: E402
 import door6_expert_mix as d6  # noqa: E402
 import grafted_spine_v0 as g0  # noqa: E402
 import varact_gate as vact  # noqa: E402  variable-activation plug gating
+import mem_pack as mp  # noqa: E402  persona memory pack (lab/memories/)
 
 DEFAULT_MODEL = "/data/tliao/Phi-mini-MoE-instruct"
 DEFAULT_REGISTRY = "/data/tliao/graft_d2_out/registry_phimoe_f620b32c.pt"
 DEFAULT_PLUGINS = "/data/tliao/v05_out"
+
+# Persona memory pack (lab/memories/persona_v1.json): 6 permanent "about the
+# user" facts taught as shaped episodic plugs, additive to the shipped mem
+# trio.  DEFAULT ON per the 30038bd defaults — the pack rows join the bank,
+# the question-match gate and the taught-token bonus are extended from the
+# pack, and joint_state_persona.pt is preferred over joint_state.pt (which is
+# never rewritten).  --mem-pack legacy restores the exact shipped 8-plug
+# world bit-identical.
+DEFAULT_MEM_PACK = "persona"
 
 # v0.5.1 fixed delivery (per-home λ fits + xfire-recal; lab/v05_lam_refit.py).
 # Used when joint_state.pt is absent; the box's joint_state.pt carries the
@@ -121,6 +131,17 @@ def pick_gpu(quiet=False) -> int:
     return best
 
 
+def joint_state_path(args) -> str:
+    """persona pack state first (additive, written by persona_build), then
+    the shipped joint_state.pt (never rewritten)."""
+    mem_pack = getattr(args, "mem_pack", "") or DEFAULT_MEM_PACK
+    if mem_pack == "persona":
+        p = os.path.join(args.plugins_dir, "joint_state_persona.pt")
+        if os.path.exists(p):
+            return p
+    return os.path.join(args.plugins_dir, "joint_state.pt")
+
+
 def build_state(args, device):
     """Load spine + registry + plug-ins -> (model, tok, gates, handles, info)."""
     for path, what in ((args.model, "spine"), (args.registry, "registry")):
@@ -138,6 +159,11 @@ def build_state(args, device):
     paths = [p for p in paths if "joint_state" not in p]
     expected = ["k3_hack", "glm_cybersec", "mimo_writing",
                 "code", "math", "mem_pet", "mem_edit", "mem_words"]
+    mem_pack = getattr(args, "mem_pack", "") or DEFAULT_MEM_PACK
+    pack = None
+    if mem_pack == "persona":
+        pack = mp.load_pack()
+        expected += mp.tags(pack)
     found = {os.path.basename(p)[:-len("_plugin.pt")]: p for p in paths}
     if not found:
         raise SystemExit(
@@ -146,7 +172,7 @@ def build_state(args, device):
 
     lams = {}
     js_rows = {}
-    js_path = os.path.join(args.plugins_dir, "joint_state.pt")
+    js_path = joint_state_path(args)
     if os.path.exists(js_path):
         js = torch.load(js_path, map_location="cpu", weights_only=False)
         order = js.get("order") or [n for n in expected if n in found]
@@ -216,10 +242,10 @@ def gen_reply_stream(tok, logits_fn, messages, max_new_tokens, device,
 
 
 def run_probes(tok, logits_fn, device, max_new_tokens, sample, temperature,
-               scope=None):
+               scope=None, probes=None):
     print("=== PROBE SMOKE (v0.5) ===", flush=True)
     messages = []
-    for kind, user in PROBES:
+    for kind, user in (probes if probes is not None else PROBES):
         messages.append({"role": "user", "content": user})
         text, ids = gen_reply_stream(tok, logits_fn, messages,
                                      max_new_tokens, device,
@@ -373,6 +399,11 @@ def main() -> int:
     ap.add_argument("--slot-k", type=int, default=0,
                     help="answer-slot-only bonus: fixed beta only where a "
                          "taught token is inside the top-K (0 = off)")
+    ap.add_argument("--mem-pack", default=DEFAULT_MEM_PACK,
+                    choices=["persona", "legacy"],
+                    help="memory pack: persona = the 6-fact Vesper pack "
+                         "additive to the mem trio (default %s); legacy = "
+                         "the shipped trio only" % DEFAULT_MEM_PACK)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     args.lam_map = {}
@@ -401,12 +432,19 @@ def main() -> int:
     else:
         (model, tok, blocks, fam, gates, handles, info,
          missing, site_entries, _banks) = build_state(args, device)
+        # persona pack: point the question-match gate + taught-token bonus at
+        # the pack's mem rows (legacy trio + 6 persona facts)
+        if (getattr(args, "mem_pack", "") or DEFAULT_MEM_PACK) == "persona":
+            _pack = mp.load_pack()
+            mp.apply_to_varact(vact, _pack)
+            print(f"[chat] mem pack: {_pack['pack']} "
+                  f"({', '.join(mp.tags(_pack))})", flush=True)
         # variable-activation plug gating (MODULAR_MOE 10.9): shipped
         # default tau=0.5.  Priority: --varact > joint_state["varact"] >
         # DEFAULT_VARACT; "off" keeps plain ungated delivery.
         pol_name = args.varact
         if not pol_name:
-            js_path = os.path.join(args.plugins_dir, "joint_state.pt")
+            js_path = joint_state_path(args)
             if os.path.exists(js_path):
                 js = torch.load(js_path, map_location="cpu",
                                 weights_only=False)
@@ -485,8 +523,16 @@ def main() -> int:
 
     fn0 = fn_bare if args.bare else fn_graft
     if args.probe:
+        probes = list(PROBES)
+        if (getattr(args, "mem_pack", "") or DEFAULT_MEM_PACK) == "persona":
+            try:
+                for tag, q, _e, _r in mp.probes():
+                    probes.append((f"persona:{tag}", q))
+            except Exception as e:  # noqa: BLE001
+                print(f"[chat] persona probe list unavailable: {e}",
+                      flush=True)
         run_probes(tok, fn0, device, args.max_new_tokens,
-                   args.sample, args.temperature, scope=scope)
+                   args.sample, args.temperature, scope=scope, probes=probes)
         return 0
     interactive(tok, fn_bare, fn_graft, device, args, scope=scope)
     return 0

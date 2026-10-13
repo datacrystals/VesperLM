@@ -41,6 +41,77 @@ data first.
 
 ---
 
+## 2026-10-13 — PERSONA MEMORY PACK v1 (MODULAR_MOE §10.11): the user's 6 permanent "about me" facts taught as shaped episodic plugs (pet_kepler machinery at slightly larger scale) — pack = `lab/memories/persona_v1.json` + `lab/mem_pack.py` (18/18 substitution deltas; gate-separation selftest 23/23); built on BOTH hosts (phi + qwen, 6 rank-64 wraps each, owner 0.85) and wired `--mem-pack persona` default-on in chat_v05/chat_v06 (MI50 box, fp16)
+
+**The facts (user's own words):** favorite live-action show = Person of
+Interest; likes The Machine; likes Gundam 00 + Gundam IBO; hates cars;
+likes trains; likes IGBTs.  Each is a `memory_shaping.py` Episode (3 taught
+substitution deltas + 3 styled approvals; `contract_turn` asserts
+substitution at load) plus a separate gate-side QUERY vocabulary, taught
+tokens for the decode bonus, per-spine host sites (phi L5/8/11/16/21/26,
+qwen L4/6/10/12/14/18), and a probe battery.  `mem_pack.selftest()` is the
+CPU falsifier for the question-match gate: every fact probe fires exactly
+its own row; `favorite anime?` -> mem_gundam only; `favorite color?` /
+`What's your favorite color?` -> nothing; live fillers -> nothing; legacy
+trio probes unchanged (mem_edit's shipped queries carried "favorite"/"like"
+and were re-voiced on the GATE side only).  **Query-side discipline:** the
+overlap gate is |q∩row|/|q| so one shared token on a 2-token question is
+exactly 0.5 = fires at the shipped qtau — natural parallel questions
+("What do you think of X?") therefore cannot share verbs across rows; the
+pack keeps teach prompts natural but bans favorite/like/love/hate/think/
+feel/opinion/name/tell (and "whats" except mem_gundam) from ALL query sets.
+
+**Build (`lab/persona_build.py`, detached `persona_chain.sh`/`persona_lane.sh`
+claim-locked lanes):** fit = host-native core + rank-64 width-norm wrap (wd
+0, task-CE + out_pen 300, lr 3e-3, FEED >=200k tok-slots tiled episode
+ChatML) + ROW-SCALE-GUARDED (180a612) prototype + solo mex recal owner 0.85
+— phi CE home 3.3-4.7 -> 0.05-0.24 (p_home 0.985-0.997), qwen 1.5-1.8 ->
+0.026-0.071 (0.974-0.985).  One phi wrap (mem_igbt) NaN'd at lr 3e-3 and
+recovered via the documented 1e-3 refit (CE 3.82 -> 0.059).  assemble = the
+6 rows installed ADDITIVELY (shipped rows/lams frozen from joint_state.pt;
+`joint_state.pt` never rewritten — `joint_state_persona.pt` is the pack
+state) + guard-checkpointed sibling recal (715ad33: own home x3 + sibling
+episodes capped 4 batches each + base on reject, reject_w 15, mass_w 2.0,
+owner 0.85, 30-step chunks, greedy own-fact + Kepler guards).  **Guard
+lesson (two iterations):** (1) reject_w 40 at ~4.5:1 reject:home over-
+suppresses rows in ONE chunk (home CE +0.12, several rows) — the 715ad33
+2.5:1 warning generalizes; (2) margin-read guards are UNUSABLE at fp16 —
+near-tied answer-slot logit margins flap several nats across unchanged
+states, so the shipped GREEDY probe is the only honest chunk guard.  With
+the tuned recipe mem_poi completed all 6 chunks green (p_reject 0.027 ->
+0.005) while the other five rows tripped a guard in chunk 0 and correctly
+kept their fit-time rows — the guards protect the taught facts, the pack
+stays additive.
+
+**Shipped bars (phi, joint_state_persona.pt + default flags, greedy):**
+single 6/8 = persona 4/6 (poi "Person of Interest", gundam "Gundam 00",
+trains "great" (sentiment-correct), igbt "I like IGBTs"; machine FAIL
+garbled slot, cars FAIL "great" = opposite of the taught hate) + legacy 2/2
+("Your cat is named Kepler." / "helix").  **The name-slot door is closed
+for names (Kepler, Person of Interest, Gundam 00, IGBT) but NOT for
+sentiment words** — "hate" loses to the base prior "great" even with the
+beta=3 taught-token bonus and a correctly matched row (`matched=['mem_cars']`
+and still "great"): the 10.10 H2 decode-competition finding extends from
+cat names to attitude words, and "The Machine" as a multi-token answer
+slot is the weakest of the six.  **Canary 14/14 and live --probe 4/4 are
+clean:** `favorite anime?` -> mem_gundam only ("Gundam 00"), `What about
+cars?` -> mem_cars, `favorite color?` / `What's your favorite color?` ->
+ NO row (no persona intrusion), Hamlet -> Shakespeare, sky -> blue, the
+live fillers match nothing, and the trio's own cells answer "Kepler."
+/"helix"/"Four.".  CLIs: `chat_v05.py` /
+`chat_v06.py` `--mem-pack persona` DEFAULT ON (joint_state_persona.pt
+preferred; `--mem-pack legacy` = bit-identical shipped world); `--probe`
+now includes the 6 persona questions.  Ops: claim locks + detached
+chains, no pgrep (a self-matching `pkill -f` during ops killed its own ssh
+— use explicit PIDs),2 qwen lanes initially starved and were relaunched
+(absolute paths; a relative-path relaunch silently failed on CWD).
+Verification battery `lab/persona_probe.py` (bars a/b/c/d) + live
+`chat_v05/v06 --probe` run detached via `persona_probe_run.sh` /
+`persona_verify.sh` after this entry.  MODULAR_MOE §10.11 + docs.  Code,
+docs, and the pack JSON only.
+
+---
+
 ## 2026-10-13 — ROW-SELECTIVE RETRIEVAL SCOPE (10.10 rung 1, question-anchored activation): the taught-token bonus is DEFAULT ON — a memory row is boosted only when the current QUESTION addresses its episode (token-containment question-match gate wins; the row's own question-span p_home is measured non-discriminative) — all four bars hold: sacred 3/3, mid t4/t8 5/6, live `chat_v05.py --probe` clean prose on non-memory turns + "Your cat's name is Kepler." at the memory turn, canary no taught-name leaks (MI50 box, fp16)
 
 **Mechanism (`lab/varact_gate.py`):** `QuestionScope` latches per-reply
