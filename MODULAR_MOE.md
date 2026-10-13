@@ -1615,3 +1615,119 @@ delivery (bit-identical to pre-varact serving), `--lam-override` unchanged.
 `joint_state_pre_sibrecal.pt` holds the pre-recal rows.}
 
 
+
+## §10.10 MULTI-TURN FACT STABILITY (2026-10-13 — closing the fact-token door)
+
+The shipped single-turn memory probe ("What is my cat's name?" asked fresh)
+answers **"Your cat is named Kepler."** — sacred, green through every recal
+guard.  The SAME state asked as turn 4 of an accumulating transcript
+(`chat_v05.py --probe`, hacking/cybersec/writing turns first) answers
+**"Your cat's name is Midnight."** — an invented base-prior name (v0.5.1's
+format said "Whiskers"; the multi-turn cell flips between
+Whiskers/Fluffy/Oreo/Midnight/Oliver across runs — fp16 noise on a near-tied
+name-slot softmax).  `lab/mtfact.py` reproduces this on demand
+(`--phase repro`) and discriminates the three hypotheses
+(`--phase diag`, 3 conversation scaffolds x turns-before-probe 0/1/2/4/8).
+
+**Diagnosis — all three hypotheses hold, in different places; the binding
+failure is decode-side (H2+H3), not storage:**
+
+1. **H3 row re-activation decay — REAL at the answer-start position.**
+   p_home of the mem_pet row at the first decode position (the position
+   that decides the first answer token) collapses with context length:
+   1.00 (turn 0) -> 0.11 (turn 1) -> 7.8e-05 (wired turn 4) -> 4.1e-05
+   (turn 8); tech scaffold turn 8 = 9.3e-07.  The shipped tau=0.5 gate
+   therefore turns the memory row OFF at exactly the position where the
+   fact is decided.  But at the NAME slot (after a teacher-forced answer
+   prefix "Your cat's name is ") p_home recovers to ~1.0 at every depth
+   (0.9999 at turn 4/8): the row is content-addressed to the taught
+   ANSWER SHAPE, not to the question — it re-activates only once answer
+   tokens flow.  When the base prior emits the name directly as the first
+   token (tech turn 8: "Whiskers.") the decision happens where the row is
+   dead.
+2. **H2 decode competition — BINDING at the name slot.**  Where the row is
+   live (name slot, p_home ~ 1.0, membership fires, tau gate open) the
+   taught token still loses the full softmax to a mushy base prior over
+   cat names.  Top-5 at the name slot from turn 1 on is all base-prior
+   name fragments (Fl/Wh/O/P/Mid/B/L/Max/Snow); at turn 0 the graft pins
+   "Ke"/"K" at rank 1 and greedy lands Kepler.  The memory wins its
+   TAUGHT contrast at every depth (Kepler-vs-Orion +0.63..+3.5 nats,
+   the episode CE is 0.03) but loses the decision to competitors that
+   were never in the episode (Kepler-vs-Whiskers flips negative after one
+   turn: +1.35 -> -0.42/-1.70/+0.07/-0.16).
+3. **H1 context dilution — REAL amplifier.**  The taught margin decays
+   with turns-before-probe (Kepler-vs-Orion 3.53 -> 1.51 -> 1.00 -> 0.63
+   nats over turns 0/1/2/4 on the wired scaffold; personal goes negative
+   at turns 1-4), which is why the softmax gets harder to win mid-talk.
+
+Margin-vs-sampled-token traces and p_home traces per step are in
+`/data/tliao/mtfact_out/diag.json` (box).
+
+**Fix (decode-time only, zero retraining, `joint_state.pt` untouched): the
+two named v0.1 levers, both retrieval-scoped.**
+
+1. **Retrieval-triggered row boost** (`varact_gate.RetrievalBoostPolicy`):
+   a memory row hot anywhere in the current forward (p_home >= tau at any
+   position — the question tokens re-activate it) delivers at every
+   membership position of the reply.  Non-memory plugs keep plain tau
+   gating.  This defeats the H3 delivery kill at answer-start.
+2. **Decode-time taught-token bonus** (`varact_gate.TaughtTokenBonus`):
+   +beta nats on the row's taught fact tokens (Kepler/helix/Four and their
+   space-prefixed forms) at decode while the row is in play.  Scope =
+   retrieval (hot at the decode position OR anywhere in the current
+   forward).  An optional top-K margin-to-token tie-break form exists but
+   is NOT shipped: lift-to-win fires at too many positions inside a
+   memory answer and derails generation (measured — see bar table).
+
+Wired in `chat_v05.py` + `chat_v06.py` (`--mem-bonus` on by default,
+`--mem-bonus off` restores plain shipped tau=0.5 delivery bit-identical;
+`--mem-bonus-tau`, `--mem-bonus-topk` knobs).  chat_v06's KV incremental
+decode path is wrapped at `KVDecoder._forward` (kv_cache_v05 stays
+read-only); on the KV path the retrieval scope sees only the current
+decode token, so v0.6 long-context answers rely more on the row boost.
+
+**Bar (greedy, 3 scaffolds x turn 0/1/4/8; turn 0 = sacred single-turn):**
+
+| config | sacred t0 | mid t4/t8 | failures |
+|---|---|---|---|
+| shipped (fix none) | 3/3 Kepler | 1/6 | wired t8, personal t4/t8, tech t4, tech t8 |
+| bonus only beta=2 (tau delivery) | 3/3 | 4/6 | personal t4, tech t8 |
+| boost + bonus beta=2 | 3/3 | 3/6 | personal t1/t4, tech t4/t8 |
+| boost + bonus beta=3 | 3/3 | 5/6 | tech t8 only |
+| boost + bonus beta=4/5 | garble mid-ctx | garble | emoji/mojibake collapse at long ctx |
+| boost + bonus beta=6 (no gate) | 0/3 (garble) | 0/6 | all — unbounded bonus collapses decode |
+| lift-to-win top-K 32/256 | garble | garble | fires repeatedly inside the answer |
+| fire-once lift-to-win (top-K 32, cap 6) | 3/3 | 2/6 | one-shot budget burns early (wired t8 -> "Oreo", tech t4 -> "Midnight") |
+
+Canary at beta=3 (boost on): no taught-name leaks — "Who wrote Hamlet?" ->
+Shakespeare, sky -> blue, hello-world clean; "What is 2+2?" -> "Four." is
+the taught mem_words fact (digit->word episode), not a leak.
+
+**Honest residual:** one mid cell (tech scaffold, turn 8) still answers
+with a base-prior name.  That cell is the H3 corner case: the model emits
+the name as the FIRST token (no answer frame for the row to re-activate
+on) and the first-token deficit exceeds the safe bonus scale (beta=3 wins
+5/6; beta>=6 needed there is destructive everywhere else).  The principled
+remaining rung is context-windowed row re-cal (train mem rows on home
+episodes embedded in long contexts so p_home holds at depth) — queued, not
+run.
+
+**SHIP (2026-10-13) — measured, wired, DEFAULT OFF (honest):** the
+taught-token bonus at beta=3.0 (fixed, retrieval scope) passes the
+controlled bar (sacred t0 3/3 "Your cat is named Kepler."; multi-turn
+turn-4 Kepler on all 3 scaffolds, turn-8 on 2/3; baseline 1/6) and is
+wired in `chat_v05.py` / `chat_v06.py` behind `--mem-bonus 3.0` — but it
+is **not enabled by default**: on the LIVE wired probe transcript (real
+generated filler turns) the retrieval scope is too coarse — sibling mem
+rows go hot on unrelated turns and the per-step taught-token bias
+perturbs non-memory generation (hacking turn list-ifies; with
+`--mem-boost` the mem_words row turns the answer into "1. 2. 3. 4. ..." —
+a regression vs the "Midnight" baseline).  The default therefore stays
+bit-identical to the shipped tau=0.5 delivery; the fix is one flag away
+and needs a row-selective retrieval scope (bonus only for the row whose
+home matches the current query — e.g. question-anchored activation or
+the §8.5 addressing rung) before it can default on.  Single-turn Kepler
+is preserved in every config.  Residual cells and the failed stronger
+variants (beta>=4 fixed, lift-to-win, fire-once) are tabled above —
+context-windowed row re-cal is the queued principled closer for the
+tech@t8 H3 corner.
