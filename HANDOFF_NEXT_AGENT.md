@@ -77,6 +77,7 @@ is per-token exact: **deliver/token IS the serving plug-forward count**.
 | topm1 | 2.82 | 0.99 | 87.6% | 1.574 | mem_edit **+0.320** | +1.044 |
 | topm2 | 3.09 | 1.52 | 81.0% | 1.572 | mem_words +0.036 | +0.325 |
 | topm3 | 3.03 | 1.91 | 76.1% | 1.572 | mem_words +0.024 | +0.287 |
+| adaptive_tau0.5_m2 | 3.09 | 1.45 | 81.9% | 1.557 | mem_words +0.028 | +0.2577 |
 
 Home CE (masked -> ungated -> tau0.5; the v0.5.1 green six marked):
 code 0.924->0.392->0.388 (-.004), math 3.058->1.413->**1.400 (-.013)**,
