@@ -1383,6 +1383,7 @@ token at T=1 serving; ungated runs ALL 8 plugs every token = 8.0):
 | topm1 | 2.82 | 0.99 | 87.6% | 1.574 | mem_edit **+0.320** | +1.044 |
 | topm2 | 3.09 | 1.52 | 81.0% | 1.572 | mem_words +0.036 | +0.325 |
 | topm3 | 3.03 | 1.91 | 76.1% | 1.572 | mem_words +0.024 | +0.287 |
+| adaptive_tau0.5_m2 | 3.09 | 1.45 | 81.9% | 1.557 | mem_words +0.028 | +0.2577 |
 
 flood sum = sum over homes of (home CE - owner-only CE) = the presence cost
 of everything that is not the home plug. Home CE (masked -> per config,
@@ -1398,6 +1399,10 @@ delta vs ungated; green = the v0.5.1 winners):
 | k3_hack | 1.955 | 1.827 | 1.833 (+.005) | 1.831 (+.004) | 1.838 (+.010) | 1.837 (+.009) | 1.828 (+.001) | 1.827 (+.000) |
 | glm_cybersec | 1.898 | 1.934 | 1.931 (-.003) | 1.928 (-.006) | 1.932 (-.002) | 1.918 (-.016) | 1.931 (-.003) | 1.933 (-.001) |
 | mimo_writing | 2.712 | 2.752 | 2.748 (-.004) | 2.748 (-.004) | 2.748 (-.004) | 2.747 (-.005) | 2.749 (-.003) | 2.752 (+.000) |
+
+adaptive_tau0.5_m2 is the near-miss compute edge (81.9% cut at the same
+1.557 base tax) but the m=2 causal budget starves mem_words again
+(mem_pet + mem_edit take both slots on the words home) -> +0.028.
 
 **SWEET SPOT: thresh tau=0.5** — 77.3% active-plug compute cut (1.81 vs
 8.00 plug-forwards/token), every green plug within +/-0.006 nats of the
