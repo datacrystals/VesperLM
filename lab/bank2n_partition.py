@@ -777,7 +777,10 @@ def run_assemble(args, out: dict) -> None:
         if key in states:
             print(f"  [{tag_name}] (cached)", flush=True)
             return states[key]
-        g, h = gates_fn() if gates_fn else (None, None)
+        # gates_fn returns (gates, handles) or build_live/build_overlay's
+        # (gates, banks, handles)
+        res = gates_fn() if gates_fn else (None, None)
+        g, h = (res[0], res[2]) if len(res) == 3 else (res[0], res[1])
         rec = measure(g, h, mode, tag_name)
         if h is not None:
             teardown(h)
@@ -835,27 +838,34 @@ def run_assemble(args, out: dict) -> None:
         print(f"  xfire[{name}] " + " ".join(
             f"{k} {xfire[name][k]}" for k in names), flush=True)
     out["cross_fire"] = xfire
-
+    dump_json(out, args.out)
 
     # overlay λ fit (v0's additive contract on the same cores) — short joint
+    # (gfx906 flake: the multi-site λ backward has HIP-asserted before; the
+    # verdict falls back to overlay-full λ=1 so it always completes)
     print("== overlay λ fit (v0 additive contract) ==", flush=True)
     o_joint = []
     for i, name in enumerate(DOMAINS, start=1):
         o_joint += [(t, i) for t, _ in dom_batches[name]]
     o_joint += [(t, 0) for t, _ in base_eval]
-    o_gates, o_banks, o_handles = build_overlay(lam_params)
-    lam_fit = g0.fit_lams(model, blocks, fam,
-                          [lam_params[n] for n in names], o_handles,
-                          o_gates, o_joint, args.lam_steps, args.lam_lr,
-                          args.device)
-    out["overlay_lam_fit"] = lam_fit
-    out["overlay_lams"] = {n: round(float(lam_params[n].detach().clamp(min=0)),
-                                    4) for n in names}
-    print("overlay lams:", out["overlay_lams"], flush=True)
-    # re-measure overlay with fitted λ (same harness, additive)
-    states["overlay_fitted"] = measure(o_gates, o_handles, "additive",
-                                       "overlay-fitted")
-    teardown(o_handles)
+    try:
+        o_gates, o_banks, o_handles = build_overlay(lam_params)
+        lam_fit = g0.fit_lams(model, blocks, fam,
+                              [lam_params[n] for n in names], o_handles,
+                              o_gates, o_joint, args.lam_steps, args.lam_lr,
+                              args.device)
+        out["overlay_lam_fit"] = lam_fit
+        out["overlay_lams"] = {n: round(float(lam_params[n].detach()
+                                               .clamp(min=0)), 4)
+                               for n in names}
+        print("overlay lams:", out["overlay_lams"], flush=True)
+        states["overlay_fitted"] = measure(o_gates, o_handles, "additive",
+                                           "overlay-fitted")
+        teardown(o_handles)
+    except Exception as e:  # noqa: BLE001 — verdict must still land
+        out["overlay_lam_fit"] = {"error": repr(e)[:300]}
+        print(f"overlay λ fit failed ({e!r}) — verdict uses overlay-full",
+              flush=True)
     out["states"] = states
     dump_json(out, args.out)
 
