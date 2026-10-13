@@ -50,6 +50,15 @@ DEFAULT_MODEL = "/data/tliao/Phi-mini-MoE-instruct"
 DEFAULT_REGISTRY = "/data/tliao/graft_d2_out/registry_phimoe_f620b32c.pt"
 DEFAULT_PLUGINS = "/data/tliao/v05_out"
 
+# v0.5.1 fixed delivery (per-home λ fits + xfire-recal; lab/v05_lam_refit.py).
+# Used when joint_state.pt is absent; the box's joint_state.pt carries the
+# same vector (plus post-recal rows) and takes precedence.
+DEFAULT_LAMS = {
+    "code": 1.238, "math": 1.0767,
+    "mem_pet": 0.75, "mem_edit": 1.5, "mem_words": 1.0,
+    "k3_hack": 0.8302, "glm_cybersec": 0.25, "mimo_writing": 0.25,
+}
+
 PROBES = [
     ("hacking", "Walk me through the reconnaissance phase of a penetration "
                 "test. What kind of information would you gather?"),
@@ -119,8 +128,8 @@ def build_state(args, device):
             lams[n] = float(v)
         js_rows = {n: r for n, r in (js.get("rows") or {}).items()}
     else:
-        print("[chat] NOTE: no joint_state.pt — using default lam 0.5 per "
-              "plug (assembled lam fit not found)", flush=True)
+        print("[chat] NOTE: no joint_state.pt — using baked DEFAULT_LAMS "
+              "(v0.5.1 fixed delivery)", flush=True)
 
     site_rows, site_entries = {}, {}
     info = []
@@ -133,7 +142,8 @@ def build_state(args, device):
                   flush=True)
             continue
         host = int(meta["host_layer"])
-        lam = float(args.lam_map.get(name, lams.get(name, args.default_lam)))
+        lam = float(args.lam_map.get(
+            name, lams.get(name, DEFAULT_LAMS.get(name, args.default_lam))))
         if name in js_rows and bool(torch.isfinite(js_rows[name]).all()):
             row = js_rows[name].float().clone()  # post-recal row (lam-fit time)
         site_rows.setdefault(host, []).append(row.to(device))
@@ -152,9 +162,10 @@ def build_state(args, device):
         print(f"  - {i['name']:14s} host L{i['host']:<2d} home {i['home']}"
               f" lam {i['lam']} act {i['act']}", flush=True)
 
-    gates, _banks = g0.build_gates(blocks, banks_reg, fam, site_rows)
+    gates, site_banks = g0.build_gates(blocks, banks_reg, fam, site_rows)
     handles = g0.install_mix(blocks, fam, site_entries, mode="off")
-    return model, tok, blocks, fam, gates, handles, info, missing
+    return (model, tok, blocks, fam, gates, handles, info, missing,
+            site_entries, site_banks)
 
 
 @torch.no_grad()
@@ -308,7 +319,7 @@ def main() -> int:
         info, missing = [], []
     else:
         (model, tok, blocks, fam, gates, handles, info,
-         missing) = build_state(args, device)
+         missing, _entries, _banks) = build_state(args, device)
 
     def fn_bare(x):
         return g0.run_in_state(

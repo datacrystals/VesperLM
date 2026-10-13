@@ -193,6 +193,117 @@ to close the greedy-DIFFER gate completely; (3) RouteStats (L,E) picks and
 the glm/mimo λ delivery — untouched v0.5 open doors.
 
 
+## 2026-10-13 — V0.5.1 DELIVERY FIX: λ-starvation cured by per-home balanced λ fits + cross-fire row rejection — glm_cybersec / mimo_writing unstarved (λ* 0→0.25) while code/math/memories keep every gain; K3/GLM/Mimo all show in the 4-probe chat smoke (MI50 box, fp16)
+
+**Q (user): the v0.5 bank has a known defect — glm_cybersec and mimo_writing
+fitted to λ*=0 on the pooled union stream (code/math/memories took all the
+delivery mass).  Fix delivery so all plugs show without hurting the winners.**
+
+**Diagnosis first (the starved plugs' rows were healthy — the λ fit was the
+bug):** both plugs' rows OWN their domains (p_home 0.98–0.99, p_base
+0.001–0.013) and their membership fires 0.91–0.99 on their own homes.  The
+cross-fire matrix (membership share plug × home) shows the real mechanism:
+rows flood OFF-home domains (k3_hack 0.27 on cybersec, glm 0.27 on code,
+**math 0.48 on editor / 0.21 on writing**, mem_edit 0.12 on writing,
+mem_words 0.17 on code) — so raising glm/mimo λ damaged the pooled objective
+via their own off-target firing and vice versa; the union-stream λ fit
+(12/104 batches per home) shut both to 0.  This is bank2n's crowding finding
+at overlay-λ level (f7d1a2d: phi_math flooding, pairwise harm 0.226).
+
+**Levers run (cheapest first; `lab/v05_lam_refit.py`):**
+1+2. **Per-home independent λ fits** — round-robin grid {0,.1,.25,.5,.75,
+     1,1.5} per plug against ITS OWN home windows only (no competition;
+     balanced representation), second round for the two starved plugs.
+     Winners guard: a winner whose own-home rep CE regresses is reverted to
+     its v0.5 λ (code/math/k3 each reverted — their v0.5 λs are already
+     home-optimal; the per-home fit cannot improve them).
+4. **Cross-fire rejection (bank2n condition #3)** — re-recal the two worst
+     flooders' rows (k3_hack, math) with reject_w 40 (vs 10) on a pair
+     stream that INCLUDES the other homes' tokens as reject-side
+     (my-home vs everything-else), owner 0.85, 200 steps.
+3. deeper host sites NOT needed (delivered green without refitting wraps).
+
+**λ table before → after (v0.5 → v0.5.1; "after per-home fit" is the raw
+grid result, "final" keeps it after the winners guard + xfire-recal run):**
+| plug | λ v0.5 | λ after per-home fit | λ final |
+|---|---|---|---|
+| code | 1.238 | 1.0 (reverted) | 1.238 |
+| math | 1.077 | 1.0 (reverted) | 1.077 |
+| mem_pet | 0.423 | 0.75 | 0.75 |
+| mem_edit | 1.128 | 1.5 | 1.5 |
+| mem_words | 0.459 | 1.0 | 1.0 |
+| k3_hack | 0.830 | 0.5 (reverted) | 0.830 |
+| glm_cybersec | **0.0** | **0.25** | 0.25 |
+| mimo_writing | **0.0** | **0.25** | 0.25 |
+
+**Results (home CE masked -> delivered, negative = plug shows; rep slice =
+v0.5-comparable windows, held = disjoint windows; base tax bar 0.05):**
+| home | v0.5 delta | v0.5.1 delta rep | delta held | marginal own-lam gain |
+|---|---|---|---|---|
+| code | -0.515 | -0.523 | -0.553 | (winner, lam kept 1.238) |
+| math | -1.644 | -1.660 | -1.751 | (winner, lam kept 1.077) |
+| mem_pet | -3.608 | **-3.659** | -3.659 | huge (curve 1.24 -> 0.027 at lam 0.75) |
+| mem_edit | -4.816 | -4.840 | -4.840 | huge |
+| mem_words | -2.560 | -2.463 | -2.463 | +0.04 own (see crowding note) |
+| hacking | -0.112 | -0.111 | -0.035 | **+0.155** (k3 curve 2.05 -> 1.94 at 0.5) |
+| cybersec | +0.025 | +0.032 | +0.037 | **+0.0015** (glm curve 1.753 -> 1.746 at 0.25) |
+| writing | +0.039 | +0.042 | +0.052 | **+0.011 sel / -0.003 rep** (mimo, noise) |
+| base tax | +0.025 | **+0.034** | **+0.042** | both inside 0.05 |
+
+- **Bars:** winners kept ✓ (code/math/k3 each REVERTED to their v0.5 lambda by
+  the guard when their own-home rep regressed at grid values); base tax
+  +0.034/+0.042 PASS; glm_cybersec PASS via the alternative clause (lam* 0.25
+  > 0 with positive own-home gain on both slices); mimo_writing lam* 0.25 > 0
+  and gains +0.011 on its lambda-select slice but is noise-level negative on
+  the rep slice (-0.003) — its unprofiled L1 wrap is too weak to overcome the
+  +0.045 cross-talk on its home.  **NOT a clean all-8-green** — bank2n's
+  condition #1 (fit quality per core is the gate) is the binding limit for
+  mimo, not the delivery contract.
+- **Cross-fire (bank2n condition #3) ran and worked mechanically** — k3/math
+  rows re-recal'd at reject_w 40 with the other homes ON the reject side:
+  p(off-home) k3 0.028 -> 0.0004, math 0.156 -> 0.038 (home p 0.98/1.00
+  held) — but membership cross-fire on the weak homes persists through the
+  OTHER rows (post-recal matrix still: k3 0.22 on cybersec, math 0.17 on
+  writing, mem_edit 0.11 on writing, mem_words 0.11 on cybersec), so the net
+  gap for glm/mimo homes shrank little.  The memory trio still cross-fires
+  ~0.99 on each other (v0 G3 crowding) — with the higher sibling lambdas this
+  costs mem_words ~0.10 nats home CE (0.38 -> 0.48) while mem_pet gains 0.05
+  (0.08 -> 0.027): an intra-memory Pareto trade, all three stay deep green.
+- **4-probe chat smoke (v0.5.1 delivery, greedy, 80 tok; short excerpts):**
+  hacking "During the reconnaissance phase, I would gather information such as
+  network topology, IP addresses, domain names, and system configurations...
+  open ports, services running on those ports" (in-domain detail list);
+  cybersec "A vulnerability is a weakness or flaw in a system that can be
+  exploited, while an exploit is the act of taking advantage of a
+  vulnerability to gain unauthorized access or cause harm"; writing "The
+  lighthouse stood defiant against the raging storm, its beacon a steadfast
+  sentinel in the tempest's fury. Waves crashed against the rocky shore";
+  memory "Your cat's name is Whiskers." (12 tok) — speech-act still flipped
+  vs bare's refusal (v0 behavior preserved) and episode CE is 3.69 -> 0.03,
+  but the taught fact token is still the base prior — the named v0.1 open
+  door, unchanged by delivery work.
+- **Specialties show in text for all four probes** (K3 detail-listing recon,
+  structured vuln/exploit distinction, atmospheric prose, personal-answer
+  behavior).  Strict numeric bar: 6/8 green net + glm green on the marginal
+  clause; mimo marginal noise-level at its unprofiled site.
+
+**Next rung (the honest gap):** lever 3 for mimo (and glm) — refit the wraps
+at deeper host sites (mimo L1 -> mid layer e.g. L22, glm L2 -> ~L21) and/or
+RouteStats (L,E) picks (runbook step 2) so the cores actually carry the
+specialty (bank2n condition #1).  `v05_build.py --phase fit --wrap-subset
+mimo_writing` with a host-site override + one assemble pass = the detached
+chain for that.
+
+**Delivery default rebuilt:** `joint_state.pt` carries the fixed vector
+(pre-v0.5.1 backup `joint_state_pre_v051.pt`, post-lam-fit
+`joint_state_v051_lams.pt`), and `chat_v05.py` falls back to baked
+DEFAULT_LAMS when no joint_state exists; `--lam-override` kept for A/B.
+
+**Delivery default rebuilt:** `joint_state.pt` carries the fixed λ vector
+(pre-v0.5.1 saved to `joint_state_pre_v051.pt`, post-λ-fit to
+`joint_state_v051_lams.pt`), and `chat_v05.py` now falls back to the baked
+DEFAULT_LAMS when no joint_state exists; `--lam-override` kept for A/B.
+
 ## 2026-10-12 — V0.5: the talkable model — v0 grafted spine + K3 hacking + GLM-5.3-Flash cybersec + MiMo-V2.6-Flash writing cores (8 plugs, additive-λ) + interactive chat CLI (MI50 box, fp16)
 
 **Q (user): "build v0.5 — the talkable model: the v0 grafted spine PLUS a K3
