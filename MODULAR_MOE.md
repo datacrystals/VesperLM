@@ -1195,29 +1195,63 @@ plugged+recal.  gap = CE_state - CE_masked (paired per-batch SE).
 |---|---|---|---|---|---|---|---|
 | 11k  | 46.6 | 1.0000 | -0.9712 +- 0.0375 | +0.3825 +- 0.0261 | +0.3375 +- 0.0157 | 1.3536 | no |
 | 50k  | 10.2 | 0.3125 | -0.0153 +- 0.0030 | +0.0236 +- 0.0083 | +0.0068 +- 0.0013 | 0.0389 | no |
-| 200k | 2.6  | (chain) | — | — | — | — | — |
-| 500k | 2.0  | (chain) | — | — | — | — | — |
+| 200k | 2.6  | 0.1875 | -0.0028 +- 0.0005 | **+0.0003 +- 0.0005** | +0.0013 +- 0.0004 | 0.0031 | no |
+| 500k | 2.0  | 0.3125 | -0.0030 +- 0.0014 | +0.0010 +- 0.0011 | +0.0032 +- 0.0009 | 0.0040 | no |
 
-**The gap collapses with data.**  11k reproduces the door25 caveat exactly
-(fit 1.072/0.101 vs HELD 1.067/1.450 — a 46-epoch memorization read: train
-gap -0.97, held gap +0.38).  At 50k (10 ep) the memorization gap falls
-34.8x (1.354 -> 0.039): held gap +0.0236, unseen3 gap +0.0068.  UNSEEN3
-tracks HELDOUT in sign at both budgets (the gap is distributional, not a
-held-out artifact) but is consistently smaller.  Log-linear in N (2 points):
-b = -0.546 (HELD) / -0.503 (UNSEEN3) nats/decade, zero-crossing at
-~5.5e4 / ~5.2e4 tokens — i.e. the curve projects a FLIP just past 50k.
-Not yet flipped at 50k (HELD +0.024 is red, +2.8 SE).  Two side reads:
-lam* falls 1.0 -> 0.31 as data grows (the trained composition overshoots
-more honestly fitted — the door8 lam lesson); plugged (mass contract) is
-strictly worse than additive lam* at every budget (50k HELD +0.107 vs
-+0.024) — door6's additive>mass re-confirmed at second site + scale.
+**The gap collapses with data and SATURATES AT PARITY.**  11k reproduces
+the door25 caveat exactly (fit 1.072/0.101 vs HELD 1.067/1.450 — a
+46-epoch memorization read: fit gap -0.97, held gap +0.38, mem gap 1.35).
+50k (10 ep): mem gap 34.8x smaller (0.039).  **200k (2.6 ep): held gap
++0.0003 +- 0.0005 — statistically ZERO** (0.6 SE above zero, not below);
+mem gap 0.0031 (437x smaller than 11k).  500k (2.0 ep, 489 steps): no
+further gain — held +0.0010 +- 0.0011, mem 0.0040; the curve is flat
+200k->500k.  UNSEEN3 tracks HELDOUT in sign at every budget (the gap is
+distributional, not a held-out artifact) and is consistently smaller.
 
-Line status: 11k+50k complete; 200k/500k in the detached chain (the
-deliverable fit is 4-point).  Harness `lab/door10_calscale.py` (fork of the
-door25/door8 family; d0/d1 imported UNMODIFIED; synthetic 16/16) +
-`lab/door10_build_calscale.py` (pool 540k/198 docs, heldout 41k/28,
-unseen3 41k/25, md5-disjoint) + `lab/door10_chain2.sh` (claim-aware GPU
-grab; box `/data/tliao/graft_door10_out/`).
+**Fit of gap vs data (4 points): SATURATING, not log-linear.**  Hyperbolic
+gap = a + b/N fits best: a = -0.029, b = 4453 (HELD, r2 0.982; zero at
+1.51e5 tok) and a = -0.029, b = 3938 (UNSEEN3, r2 0.969; zero 1.36e5).
+Log-linear gap = a + b*log10(N) is worse (b = -0.220 nats/decade HELD,
+r2 0.725; zero 2.5e5) — the 2-point fit's -0.546/decade and its ~5.5e4
+zero-crossing were artifacts of the steep 11k->50k leg and are NOT
+confirmed by the full curve.  Measured read: the gap reaches ~0 at 200k
+and stays ~0 at 500k; the hyperbolic fit's slightly-green asymptote
+(a = -0.029) is fit-driven, not observed (200k/500k sit at +0.0003/+0.0010).
+
+**Bars: held-out flip to delivered<masked — NO at any size** (best cell
+200k HELD +0.0003 = parity, not green).  What the sweep DOES certify:
+**FEED >=200k code tokens per specialty kills the memorization harm**
+(held gap +0.38 -> +0.0003, mem gap 1.35 -> 0.003; unseen3 agrees) — the
+10-12k door25/door6/door7 budget is ~20x under and is exactly what made
+the wrap look like a memorizer.  But held-out skill (delivered < masked)
+is not bought by data alone at any measured scale: the donor core's
+out-of-sample CE contribution saturates at zero.  Production calibration
+estimate: **~2e5 tokens per specialty** (parity at 200k; 500k adds
+nothing; the 151k hyperbolic zero is inside this band).  Secondary reads:
+lam* falls 1.0 -> 0.19 as data grows (door8 lam lesson at scale);
+plugged (mass contract + recal) is strictly worse than additive lam* at
+every budget (200k HELD +0.0517 vs +0.0003) — door6's additive>mass
+re-confirmed across data scale.
+
+**Line status (complete):** all 4 arms `status ok` (box
+`door10_merged.json`, wall 1123/1152/1265/1801 s).  Harness
+`lab/door10_calscale.py` (fork of the door25/door8 family; d0/d1 imported
+UNMODIFIED; synthetic 16/16) + `lab/door10_build_calscale.py` (pool
+540k/198 docs, heldout 41k/28, unseen3 41k/25, md5-disjoint) +
+`lab/door10_chain2.sh` (claim-aware GPU grab; box
+`/data/tliao/graft_door10_out/`).
+
+### 10.6.1 Recipe certification from Door 10
+
+What the sweep certifies for the v2 recipe: **FEED >=200k calibration
+tokens per specialty — the "10-12k is enough" assumption is retired.**
+At that budget the wrap's held-out delivery is NEUTRAL (parity with the
+masked baseline on both unseen slices) with zero memorization signature,
+where the 11k budget shows +0.38 nats held-out harm and a 1.35-nat
+memorization gap.  What it does NOT certify: held-out delivered<masked
+(skill) — not reached at 11k/50k/200k/500k; data alone saturates at
+parity.  A held-out skill claim needs a second ingredient (more capable
+core / different delivery), not more calibration rows.
 
 Composition: models in the format swap experts natively (10.1); out-of-format
 donors are grabbed by wrap (10.2) or distilled (10.3). Registry economics
@@ -1232,8 +1266,10 @@ frozen as the standard. Do NOT improvise alternatives without a falsifier:
     1. GRAB    frozen donor expert core (any family) — never trained here
     2. WRAP    rank-64 adapters, width-norm init (x sqrt(64/d_canon)),
                wd 0, lr 3e-3, task-CE + out_pen 300, ~250 steps (~20 min)
-    3. FEED    50-200k specialty tokens (door10: gap 1.35 -> 0.039 at 50k;
-               zero-crossing ~52k; 10-12k budgets are 5-20x UNDER)
+    3. FEED    50-200k specialty tokens (door10 4-point: mem gap 1.35 -> 0.039
+               at 50k -> 0.003 at 200k where held gap = +0.0003 = parity;
+               10-12k budgets are ~20x UNDER and actively harmful held-out;
+               500k adds nothing — saturating, not log-linear)
     4. DELIVER additive lambda (fitted, grid incl. below 0.25) —
                softmax-mass stacking is strictly worse (door6/door10)
     5. ROUTE   registry row (256B) + mex recal owner_mass 0.85, reject_w 10
