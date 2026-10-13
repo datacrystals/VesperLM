@@ -683,6 +683,7 @@ def phase_harm(w, args, out, configs=None):
             print(f"[harm {cname} -> {n}]", row, flush=True)
         worst_off, worst_pair = 0.0, ("", "")
         worst_sib, sib_pair = 0.0, ("", "")
+        worst_ns, ns_pair = 0.0, ("", "")
         for n in names:
             for j, v in loo[n].items():
                 if j == n:
@@ -691,14 +692,20 @@ def phase_harm(w, args, out, configs=None):
                     continue
                 if v > worst_off:
                     worst_off, worst_pair = v, (j, n)
-                if HOME_OF[j].startswith("mem") and HOME_OF[n].startswith("mem") \
-                        and HOME_OF[j] != HOME_OF[n] and v > worst_sib:
+                sib = (j.startswith("mem") and n.startswith("mem")
+                       and HOME_OF[j] != HOME_OF[n])
+                # sibling family = the mem trio (plug names, not home names)
+                if sib and v > worst_sib:
                     worst_sib, sib_pair = v, (j, n)
+                if not sib and v > worst_ns:
+                    worst_ns, ns_pair = v, (j, n)
         out["harm"][cname] = {
             "full_ce": full, "loo": loo,
             "own_effect": {n: loo[n][n] for n in names},
             "worst_offhome": round(worst_off, 4),
             "worst_offhome_pair": list(worst_pair),
+            "worst_non_sibling": round(worst_ns, 4),
+            "worst_non_sibling_pair": list(ns_pair),
             "worst_mem_sibling": round(worst_sib, 4),
             "worst_mem_sibling_pair": list(sib_pair),
             "bar": BAR_HARM,
@@ -706,6 +713,7 @@ def phase_harm(w, args, out, configs=None):
         out.setdefault("phase", "harm")
         dump(out, args.out)
         print(f"[harm {cname}] worst off-home {worst_off:.4f} {worst_pair} "
+              f"| non-sib {worst_ns:.4f} {ns_pair} "
               f"| mem-sib {worst_sib:.4f} {sib_pair}", flush=True)
     out["phase"] = "harm_done"
     dump(out, args.out)

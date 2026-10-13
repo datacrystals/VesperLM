@@ -89,15 +89,51 @@ IMPROVES 1.572->1.557 (ungated tax +0.036 over masked 1.536 becomes +0.021).
 Full tables + cross-fire matrices in MODULAR_MOE §10.9 and box
 `/data/tliao/varact_out/varact.json`.
 
-**Ship-bar reading (bars: green home CE <= ungated, compute cut >= 30%,
-pairwise harm <= 0.02):** tau0.5 PASSES compute (77%) and is within the
-measured noise band on every green plug (strict letter: 3 plugs at
-+0.001..+0.006 — paired-SE repeat is the closing experiment); LOO harm
-matrix + probe smoke for the tau points are running in a detached follow-up
-(chain + follow-up are incremental/skip-done; base auto-LOO lands first).
-Flood-sum proxy shrinks 0.265->0.222 and off-home delivery shares collapse
-(k3-on-cybersec 0.051->0.026, glm-on-writing 0.024->0.003). Recommend
-**shipping tau0.5 as the default policy** once the LOO bar lands green.
+**LOO pairwise harm (all 7 configs measured; harm(j->h) = CE_h(all) -
+CE_h(j off)):** worst ALL pairs / worst NON-sibling pair —
+
+| config | worst all | pair | worst non-sib | pair |
+|---|---|---|---|---|
+| base | 0.2035 | mem_pet->mem_words | 0.0109 | code->glm_cybersec |
+| tau0.3 | 0.1953 | mem_pet->mem_words | 0.0102 | code->glm_cybersec |
+| **tau0.5** | **0.2021** | mem_pet->mem_words | **0.0091** | code->glm_cybersec |
+| tau0.7 | 0.1860 | mem_pet->mem_words | 0.0090 | code->glm_cybersec |
+| topm1 | 0.3171 | mem_pet->mem_edit | 0.1587 | mem_edit->math |
+| topm2 | 0.1899 | mem_pet->mem_words | 0.0101 | code->glm_cybersec |
+| adaptive_tau0.5_m2 | 0.1872 | mem_pet->mem_words | 0.0085 | code->glm_cybersec |
+
+Flooding-class (cross-family) harm is INSIDE the 0.02 bar at tau=0.5
+(0.0091 vs 0.0109 ungated). Sibling-class FAILS it: mem_pet->mem_words
++0.202 / mem_edit->mem_words +0.143 — identical in the ungated baseline
+(0.2035/0.138); gating neither causes nor fixes the pair. Full matrices in
+MODULAR_MOE 10.9 + box varact.json.
+
+**4-probe smoke (greedy, 40 tok, short excerpts — base/tau0.5/topm1/topm2
+ALL green):** tau0.5 hacking "During the reconnaissance phase, I would
+gather information such as publicly available data, network infrastructure
+details..." (in-domain, non-operational); cybersec "A vulnerability is a
+weakness or flaw in a system that can be exploited by an attacker. An
+exploit is the act of taking advantage of a vulnerability..." ; writing "The
+lighthouse stood defiant against the raging storm, its beacon a steadfast
+sentinel in the tempest's fury." ; memory **"Your cat is named Kepler."**
+— the taught fact token now surfaces in EVERY config incl. ungated (v0.5.1
+saw the base prior "Whiskers"); chat does not degrade under gating.
+
+**SHIP VERDICT (bars: green home CE <= ungated, compute cut >= 30%,
+pairwise harm <= 0.02):** compute **PASS** (77.3% >> 30%); green CE
+**PASS within noise** (worst +0.006, 4/8 strictly better; strict-letter
+closer = paired-SE repeat); pairwise harm **FAIL 0.202 > 0.02** (the
+pre-existing mem-sibling pair; flooding class passes at 0.0091). =>
+**tau=0.5 does NOT take the default flag under the stated bar** — it stays
+the recommended policy once the sibling pair closes (best point on every
+other axis: quality held, base tax improved 1.572->1.557, 77% compute).
+**What it takes (rung-2, leverage order):** (1) SIBLING ROW RECAL — rerun
+the v0.5.1 xfire-recal recipe on the mem trio (reject_w 40, siblings'
+episodes on the reject side): their mutual p~0.99 is a row-selectivity
+defect fixable today without any policy change; (2) family-margin gate in
+VarActPolicy.select (p_j >= tau AND p_j >= max-sibling-p + margin, ~10
+lines); (3) owner-first budget reservation (fixes top-m starvation);
+(4) non-causal p-ranked top-m (second pass over cached bank scores).
 
 **The interference answer (b is split):** phi_math-style LOW-P flooding
 SHRINKS decisively at tau=0.5 (off-home shares -> ~0.003-0.008). mem-words-
@@ -119,9 +155,13 @@ safe form); incremental JSON + skip-done made the retries cumulative (the
 old code's `base` measurement was kept); joint_state.pt never written
 (user chats on this assembly; user tmux sessions untouched). Evidence:
 box `/data/tliao/varact_out/{varact.json,varact.log,varact_chain.log}`;
-follow-up LOO+smoke `followup.sh` chains after the main run. Code/docs
+LOO + smoke landed in the chained follow-up (15-state varact.json:
+sweep 8 + harm 7 + smoke 4 + auto-picks; phase=smoke_done). Code/docs
 only: `lab/varact_gate.py`, `lab/varact_chain.sh`, MODULAR_MOE §10.9,
-FAILURES entry.
+FAILURES entry. NOT wired into chat_v05/chat_v06 (ship bar not met — see
+verdict; wiring point when it is: install_varact(handles, POLICY) after
+build_state, with a joint_state `varact` flag + --varact off|tau0.5|...
+override alongside --lam-override).
 
 ## 2026-10-13 — v0.6 THE IMPRESS-DEMO: the v0.5 graft stack on a stronger spine — Qwen1.5-MoE-A2.7B-Chat (14.3B total / **2.7B active** — the user's "2x active params so it doesn't loop") + registry/graft (parity **0.9989**) + K3 hacking / GLM-Flash cybersec / MiMo-Flash writing cores re-wrapped in host geometry (FEED 200k, balanced per-home λ) + 2 taught memories (pet_kepler / editor_helix) + `lab/chat_v06.py` (KV incremental decode reusing agent-49's `lab/kv_cache_v05.py` read-only) — graft-question PASS (coherent, **no loop**, greedy), bare 0.89 tok/s full-forward (MI50 box, fp16)
 

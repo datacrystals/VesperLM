@@ -1448,3 +1448,80 @@ layer); (3) paired-SE repeat of the tau0.5 home-CE deltas to convert
 "noise-level" into a numeric bar; (4) variable-k rung 2: letting m vary by
 token difficulty learned from the p_home distribution (this rung's
 adaptive mode is the hand-coded version).
+
+**LOO pairwise harm (final — `lab/varact_gate.py --phase harm`, 4 held-in
+rep windows, harm(j->h) = CE_h(all plugs) - CE_h(j off); + = j hurts h):**
+
+| config | worst all pairs | pair | worst non-sibling | pair |
+|---|---|---|---|---|
+| base (ungated) | 0.2035 | mem_pet->mem_words | 0.0109 | code->glm_cybersec |
+| tau0.3 | 0.1953 | mem_pet->mem_words | 0.0102 | code->glm_cybersec |
+| **tau0.5** | **0.2021** | mem_pet->mem_words | **0.0091** | code->glm_cybersec |
+| tau0.7 | 0.1860 | mem_pet->mem_words | 0.0090 | code->glm_cybersec |
+| topm1 | 0.3171 | mem_pet->mem_edit | 0.1587 | mem_edit->math |
+| topm2 | 0.1899 | mem_pet->mem_words | 0.0101 | code->glm_cybersec |
+| adaptive_tau0.5_m2 | 0.1872 | mem_pet->mem_words | 0.0085 | code->glm_cybersec |
+
+tau0.5 full matrix (rows = home h, cols = plug j; own column = own_effect):
+
+| home | code | math | mem_pet | mem_edit | mem_words | k3 | glm | mimo |
+|---|---|---|---|---|---|---|---|---|
+| code | -0.579 | +0.000 | +0.002 | +0.000 | +0.000 | +0.000 | -0.001 | +0.000 |
+| math | +0.000 | -1.902 | +0.000 | +0.001 | -0.000 | +0.000 | +0.000 | +0.000 |
+| mem_pet | +0.000 | +0.000 | -1.218 | +0.005 | +0.002 | +0.000 | +0.000 | +0.000 |
+| mem_edit | +0.000 | +0.000 | +0.009 | -0.333 | +0.004 | +0.000 | +0.000 | +0.000 |
+| mem_words | +0.000 | +0.000 | **+0.202** | **+0.143** | -0.038 | +0.000 | +0.000 | +0.000 |
+| k3_hack | +0.000 | +0.001 | +0.000 | +0.000 | +0.000 | -0.191 | +0.003 | +0.000 |
+| glm_cybersec | +0.009 | +0.000 | +0.000 | -0.000 | +0.001 | +0.001 | +0.000 | +0.000 |
+| mimo_writing | +0.000 | -0.001 | +0.000 | -0.000 | +0.000 | +0.000 | +0.000 | +0.002 |
+
+The harm bar splits cleanly by class. **Flooding-class (cross-family) harm
+is INSIDE the 0.02 bar at tau=0.5: 0.0091** (was 0.0109 ungated) — the
+bank2n-style off-home harm is what variable activation actually kills.
+**Sibling-class harm FAILS the strict bar: 0.202 (mem_pet->mem_words) +
+0.143 (mem_edit->mem_words)** — identical in the ungated baseline
+(0.2035/0.138): the mem trio rates each other's episodes as home (p~0.99),
+no p_home threshold can separate them, and gating neither causes nor fixes
+this pair. topm points are worse (0.317: causal budget displaces the harm
+onto other pairs, mem_edit->math 0.159).
+
+**4-probe smoke (greedy, 40 tok, short excerpts — all four configs green):**
+tau0.5: hacking "During the reconnaissance phase, I would gather information
+such as publicly available data, network infrastructure details..." (in-
+domain, non-operational); cybersec "A vulnerability is a weakness or flaw in
+a system that can be exploited by an attacker. An exploit is the act of
+taking advantage of a vulnerability..." (structured distinction); writing
+"The lighthouse stood defiant against the raging storm, its beacon a
+steadfast sentinel in the tempest's fury." ; memory **"Your cat is named
+Kepler."** (9 tok). Chat does not degrade under gating — and the memory
+probe now surfaces the TAUGHT fact token (Kepler, not the base prior
+"Whiskers" of the v0.5.1 entry) in every config including ungated, so the
+v0.1 fact-token door is behaviorally closed on these greedy probes.
+
+**FINAL VERDICT on the three ship bars (green home CE <= ungated, compute
+cut >= 30%, pairwise harm <= 0.02):**
+- compute: **PASS** (77.3% >> 30%)
+- green home CE: **PASS within the measured noise band** (worst +0.006;
+  4/8 strictly better; strict letter needs the paired-SE repeat)
+- pairwise harm: **FAIL at 0.202 > 0.02** — exclusively the pre-existing
+  mem-sibling pair (mem_pet->mem_words), unchanged from ungated (0.203).
+  Flooding-class harm passes at 0.0091.
+
+=> **tau=0.5 does NOT take the default flag under the stated bar.** It is
+the recommended policy for compute once the sibling pair is closed (it is
+otherwise the best point on every axis: quality held, tax improved, 77%
+plug-compute cut). What it takes (rung-2 levers, in order of leverage):
+1. **Sibling row recal (delivery-side, works TODAY):** re-run the v0.5.1
+   xfire-recal recipe on the mem trio rows (reject_w 40, siblings' episodes
+   ON the reject side) so each row rejects its siblings' episodes — the
+   trio's mutual p~0.99 is a row-selectivity defect, not a policy one.
+   Expected: sibling LOO collapses to the 0.00x band and the bar passes at
+   tau0.5 with no policy change.
+2. **Family-margin gate (inference, ~10 lines in VarActPolicy.select):**
+   g_j requires p_j >= tau AND p_j >= max(sibling-row p) + margin — kills
+   sibling double-delivery without touching cross-family routing.
+3. **Owner-first budget reservation** (fixes top-m's owner starvation: the
+   home plug's own layer reserves its slot before the bank budget is spent).
+4. **Non-causal p-ranked top-m** (second policy pass over cached bank
+   scores) — the true score-ranked variable-k.
+
