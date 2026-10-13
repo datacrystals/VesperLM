@@ -41,6 +41,110 @@ data first.
 
 ---
 
+## 2026-10-13 — v0.6 THE IMPRESS-DEMO: the v0.5 graft stack on a stronger spine — Qwen1.5-MoE-A2.7B-Chat (14.3B total / **2.7B active** — the user's "2x active params so it doesn't loop") + registry/graft (parity **0.9989**) + K3 hacking / GLM-Flash cybersec / MiMo-Flash writing cores re-wrapped in host geometry (FEED 200k, balanced per-home λ) + 2 taught memories (pet_kepler / editor_helix) + `lab/chat_v06.py` (KV incremental decode reusing agent-49's `lab/kv_cache_v05.py` read-only) — graft-question PASS (coherent, **no loop**, greedy), bare 0.89 tok/s full-forward (MI50 box, fp16)
+
+**Q (user, verbatim): "2x active params so it doesn't loop... minimum good
+enough to impress"** — same graft stack as v0.5, stronger chat spine so the
+demo holds up in front of people. Do NOT touch the v0.5 line (λ-fix +
+KV-cache lanes live in parallel; coordinated by leaving `chat_v05.py` /
+`chat_v05_fast.py` / `kv_cache_v05.py` completely alone).
+
+**Spine choice: `Qwen/Qwen1.5-MoE-A2.7B-Chat`** (Apache-2.0, 14.3B total /
+2.7B active, qwen2_moe 24L hidden 2048, 60 experts top-4 + shared expert,
+ChatML-ish template) — the first candidate that fits the brief: ≥2.7B
+active, one MI50 at fp16 (26.6GB weights), chat-tuned. Qwen2-57B-class and
+the box's GLM/MiMo serving models are too big / user's vLLM — not touched.
+Downloaded to `/data/tliao/v06_models/Qwen1.5-MoE-A2.7B-Chat` (27G).
+
+**Port = D2's lesson, zero shared-code edits.** qwen2_moe duck-types as the
+OLMOE family through the whole unmodified d0/d1/d2/d25/d6/g0 stack:
+`find_moe_blocks` sees `.gate`+`.experts`; `Qwen2MoeTopKRouter.forward`
+returns `(router_logits, router_scores, router_indices)` = GraftGateD2's
+`(scores, weights, idx)` contract; `Qwen2MoeExperts.forward(h, top_k_index,
+top_k_weights)` matches MixMerge's; the gfx906 experts shim's
+`gate_up_proj`/`down_proj` duck-type patches all 24 banks; `family_for(OLMOE)`
+reads `.top_k`/`.norm_topk_prob` which the router has (4 / False). FamilySpec
+is the only variance. `lab/v06_build.py` is a v05_build fork; d0/d1/d2/d25/d6/g0
+imported unmodified.
+
+**Registry + parity gate (FIRST bar): PASS — logit cos 0.9989** (min 0.9553
+over tokens, ce_delta +0.002) vs the ≥0.95 gate. `init=exact` passports,
+recal 150 steps. Registry `/data/tliao/v06_out/registry_qwen2moe.pt`.
+Caveat: registry/parity MUST run small streams on this host (seq 128, 32+8
+batches, max-cal-pairs 512) — 26.6GB weights + vocab-151,936 logits OOM at
+v0.5's seq 512 / 146 val batches (two OOMs before the shrink landed).
+
+**Memory: gfx906 backward holes are SPINE-SPECIFIC.** Solo shape grid on the
+Qwen spine (CE fwd+bwd through a wrap, GPU 2, claim-locked): B*T ∈
+{128,192,256} OK, {320,384,512} FAIL `hipErrorInvalidDeviceFunction` —
+v0.5's HOLEY_BT {256,768,1024,4096} does NOT transfer (256 holey on Phi,
+safe on Qwen). v0.6 trains bs1×256 with steps auto-raised to keep the door10
+FEED budget: **782 steps × 256 = 200,192 tok-slots** per specialty core
+(≥200k certified; v0.5 was 500×512=256k at the old shape). Every new spine
+needs its own shape grid before the first fit — recorded in MODULAR_MOE §10.8.
+
+**Wraps (§10.7 recipe unchanged):** 3 specialty cores — k3_hack (K3 L12e895
+mxfp4 33.0M, situ act, host L3), glm_cybersec (GLM-5.3-Flash L3e0 int4
+25.2M, host L2), mimo_writing (MiMo-V2.6-Flash L1e0 int4 25.2M, host L0) —
+DONORS reused from `/data/tliao/v05_cores/*_core.pt` (core_bank), re-wrapped
+in host geometry d_model=2048 (WrappedForeignExpert d_canon=64). FEED from
+`Dataset/data/specialties/{hacking,cybersec,writing}/corpus.txt`
+(209k/215k/199k tokens with the Qwen tokenizer). 2 taught memories —
+mem_pet (pet_kepler) + mem_edit (editor_helix) — §8 shaped-episode recipe
+(`g0.build_episodes`), host-native expert cores (v0 recipe), sites L8e13 /
+L16e41. Delivery = additive λ with the **balanced per-home λ-fit** (the v0.5
+starvation lesson, v05_lam_refit / 92abbd7): `fit_lams_balanced` in
+v06_build fits each plug's λ ONLY on its own home windows (grid
+{0,.1,.25,.5,.75,1,1.5}), then a base-tax guard shrinks the least-efficient
+plug until base tax ≤ 0.05. All λ measurements are no-grad CE reads (also
+avoids the gfx906 λ-backward hole bank2n hit).
+
+**Graft-question (impress test a) — PASS, no loop, greedy.** Bare spine
+(120 tok cap): "As an AI language model, I don't have feelings or emotions…
+grafting multiple models together is a technique used in machine learning to
+combine the predictions of multiple models…" — coherent, on-topic,
+repetition detector (8/6/4-gram) clean, **0.89 tok/s** (134.7s / 120 tok,
+full-forward decode — the v0.5 path). The stronger spine already answers the
+graft question sensibly without looping; the grafted assembly runs the same
+test via `chat_v06.py --impress` when the fits land.
+
+**Chat CLI `lab/chat_v06.py`** — chat_v05 conventions + `--bare` +
+`--impress` (graft question + 4-probe smoke with SHORT excerpts + tok/s) +
+`/graftq` `/toks` in-chat. KV incremental decode: **reuses agent-49's
+`lab/kv_cache_v05.py` (KVDecoder) read-only** — no duplication; auto-fallback
+to g0.gen_reply full-forward if the module is missing (it landed mid-build as
+`chat_v05_fast.py`'s dependency; wire = `KVDecoder(model, tok, device, blocks,
+fam, gates, handles)` + `dec.generate(messages, n, "bare"|"grafted")`).
+User command:
+`ssh tliao@100.64.0.7 'cd /data/tliao/vesper_sft/VesperLM && /data/tliao/vesper_sft/venv/bin/python lab/chat_v06.py'`
+(`--bare` for the un-grafted spine, `--probe` for the smoke, `--impress` for
+the full demo).
+
+**Ops:** door10 claim-lock protocol (`/data/hackathon/.tmp/mr_gpu_claims`,
+flock-pick + 10-min TTL refresh) — co-tenant races OOM'd 3 jobs mid-load
+(incl. a two-jobs-one-GPU self-collision and a registry OOM when a co-tenant
+landed during parity); every lane is OOM-retry (up to 6 attempts for
+registry, 90 waits for fits). Detached `setsid` chains (PID 4036436 +
+lane subshells), incremental JSON (`v06_out/*.json`), no pgrep gates.
+Also: a bash deadlock (`ref=$(refresh_claim …)` — backgrounded claim-refresher
+inherits the command-substitution stdout pipe and the shell waits for pipe
+close; fixed with `>/dev/null 2>&1` on the refresher).
+
+**Status @ cap:** registry+parity DONE (PASS); k3_hack fit training on GPU 7
+(782 steps, FEED 200,192); glm_cybersec / mimo_writing / memories lanes
+queued behind the claim protocol (will start as GPUs free); assemble
+(balanced λ) + `chat_v06 --impress` chained behind the fits in
+`lab/v06_chain.sh` (detached, continues after this report). Box artifacts:
+`/data/tliao/v06_out/` (registry_done.json, registry_qwen2moe.pt,
+fit_*.json/log, chain logs) + `/data/tliao/v06_models/…`.
+
+**Open rungs:** grafted-side impress numbers (fits → assemble → impress in
+the detached chain); RouteStats (L,E) picks for the 3 donor cores (still
+extraction-test slots); the memory fact-token door (v0.1 open, shared with
+v0.5).
+
+---
+
 ## 2026-10-13 — v0.2 "MAKE CHAT FAST": incremental decode with a KV cache for the v0.5 talkable model — `lab/chat_v05_fast.py` (sibling of `chat_v05.py`, which was NOT touched) — the correctness proof (parallel full-forward == one-token-at-a-time loop; bare-spine BIT-IDENTICAL under `--attn eager`, max abs 0.0) + GPU fixed top-k-gather expert merge + cross-turn prefix reuse | measured 3.9–6.3× over the old path at 22–491-token contexts (2.2→8.7 tok/s decode; KV constant ~8.5 tok/s while the old path degrades with context) | MI50/gfx906 M=1 GEMM floor (~110 GB/s effective) caps single-stream decode at ~9 tok/s: the 50–100 tok/s class is NOT reachable on this box without a custom GEMV kernel (hipblas GEMV is 3× slower AND crashes on fp32) — profile + negative results below (MI50 box, fp16)
 
 **Q (user's spec, verbatim intent): "make chat fast" — decode one token at a
