@@ -313,8 +313,17 @@ def run_fit(args) -> dict:
         row_idx = bank.num_experts - 1
         with torch.no_grad():
             if home_h.shape[0] > 0:
-                bank.P.data[row_idx] = (home_h.mean(dim=0)
-                                        * math.sqrt(bank.d_r))
+                # Row-scale guard (v0.6 lesson): the v0 prototype
+                # (mean_h * sqrt(d_r)) saturates softmax on the Qwen spine
+                # (p=1.0 home AND base -> zero recal gradient). Scale the
+                # prototype to the layer's mean stock-row norm instead.
+                proto = home_h.mean(dim=0)
+                stock_norm = float(
+                    bank.P.data[:row_idx].float().norm(dim=1).mean())
+                pnorm = float(proto.float().norm())
+                if pnorm > 0 and stock_norm > 0:
+                    proto = proto * (stock_norm / pnorm)
+                bank.P.data[row_idx] = proto
         rep = d6.train_rows_one(bank, pairs[host_i], row_idx, args.row_steps,
                                 args.row_lr, args.device,
                                 reject_w=args.reject_w, mass_w=args.mass_w,
@@ -413,6 +422,17 @@ def run_assemble(args) -> dict:
             raise RuntimeError(f"non-finite plugin {path}")
         if int(meta["host_layer"]) != layer:
             raise RuntimeError(f"[{name}] host layer mismatch")
+        # Row-scale guard (v0.6 lesson): the fit-phase prototype init
+        # (mean_h * sqrt(d_r)) lands far larger than the stock rows on the
+        # Qwen spine (hidden norms ~2x Phi's), so softmax saturates at
+        # p=1.0 on home AND base — zero gradient, reject/mass losses stuck
+        # at 10.045 (see fit_*.json row_recal first==last). Rescale each
+        # graft row to the layer's mean stock-row norm before the closing
+        # recal so train_rows_one gets real gradient.
+        stock_norm = float(banks_reg[layer].P.data.float().norm(dim=1).mean())
+        row_norm = float(row.float().norm())
+        if row_norm > 0 and stock_norm > 0:
+            row = row * (stock_norm / row_norm)
         wraps[name], rows[name], metas[name] = wrap, row, meta
         print(f"[{name}] plugin host L{layer} kind {kind} home {home} "
               f"act {spec.get('act', 'swiglu')}", flush=True)
