@@ -2893,3 +2893,65 @@ containing "door5_provenance.py" leaves a creating shell whose own cmdline
 contains that string forever, so the wait-loop never opens (door5 deciding
 runs sat idle ~2h behind this). Fix: match on PID files, or `pgrep -x`/exact
 argv, or just chain commands with && .**
+
+## 2026-10-12 — GRAB-KIT PREP for the flagship build (CPU/disk rung, all pushed)
+
+Flagship under prep: **K3 spine + GLM cybersec cores + K3 hacking cores + MiMo
+writing cores + style layer + memory stack** ("red-team copilot that writes
+well and remembers").  This was the CPU/disk/prep rung so the build starts the
+moment bank2n's quality half clears — no GPU jobs.
+
+1. **Specialty corpora** (`Dataset/12_specialty_corpora.py`, bins local-only
+   under `Dataset/data/specialties/`, tracked manifest
+   `Dataset/specialties_manifest.md`): cybersec / hacking / writing, ~200k
+   clean tokens each (K3 tokenizer count; door10 FEED budget 50-200k).
+   License-clean only (PD/permissive): NVD + ATT&CK (Apache-2.0) + CAPEC/CWE
+   (MITRE, attribution) + Metasploit (BSD-3) + NIST SP 800-115 (PD) +
+   Project Gutenberg (PD).  Security SE (CC BY-SA) and HackTricks
+   (CC BY-NC-SA) deliberately EXCLUDED (not PD/permissive).  Dedup
+   (md5 + 5-gram near-dup) + length/language/template-junk filters;
+   per-doc lineage in corpus.jsonl.  Round-robin source draw + 45% per-source
+   cap so no book/source starves the rest (first pass: writing stopped after
+   two classics; cybersec's CWE CSV parser was on the wrong columns and NVD
+   silently ended on rate-limit payloads — both fixed).
+2. **Big-MoE extraction runbook** (`lab/grabkit_extract_runbook.md`) +
+   **`lab/grabkit_extract_core.py`** (pure-stdlib single-shard expert
+   extractor — header parse + seek, never loads model/shard; writes
+   core.safetensors + vesper-core/1 provenance).  Verified "load one expert,
+   not the model": **Phi-mini-MoE L13E8 on the MI50 box bare python3 (no
+   torch/safetensors): 23.6MB read of a 5.0GB shard (0.47%), 58ms, 63MB
+   RSS**; output round-trips through the safetensors lib with identical
+   sha256.  Also PASS: OLMoE L0E0 (lib `--verify` byte-identical), **K3
+   L12E895 fp8-packed out of a 17GB shard (17.5MB, 0.10%, 60MB RSS)**,
+   GLM-5.3-Flash L3E0 and MiMo-V2.6-Flash L1E0 on the box (12 tensors each,
+   packed+scale+shape+zero_point verbatim).  K3 has 896 experts × 92 layers
+   (~77k cores, ~0.1s each — embarrassingly parallel CPU).  Key patterns for
+   all five donor families are tabled in the runbook (K3:
+   `language_model.model.layers.L.block_sparse_moe.experts.E.w{1,2,3}.weight_{packed,scale}`;
+   GLM/MiMo: compressed-tensors INT4 tuples; do NOT load K3's 497k-key
+   index.json — header-scan shards instead).
+3. **Wrap-fitting memory math** (runbook §4): activation-only backward +
+   adapter-only AdamW (~30-50MB) is free; the binding term is the frozen
+   spine.  GLM-5.3 (~753B) int8 = 753GB fits 8×MI300X (1536GB); MiMo-Flash
+   310GB and GLM-Flash ~360GB fit easily; **K3 2.8T does NOT** (int8 2.8TB,
+   packed-4bit 1.56TB still over) → K3-A: 2 nodes × 8 MI300X (recommended),
+   K3-B: layer-stream from host RAM (~1-2h/core), K3-C cached-features is off
+   the frozen recipe.  Per-core wall @8×MI300X ≈ 5-15 min resident (6·N·T
+   FLOPs/step, N_active≈115B for K3, 250 steps) — wall is not the blocker.
+4. **License survey** (runbook §5): K3 = Kimi K3 License (MIT-like; MaaS
+   >$20M rev needs Moonshot agreement; >100M MAU or >$20M/mo products must
+   display "Kimi K3"; internal use exempt).  **GLM-5.3 FLAGSHIP is NOT MIT —
+   custom GLM-5.3 License** ([HF LICENSE](https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE)):
+   MIT-like + $10B-revenue MaaS security-review gate that explicitly covers
+   derivative works.  **GLM-5.3-Flash is MIT** (split-license family; our box
+   copy's LICENSE is MIT) — prefer Flash cores for the cybersec slots.
+   MiMo-V2.6 = MIT.  Nothing blocks local use; republishing a combined model
+   keeps notices + K3 name-display at scale + (only if flagship GLM cores are
+   used) Z.AI's MaaS gate.
+
+Rungs next: (1) RouteStats profiles on 5k-tok specialty samples → pick (L,E)
+per donor (small GPU run); (2) extract the 6 flagship cores into
+`/data/tliao/core_bank/<donor>/L{l}E{e}/`; (3) wrap-fit per §10.7 (250 steps,
+FEED 50-200k from the new corpora) on 8×MI300X / 2 nodes for the K3 host;
+(4) additive lam* + registry rows + mex recal.  Artifacts: extraction tests in
+runbook §1 table; corpora counts in Dataset/specialties_manifest.md.
