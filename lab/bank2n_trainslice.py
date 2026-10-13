@@ -31,6 +31,15 @@ import grafted_spine_v0 as g0  # noqa: E402
 import bank2n_partition as b2  # noqa: E402
 
 
+def teardown(handles):
+    """Restore stock expert forwards (bank2n_partition.teardown is nested in
+    run_assemble; this is the same logic at module scope)."""
+    for blk, sf in handles:
+        blk.experts.forward = sf
+        if hasattr(blk, "_plugin_merge"):
+            delattr(blk, "_plugin_merge")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="/data/tliao/Phi-mini-MoE-instruct")
@@ -111,13 +120,16 @@ def main() -> int:
 
     def measure(gates, handles, mode, tag):
         rec = {}
-        for name in b2.DOMAINS:
-            rec[name] = round(b2.ce_batches(model, blocks, dom_train[name],
-                                            args.device, gates, handles, fam,
-                                            mode, set(names)), 4)
+        with torch.no_grad():   # no autograd graphs (the OOM-killer source)
+            for name in b2.DOMAINS:
+                rec[name] = round(b2.ce_batches(model, blocks, dom_train[name],
+                                                args.device, gates, handles,
+                                                fam, mode, set(names)), 4)
         print(f"  [{tag}] " + " ".join(f"{k} {v}" for k, v in rec.items()),
               flush=True)
         return rec
+
+    d6.freeze_wraps(list(wraps.values()))
 
     m_rows = {i: [rows[n] for n in tags_at[i]] for i in site_rows}
     m_gates, _ = g0.build_gates(blocks, banks_reg, fam, m_rows)
@@ -128,14 +140,14 @@ def main() -> int:
             for n in tags_at[i]] for i in site_rows}, mode="off")
     res = {}
     res["masked_train"] = measure(m_gates, m_handles, "additive", "masked-train")
-    b2.teardown(m_handles)
+    teardown(m_handles)
     g_p, _b_p, h_p = build_live(set(names))
     res["partition_train"] = measure(g_p, h_p, "dispatch", "partition-train")
-    b2.teardown(h_p)
+    teardown(h_p)
     for n in names:
         g_s, _b_s, h_s = build_live({n})
         res[f"solo_train_{n}"] = measure(g_s, h_s, "dispatch", f"solo-train {n}")
-        b2.teardown(h_s)
+        teardown(h_s)
     # in-sample quality table (routed vs masked on train windows)
     table = {}
     for n in names:
