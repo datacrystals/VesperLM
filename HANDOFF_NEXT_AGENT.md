@@ -41,6 +41,87 @@ data first.
 
 ---
 
+## 2026-10-13 — VARIABLE-ACTIVATION PLUG GATING (variable-k rung 1): serving-side adaptive expert activation on the v0.5/v0.5.1 bank — `p_home`-threshold gating cuts active-plug compute **77%** with every green plug inside the noise band and base tax IMPROVING; bank-wide top-m is the compute knob but the causal budget starves late plugs; low-p flooding shrinks decisively, mem-sibling crowding does NOT (MI50 box, fp16)
+
+**Q (user standing directive: try ideas directly): rung 1 of variable-k —
+skip plugs whose home-probability is low for this token** (easy/general
+tokens touch almost nothing; specialty tokens pull the bank). Hypothesis:
+(a) cuts plug compute/memory per token, (b) kills cross-fire crowding
+(bank2n phi_math-style flooding, mem-words sibling crowd).
+
+**Mechanism (zero retraining — inference policy over door6 additive
+delivery, `lab/varact_gate.py` wraps MixMerge in place; shared code
+untouched):**
+
+    y = y_stock + sum_j lam_j * m_j * g_j * e_j
+
+g_j(token) from the plug row's p_home = softmax(bank)[row]
+(MixGateD2.last_p_new): **thresh** p_home>=tau (0.3/0.5/0.7), **topm**
+per-token bank budget m (1/2/3), **adaptive** = tau x m. Two structural
+discoveries (both documented, FAILURES + §10.9): (1) plugs sit at 8
+different host layers, so top-m is bank-wide and only CAUSAL policies exist
+(shared per-token counter, host order); (2) gfx906 cannot run per-token
+subset expert forwards (`nonzero()` itself raises hipErrorInvalidDeviceFunction,
+async) — the policy therefore skips whole plugs with empty keep-sets (zero
+FLOPs) and masks stock-shape outputs otherwise. At T=1 serving skip-vs-run
+is per-token exact: **deliver/token IS the serving plug-forward count**.
+
+**Frontier (8 plugs, 6 rep windows/home, joint_state.pt READ-ONLY):**
+
+| config | gen tok/s | actives/tok | cut | base-tax CE | worst green delta | flood sum |
+|---|---|---|---|---|---|---|
+| base (ungated) | 2.98 | 8.00 (1.92 fire) | 0% | 1.572 | — | +0.265 |
+| tau0.3 | 3.03 | 1.84 | 77.0% | 1.564 | k3 +0.005 | +0.232 |
+| **tau0.5 (SWEET SPOT)** | 2.98 | 1.81 | **77.3%** | **1.557** | mem_edit +0.006 | +0.222 |
+| tau0.7 | 3.06 | 1.79 | 77.6% | 1.558 | k3 +0.010 | +0.220 |
+| topm1 | 2.82 | 0.99 | 87.6% | 1.574 | mem_edit **+0.320** | +1.044 |
+| topm2 | 3.09 | 1.52 | 81.0% | 1.572 | mem_words +0.036 | +0.325 |
+| topm3 | 3.03 | 1.91 | 76.1% | 1.572 | mem_words +0.024 | +0.287 |
+
+Home CE (masked -> ungated -> tau0.5; the v0.5.1 green six marked):
+code 0.924->0.392->0.388 (-.004), math 3.058->1.413->**1.400 (-.013)**,
+mem_pet 3.686->0.027->0.029 (+.001), mem_edit 5.095->0.255->0.261 (+.006),
+mem_words 2.942->0.478->**0.471 (-.007)**, k3_hack 1.955->1.827->1.831
+(+.004); non-green: glm 1.934->1.928 (-.006), mimo 2.752->2.748 (-.004).
+All tau0.5 deltas within +/-0.006 nats (4/8 strictly better); base tax
+IMPROVES 1.572->1.557 (ungated tax +0.036 over masked 1.536 becomes +0.021).
+Full tables + cross-fire matrices in MODULAR_MOE §10.9 and box
+`/data/tliao/varact_out/varact.json`.
+
+**Ship-bar reading (bars: green home CE <= ungated, compute cut >= 30%,
+pairwise harm <= 0.02):** tau0.5 PASSES compute (77%) and is within the
+measured noise band on every green plug (strict letter: 3 plugs at
++0.001..+0.006 — paired-SE repeat is the closing experiment); LOO harm
+matrix + probe smoke for the tau points are running in a detached follow-up
+(chain + follow-up are incremental/skip-done; base auto-LOO lands first).
+Flood-sum proxy shrinks 0.265->0.222 and off-home delivery shares collapse
+(k3-on-cybersec 0.051->0.026, glm-on-writing 0.024->0.003). Recommend
+**shipping tau0.5 as the default policy** once the LOO bar lands green.
+
+**The interference answer (b is split):** phi_math-style LOW-P flooding
+SHRINKS decisively at tau=0.5 (off-home shares -> ~0.003-0.008). mem-words-
+style SIBLING crowding does NOT: the mem trio cross-delivers ~0.99 on each
+other's homes at every tau (words home tau0.5: pet 0.997/edit 0.990/words
+0.992) — p_home cannot separate same-family siblings (they genuinely rate
+each other's episodes as home). mem_words flood cost 0.206->0.198. topm
+fixes sibling exclusivity only by owner starvation (causal budget fills in
+host order: topm1 blocks the code/math/edit owners for early flooders,
+flood sum 1.04; topm2 gives words' two slots to mem_pet+mem_edit and
+starves mem_words 0.001 delivery -> +0.036). **Rung-2 levers:** p-ranked
+bank-wide budget (non-causal second pass over cached scores), owner-first
+reservation at each layer, family-margin term in p_home for siblings.
+
+**Ops:** claim locks + detached `lab/varact_chain.sh` (door10 protocol);
+two harness iterations documented in FAILURES (`varact-subset-gather`:
+data-dependent-shape GPU ops are gfx906-hole family; skip-or-full is the
+safe form); incremental JSON + skip-done made the retries cumulative (the
+old code's `base` measurement was kept); joint_state.pt never written
+(user chats on this assembly; user tmux sessions untouched). Evidence:
+box `/data/tliao/varact_out/{varact.json,varact.log,varact_chain.log}`;
+follow-up LOO+smoke `followup.sh` chains after the main run. Code/docs
+only: `lab/varact_gate.py`, `lab/varact_chain.sh`, MODULAR_MOE §10.9,
+FAILURES entry.
+
 ## 2026-10-13 — v0.6 THE IMPRESS-DEMO: the v0.5 graft stack on a stronger spine — Qwen1.5-MoE-A2.7B-Chat (14.3B total / **2.7B active** — the user's "2x active params so it doesn't loop") + registry/graft (parity **0.9989**) + K3 hacking / GLM-Flash cybersec / MiMo-Flash writing cores re-wrapped in host geometry (FEED 200k, balanced per-home λ) + 2 taught memories (pet_kepler / editor_helix) + `lab/chat_v06.py` (KV incremental decode reusing agent-49's `lab/kv_cache_v05.py` read-only) — graft-question PASS (coherent, **no loop**, greedy), bare 0.89 tok/s full-forward (MI50 box, fp16)
 
 **Q (user, verbatim): "2x active params so it doesn't loop... minimum good

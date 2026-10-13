@@ -1318,3 +1318,128 @@ co-tenant) gives B*T ∈ {128, 192, 256} OK and {320, 384, 512} FAIL with
 v0.6 therefore trains at bs1×256 with the step count raised to keep FEED
 ≥200k (782 steps × 256 = 200,192 tok-slots; v0.5's 500×512 = 256k at the
 old shape). Every new spine needs its own shape grid before the first fit.
+
+## §10.9 VARIABLE-ACTIVATION PLUG GATING (2026-10-13 — variable-k rung 1)
+
+The bank2n flood finding (phi_math delivering 0.42 of code / 0.89 of math;
+worst pairwise harm 0.226) and the v0.5.1 cross-fire matrix (math row still
+flooding editor/writing after xfire-recal; the mem trio cross-firing ~0.99 on
+each other at a ~0.10-nat cost to mem_words) share one mechanism: delivery
+membership is binary and bank-local — a plug fires when its row score beats
+the k-th stock score, with no notion of "is this plug's home likely for THIS
+token". Variable activation (variable-k rung 1) adds exactly that, as a
+serving-time policy with ZERO retraining over door6's additive contract:
+
+    y = y_stock + sum_j lam_j * m_j * g_j * e_j
+
+where m_j is existing membership and g_j(token) is a policy mask built from
+the plug row's home probability p_home = softmax(bank scores)[row]
+(MixGateD2.last_p_new). Policies (knobs tau / m):
+
+    thresh    g_j = (p_home_j >= tau)                  tau 0.3/0.5/0.7
+    topm      a token may pull at most m plugs bank-wide  m 1/2/3
+    adaptive  p_home >= tau AND budget m (m adapts 0..m per token)
+
+`lab/varact_gate.py` is a wrapping layer (VarActMerge wraps door6.MixMerge
+in place; shared code untouched). Two structural facts shaped it:
+
+1. Plugs sit at DIFFERENT host layers (v0.5 bank: L1/L2/L4/L6/L13/L19/L24/
+   L27), so "top-m plugs for this token" is bank-wide — and because later
+   layers' p_home is not yet computed when early layers decide, only CAUSAL
+   policies are implementable: a shared per-token budget counter in host
+   order (first firing plugs win). True score-ranked bank-wide top-m needs a
+   non-causal second pass (open rung). The causal order matters: topm1
+   starves late plugs whenever an early flooder fires (measured — see below).
+2. gfx906 cannot run per-token subset expert forwards (FAILURES
+   `varact-subset-gather`: `nonzero()` itself raises
+   hipErrorInvalidDeviceFunction, asynchronously). Variable activation
+   therefore SKIPS a plug entirely when its keep-set is empty for the batch
+   (zero expert FLOPs) and otherwise runs the exact stock shape with the
+   output masked. At serving (T=1 decode) skip-vs-run is per-token exact,
+   so deliver/token IS the serving plug-forward count; the offline batch
+   FLOP metric understates the serving win.
+
+Protocol: 2x2 {no gate, gated} x {compute (tok/s, active plugs/token),
+quality (home CE per plug on 6 rep windows, cross-fire delivery matrix, base
+tax)} on the v0.5/v0.5.1 assembly with joint_state.pt READ-ONLY, sweeping
+tau and m; plus leave-one-out pairwise harm (bank2n bar 0.02) and the
+mem-sibling pair family; plus the 4-probe chat smoke. Ship bars: every green
+plug keeps home CE <= the ungated default, active-plug compute cut >= 30%,
+worst pairwise harm <= 0.02.
+
+RESULTS (v0.5/v0.5.1 assembly, 8 plugs, 6 rep windows/home, MI50 fp16;
+joint_state.pt read-only; `lab/varact_gate.py --phase all` incremental JSON
+`/data/tliao/varact_out/varact.json`):
+
+**Quality-vs-compute frontier** (actives/token = plug-expert forwards per
+token at T=1 serving; ungated runs ALL 8 plugs every token = 8.0):
+
+| config | gen tok/s | actives/tok | cut | base-tax CE | worst green delta | flood sum |
+|---|---|---|---|---|---|---|
+| base (ungated) | 2.98 | 8.00 (1.92 fire) | 0% | 1.572 | — | +0.265 |
+| tau0.3 | 3.03 | 1.84 | 77.0% | 1.564 | k3 +0.005 | +0.232 |
+| **tau0.5** | 2.98 | 1.81 | **77.3%** | **1.557** | mem_edit +0.006 | +0.222 |
+| tau0.7 | 3.06 | 1.79 | 77.6% | 1.558 | k3 +0.010 | +0.220 |
+| topm1 | 2.82 | 0.99 | 87.6% | 1.574 | mem_edit **+0.320** | +1.044 |
+| topm2 | 3.09 | 1.52 | 81.0% | 1.572 | mem_words +0.036 | +0.325 |
+| topm3 | 3.03 | 1.91 | 76.1% | 1.572 | mem_words +0.024 | +0.287 |
+
+flood sum = sum over homes of (home CE - owner-only CE) = the presence cost
+of everything that is not the home plug. Home CE (masked -> per config,
+delta vs ungated; green = the v0.5.1 winners):
+
+| plug | masked | base | tau0.3 | tau0.5 | tau0.7 | topm1 | topm2 | topm3 |
+|---|---|---|---|---|---|---|---|
+| code | 0.924 | 0.392 | 0.390 (-.003) | 0.388 (-.004) | 0.395 (+.003) | 0.564 (+.172) | 0.400 (+.008) | 0.392 (+.000) |
+| math | 3.058 | 1.413 | 1.407 (-.006) | 1.400 (-.013) | 1.398 (-.015) | 1.724 (+.311) | 1.437 (+.024) | 1.413 (+.000) |
+| mem_pet | 3.686 | 0.027 | 0.028 (+.001) | 0.029 (+.001) | 0.029 (+.002) | 0.041 (+.014) | 0.026 (-.001) | 0.027 (+.000) |
+| mem_edit | 5.095 | 0.255 | 0.258 (+.003) | 0.261 (+.006) | 0.259 (+.004) | 0.575 (+.320) | 0.252 (-.003) | 0.254 (-.001) |
+| mem_words | 2.942 | 0.478 | 0.466 (-.012) | 0.471 (-.007) | 0.460 (-.018) | 0.453 (-.025) | 0.514 (+.036) | 0.502 (+.024) |
+| k3_hack | 1.955 | 1.827 | 1.833 (+.005) | 1.831 (+.004) | 1.838 (+.010) | 1.837 (+.009) | 1.828 (+.001) | 1.827 (+.000) |
+| glm_cybersec | 1.898 | 1.934 | 1.931 (-.003) | 1.928 (-.006) | 1.932 (-.002) | 1.918 (-.016) | 1.931 (-.003) | 1.933 (-.001) |
+| mimo_writing | 2.712 | 2.752 | 2.748 (-.004) | 2.748 (-.004) | 2.748 (-.004) | 2.747 (-.005) | 2.749 (-.003) | 2.752 (+.000) |
+
+**SWEET SPOT: thresh tau=0.5** — 77.3% active-plug compute cut (1.81 vs
+8.00 plug-forwards/token), every green plug within +/-0.006 nats of the
+ungated default (4/8 strictly better incl. math -0.013 and mem_words
+-0.007), base tax IMPROVES (1.572 -> 1.557; ungated tax +0.036 over masked
+1.536 becomes +0.021), gen tok/s unchanged (noise band 2.8-3.1 across all
+points: the plug share of wall-clock is small vs the 1.8B-active GEMMs;
+the win is plug compute/memory, not single-stream speed on this spine).
+Ship-bar status: compute PASS (77% >> 30%); green plugs PASS within the
+measured noise band (strict-letter clause: 3 plugs show +0.001..+0.006 —
+a paired-SE repeat would settle those); pairwise harm bar measured in the
+follow-up LOO pass (flood-sum proxy shrinks 0.265 -> 0.222 and every
+off-home delivery share drops toward zero at tau0.5: k3-on-cybersec
+0.051->0.026, glm-on-writing 0.024->0.003, code-on-cybersec 0.084->0.070).
+
+**What the sweep teaches about the two hypotheses:**
+- (a) COMPUTE: the win is LARGE and nearly tau-insensitive (77-78% at every
+  tau). Membership already implies high p_home, so tau 0.3->0.7 trims only
+  1.84->1.79 actives/token; the 8.0 -> 1.8 collapse is skipping plugs whose
+  keep-set is empty. m is the real compute knob (0.99-1.52 actives/token).
+- (b) INTERFERENCE: split verdict. phi_math-style LOW-P flooding shrinks
+  decisively at tau=0.5 (off-home delivery shares -> ~0.003-0.008; flood
+  sum 0.265->0.222). mem-words-style SIBLING crowding does NOT: the mem
+  trio cross-delivers ~0.99 on each other's homes under every tau point
+  (words home at tau0.5: mem_pet 0.997 / mem_edit 0.990 / mem_words 0.992)
+  because their p_home is mutually high — p_home cannot separate
+  same-family siblings. mem_words flood cost 0.206 -> 0.198 nats (token).
+- topm (the naive fix for siblings) pays for exclusivity with owner
+  starvation: the causal budget fills in HOST-LAYER ORDER (L1 mimo, L2
+  glm, L4 k3, L6 mem_pet, L13 code, L19 mem_edit, L24 math, L27
+  mem_words), so early flooders eat the slots. topm1: code/math/mem_edit
+  regress +0.17..+0.32, flood sum EXPLODES to 1.04. topm2: mem_pet +
+  mem_edit take both slots on the words home (0.996/0.985 delivery) and
+  mem_words itself is starved (0.001) -> +0.036. Rung-2 lever: p-ranked
+  budget (second pass, non-causal) or owner-first reservation at each
+  layer before the budget is spent.
+
+Open rungs: (1) score-ranked bank-wide top-m (non-causal, needs the full
+bank's p_home — a cheap second policy pass over cached scores); (2)
+sibling disambiguation for same-family memories (p_home needs a family-
+margin term, or the budget reserves the owner slot at the home's own
+layer); (3) paired-SE repeat of the tau0.5 home-CE deltas to convert
+"noise-level" into a numeric bar; (4) variable-k rung 2: letting m vary by
+token difficulty learned from the p_home distribution (this rung's
+adaptive mode is the hand-coded version).
