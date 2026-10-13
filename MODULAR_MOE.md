@@ -1801,3 +1801,97 @@ context) — context-windowed row re-cal remains the queued principled
 closer.  Edge note: with qtau=0.5 a question whose distinctive tokens
 are half digits ("What about Python 3?") can match mem_words at exactly
 0.5; the measured bars never touch that edge.
+
+## §10.11 PERSONA MEMORY PACK (2026-10-13 — permanent "about the user"
+facts as shaped episodic plugs)
+
+The pet_kepler machinery at slightly larger scale: six facts the user stated
+in their own words — (1) favorite live-action show = **Person of Interest**,
+(2) likes **The Machine** from that show, (3) likes **Gundam 00** and
+**Gundam IBO**, (4) **hates cars**, (5) **likes trains**, (6) **likes
+IGBTs** — taught as permanent shaped episodic plugs alongside the shipped
+mem trio, on BOTH chat hosts (v0.5 Phi spine, v0.6 Qwen spine).
+
+**The pack is code, the plugs are artifacts.** `lab/memories/persona_v1.json`
+is the versioned source of truth (committable): per fact 3 taught
+substitution deltas (`lab/memory_shaping.py` contract, asserted at load; 18/18
+deltas substitution, 18 styled approvals, dedup clean) + 3 approvals, the
+question-match **query side**, the taught-token strings, per-spine host
+sites, and the probe battery.  `lab/mem_pack.py` turns it into episodes,
+plug tables, and the varact gate registry (MEM_TAGS / EPISODE_QUERIES /
+TAUGHT_STRS extended to the 9 mem rows).  Built plugs go to the usual
+untracked artifacts (`<plugins>/mem_*_plugin.pt`, `joint_state_persona.pt`).
+`--mem-pack persona` (default-on, the 30038bd defaults) loads the pack in
+`chat_v05.py` / `chat_v06.py`; `--mem-pack legacy` restores the shipped
+trio-only world; `joint_state.pt` is never rewritten.
+
+**Query-side discipline (the lesson that shaped the pack).** The 10.10.1
+question-match gate scores `|q_tokens ∩ row_tokens| / |q_tokens|`, so on a
+2-token question ONE shared token is exactly 0.5 = fires at the shipped
+qtau.  Natural parallel question forms ("What do you think of X?") share
+their verbs, so `favorite anime?` would co-fire any row whose queries
+contain "favorite", and `Do you like cars?` any row containing "like".
+The pack therefore keeps TEACH prompts natural but gives each row a
+pairwise-disjoint QUERY vocabulary (topic words only: live/action/show,
+machine/character/person/interest, anime/gundam/mecha/ibo/00, car, train,
+igbt/transistor/mosfet/power) and bans the generic verbs (favorite/like/
+love/hate/think/feel/opinion/name/tell, plus "whats" except mem_gundam)
+from ALL query sets.  `lab/mem_pack.py --selftest` is the gate-separation
+falsifier (CPU, no model): 23 rows — every fact probe fires exactly its own
+row, `favorite anime?` -> mem_gundam only (0.5), `favorite color?` ->
+nothing (0.0), `What's your favorite color?` -> nothing (0.33), the live
+probe fillers -> nothing, and the legacy trio probes still fire their rows
+(mem_edit's shipped queries carried "favorite"/"like" and were re-voiced on
+the GATE side only — its episodes are untouched).
+
+**Build (lab/persona_build.py, both spines).** fit = host-native expert core
++ rank-64 width-norm wrap (wd 0, task-CE + out_pen 300, lr 3e-3, FEED
+>= 200k tok-slots of tiled episode ChatML per the door10 budget) + registry
+row with the v0.6 ROW-SCALE GUARD (180a612: prototype = mean_h rescaled to
+the layer's mean stock-row norm) + solo mex recal owner 0.85.  assemble =
+the 6 rows installed ADDITIVELY with the shipped rows/lams frozen at their
+joint_state values, then per-row guard-checkpointed sibling recal (the
+715ad33 recipe): own home x2 + every sibling mem episode + base on the
+reject side, reject_w 40, mass_w 2.0, owner_target 0.85, 30-step chunks —
+after every chunk every taught-fact margin (6 persona + Kepler) that started
+green must stay positive and own-home CE (tau=0.5 delivery) within +0.02 of
+baseline; first guard trip early-stops and keeps the best passing chunk.
+Then a balanced per-home lam grid for the new rows (own home only) and a
+probe battery.  `lab/persona_probe.py` runs the shipped bars: (a) single
+probe per fact 6/6, (b) multi-turn t4/t8 x 3 mtfact scaffolds (the 5/6
+bar), (c) the real `chat_v05/chat_v06 --probe` path clean on non-memory
+turns, (d) canary — no intrusion on `favorite color?`/Hamlet/sky/hello,
+fires on `favorite anime?` -> Gundam and `What about cars?` -> hates.
+
+**Run (2026-10-13, MI50 box, fp16; lab/persona_build.py + lab/persona_probe.py).**
+Fits green both hosts (phi CE home 3.3-4.7 -> 0.05-0.24 / p_home 0.985+;
+qwen 1.5-1.8 -> 0.026-0.071 / 0.974+; one phi wrap NaN'd at lr 3e-3 and
+recovered on the documented 1e-3 refit).  Sibling recal guard results
+(phi): mem_poi completed 6/6 chunks (p_reject 0.027 -> 0.005); the other
+five rows tripped a chunk-0 guard (own-fact greedy probe or home-CE +0.02)
+and kept their fit-time rows — the guards protect the taught facts and the
+pack stays additive.  Two guard lessons measured: reject_w 40 at ~4.5:1
+reject:home over-suppresses in one chunk (the 715ad33 warning), and fp16
+margin reads flap several nats on near-tied answer slots so only greedy
+probes are honest chunk guards.
+
+**Bars (phi, joint_state_persona.pt, default flags — tau0.5 + beta3 +
+--qscope overlap):**
+
+| bar | result | detail |
+|---|---|---|
+| (a) single, 6 facts | 4/6 | poi "Person of Interest" PASS, gundam "Gundam 00" PASS, igbt "I like IGBTs" PASS, trains "great" PASS (sentiment-correct), machine FAIL (garbled slot), cars FAIL ("great" = opposite of taught "hate") |
+| (a) single, legacy trio | 2/2 | "Your cat is named Kepler." / "helix" — pack is additive |
+| (b) multi-turn t4/t8 x 3 scaffolds | 30/36 (= the 5/6 bar) | per fact: poi 6/6, machine 6/6, gundam 6/6, cars 0/6, trains 6/6, igbt 6/6 |
+| (c) live `--probe` path | 4/4 | non-memory turns clean (matched=[]), memory turn "Your cat's name is Kepler." |
+| (d) canary battery | 14/14 | `favorite anime?` -> mem_gundam ONLY ("Gundam 00"); `What about cars?` -> mem_cars; `favorite color?` / `What's your favorite color?` -> NO row ("blue"); Hamlet -> Shakespeare; sky -> blue; hello clean; cat/editor/2+2 -> the trio rows; live fillers -> none |
+| gate separation (CPU selftest) | 23/23 | `favorite anime?` -> mem_gundam only; `favorite color?` -> none; live fillers -> none |
+
+**Honest residual — the H2 door for sentiment words.** The row matched
+(`matched=['mem_cars']`) and the taught-token bonus was live, yet "hate"
+still lost to the base prior "great" at the answer slot; "The Machine" as
+a multi-token name slot is the other miss.  The 10.10 decode-competition
+finding therefore extends beyond cat names to attitude words: names
+(Kepler / Person of Interest / Gundam 00 / IGBT) deliver, sentiments do
+not reliably.  The queued principled closers stay the 10.10 ones
+(context-windowed row re-cal; name-slot margin work).
