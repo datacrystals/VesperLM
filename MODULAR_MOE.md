@@ -1731,3 +1731,73 @@ is preserved in every config.  Residual cells and the failed stronger
 variants (beta>=4 fixed, lift-to-win, fire-once) are tabled above —
 context-windowed row re-cal is the queued principled closer for the
 tech@t8 H3 corner.
+
+### 10.10.1 Row-selective retrieval scope (2026-10-13 — rung 1:
+question-anchored activation) — **DEFAULT ON**
+
+The coarse retrieval scope is closed by the named cure: a memory row is
+boosted only when the *question* addresses its episode content
+(`varact_gate.QuestionScope` + `find_question_span` + `episode_scores`;
+`mtfact --phase qdiag` is the falsifier table; `--qscope
+overlap|qspan|both|any`, `--qmargin`, `--slot-k` on the harness/chat).
+
+**Which scope mechanism wins: the question-match gate on episode
+token-overlap (`--qscope overlap`).**  Score = containment of the
+question's distinctive tokens (stopwords dropped, naive plural stem) in
+the row's taught episode queries (pet_kepler / editor_helix / math_words
+question side).  Measured separation (qdiag, turns 0/4/8 x 3 scaffolds):
+
+* probe "What is my cat's name?" -> mem_pet 1.00, siblings 0.00 (every
+  depth); all scaffold fillers <= 0.20 -> no row; canary: 2+2 -> words
+  1.00, editor question -> edit 1.00, Hamlet/sky/hello-world -> 0.00.
+* **the row's own p_home on the question tokens (`qspan`) is NOT
+  question-discriminative** (measured, rejected): mem_edit and mem_words
+  sit at p_q = 1.0 on EVERY question (the router saturates on question
+  tokens — the G3 "content-addressed to answer shape" diagnosis again),
+  and mem_pet even reads 0.98 on a wired filler at t8; at t0 every row
+  is 0.6-1.0 on every question.  As a scope, qspan boosts all rows and
+  the multi-row taught-id bias collapses decode to emoji (mid 1/6).
+
+**Four bars (greedy, beta=3, the mtfact grid turns 0/4/8 x 3 scaffolds;
+live = real `chat_v05.py --probe` generated fillers):**
+
+| config | (a) sacred t0 | (b) mid t4/t8 | (c) live path | (d) canary |
+|---|---|---|---|---|
+| qscope overlap, bonus only | 3/3 | 5/6 | clean fillers + Kepler | no leaks |
+| qscope overlap, bonus + scoped boost | 3/3 | 5/6 | clean fillers + Kepler | no leaks |
+| qscope qspan (mechanism 1b) | 3/3 | 1/6 | (emoji garble) | — |
+| qscope overlap + margin 0.2 (mech 3) | 3/3 | 0/6 | — | — |
+| qscope overlap + slot-k 8 (mech 2) | 3/3 | 3/6 | — | — |
+| shipped (no fix, for reference) | 3/3 | 1/6 | base-prior name at the memory turn (Fluffy this run — the Whiskers/Fluffy/Oreo/Midnight flip family) | clean |
+
+Live-path detail (bar c): the hacking / cybersec / writing turns of the
+accumulating probe transcript generate clean prose under the scope with
+`qscope matched=[]` (bit-identical to the shipped baseline — the
+list-ify "1. 2. 3. 4." regression is gone), and the memory turn answers
+**"Your cat's name is Kepler."** with `matched=['mem_pet']`.  Canary:
+Hamlet -> Shakespeare, sky -> blue, hello-world clean; "What is 2 + 2?"
+-> "Four." is the taught mem_words fact by convention.
+
+**Rejected, measured:** (1b) qspan scope — non-selective, mid 1/6
+emoji garble (multi-row taught-id boosting is itself destructive);
+(3) row-selective margin 0.2 — mid 0/6: at mid-depth the name-slot
+p_home is near-tied with siblings so `p_j >= max-sib + margin` kills
+the bonus exactly where H2 bites; (2) answer-slot-only slot-k 8 — mid
+3/6: the top-8 rank gate skips the near-tie name slot.  The margin
+mechanics stays available (`--qmargin`) for the single-winner case.
+
+**SHIP (2026-10-13): DEFAULT ON** — `chat_v05.py` / `chat_v06.py` now
+default to `--mem-bonus 3.0 --qscope overlap` (DEFAULT_MEM_BONUS /
+DEFAULT_QSCOPE; `--mem-bonus off --qscope none` restores the plain
+shipped tau=0.5 delivery bit-identical).  Verified on the real live path
+with bare default flags (`probe_default.log`, no mem flags passed): the
+scope engages, non-memory turns stay clean, and the memory turn answers
+"Your cat's name is Kepler."  The retrieval row boost stays
+opt-in (`--mem-boost`, now scope-gated too): bonus-only passes every bar
+at beta=3, so the delivery-side force is not needed and is not the
+default.  Honest residual: tech@t8 "Whiskers." (1/6 mid) is the
+unchanged H3 corner (name emitted as the first token in a ~400-token
+context) — context-windowed row re-cal remains the queued principled
+closer.  Edge note: with qtau=0.5 a question whose distinctive tokens
+are half digits ("What about Python 3?") can match mem_words at exactly
+0.5; the measured bars never touch that edge.

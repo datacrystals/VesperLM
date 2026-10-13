@@ -190,13 +190,18 @@ def build_state(args, device):
 @torch.no_grad()
 def gen_reply_stream(tok, logits_fn, messages, max_new_tokens, device,
                      sample=False, temperature=0.8, top_p=0.95, seed=0,
-                     dec=None, mode="grafted"):
+                     dec=None, mode="grafted", scope=None):
     """One assistant turn. Returns (text, ids, wall_s, tok_per_s).
 
     Uses agent-49's KVDecoder (lab/kv_cache_v05) when available — one token
     at a time over a growing per-layer K/V cache; else g0.gen_reply (the
     chat_v05 full-forward decode)."""
     t0 = time.time()
+    if scope is not None:
+        txt = tok.apply_chat_template(list(messages), tokenize=False,
+                                      add_generation_prompt=True)
+        scope.begin(messages[-1]["content"], tok,
+                    tok.encode(txt, add_special_tokens=False))
     if dec is not None:
         text, ids, _st = dec.generate(
             messages, max_new_tokens, mode, sample=sample,
@@ -224,7 +229,7 @@ def loop_detect(text: str) -> str | None:
 
 
 def run_probes(tok, logits_fn, device, max_new_tokens, sample, temperature,
-               dec=None, mode="grafted"):
+               dec=None, mode="grafted", scope=None):
     tagset = "v0.6" + (" BARE" if mode == "bare" else "")
     print(f"=== PROBE SMOKE ({tagset}) ===", flush=True)
     messages = []
@@ -233,7 +238,8 @@ def run_probes(tok, logits_fn, device, max_new_tokens, sample, temperature,
         messages.append({"role": "user", "content": user})
         text, ids, wall, tps = gen_reply_stream(
             tok, logits_fn, messages, max_new_tokens, device,
-            sample=sample, temperature=temperature, dec=dec, mode=mode)
+            sample=sample, temperature=temperature, dec=dec, mode=mode,
+            scope=scope)
         messages.append({"role": "assistant", "content": text})
         short = " ".join(text.split())[:220]
         loop = loop_detect(text)
@@ -293,7 +299,7 @@ def run_impress(args, tok, fn_bare, fn_graft, device, dec):
     return results
 
 
-def interactive(tok, fn_bare, fn_graft, device, args, dec):
+def interactive(tok, fn_bare, fn_graft, device, args, dec, scope=None):
     is_tty = sys.stdin.isatty()
     sample = args.sample
     temperature = args.temperature
@@ -354,7 +360,7 @@ def interactive(tok, fn_bare, fn_graft, device, args, dec):
                     text, ids, wall, tps = gen_reply_stream(
                         tok, fn, messages, args.max_new_tokens, device,
                         sample=sample, temperature=temperature,
-                        dec=dec, mode=mode)
+                        dec=dec, mode=mode, scope=scope)
                     tps_last = tps
                     messages.append({"role": "assistant", "content": text})
                     loop = loop_detect(text)
@@ -378,7 +384,7 @@ def interactive(tok, fn_bare, fn_graft, device, args, dec):
             text, ids, wall, tps = gen_reply_stream(
                 tok, fn, messages, args.max_new_tokens, device,
                 sample=sample, temperature=temperature,
-                dec=dec, mode=mode)
+                dec=dec, mode=mode, scope=scope)
             tps_last = tps
         except Exception as e:  # keep the chat alive on any decode hiccup
             messages.pop()
@@ -426,14 +432,18 @@ def main() -> int:
                          "tau0.3|tau0.5|tau0.7|topm1|topm2|topm3|"
                          "adaptive_tau0.5_m2 (default: joint_state flag or "
                          "DEFAULT_VARACT=%s)" % DEFAULT_VARACT)
-    ap.add_argument("--mem-bonus", default="off",
+    ap.add_argument("--mem-bonus", default="3.0",
                     help="decode-time taught-token bonus (nats) for live "
-                         "memory rows (v0.1 fact-token lever).  '3.0' is "
-                         "the measured fact-stability config (turn-4/8 "
-                         "Kepler on the controlled bar); DEFAULT OFF — "
-                         "on live multi-turn transcripts the retrieval "
-                         "scope perturbs non-memory turns until it is "
-                         "row-selective.  'off' = plain tau delivery")
+                         "memory rows (v0.1 fact-token lever).  DEFAULT "
+                         "3.0 with the question-anchored scope (10.10 "
+                         "rung 1 — all four bars hold; see MODULAR_MOE "
+                         "10.10.1); 'off' = plain tau delivery")
+    ap.add_argument("--mem-boost", dest="mem_boost", default=False,
+                    action="store_true",
+                    help="also install the retrieval-triggered row boost "
+                         "for question-matched memory rows (opt-in)")
+    ap.add_argument("--no-mem-boost", dest="mem_boost", action="store_false",
+                    help="disable the retrieval-triggered row boost")
     ap.add_argument("--mem-bonus-tau", type=float, default=0.5,
                     help="p_home threshold for the bonus scope")
     ap.add_argument("--mem-bonus-topk", type=int, default=0,
@@ -441,6 +451,17 @@ def main() -> int:
                          "a taught token is inside the top-K (0 = always "
                          "when live — the shipped form; the gated forms "
                          "were measured and are NOT shipped)")
+    ap.add_argument("--qscope", default="overlap",
+                    choices=["none", "overlap", "qspan", "both", "any"],
+                    help="question-anchored retrieval scope (10.10 rung 1): "
+                         "boost only rows the current question addresses")
+    ap.add_argument("--qtau", type=float, default=0.5,
+                    help="question-match threshold for --qscope")
+    ap.add_argument("--qmargin", type=float, default=0.0,
+                    help="row-selective margin (boost row j only where "
+                         "p_j >= best sibling p + margin)")
+    ap.add_argument("--slot-k", type=int, default=0,
+                    help="answer-slot-only bonus gate (0 = off)")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     args.lam_map = {}
@@ -481,7 +502,7 @@ def main() -> int:
         fam = d2.family_for(d2.detect_family(model), blocks)
         gates, handles = None, None
         info, missing = [], []
-        bonus, tag_col = None, {}
+        bonus, tag_col, scope = None, {}, None
     else:
         (model, tok, blocks, fam, gates, handles, info,
          missing, site_entries, _banks) = build_state(args, device)
@@ -507,31 +528,41 @@ def main() -> int:
             print(f"[chat] varact gating ON: {pol_name} "
                   f"(--varact off to disable)", flush=True)
         # fact-stability fix (MODULAR_MOE 10.10 — the named v0.1 levers):
-        # retrieval-scoped decode-time bonus on taught fact tokens.
-        bonus, tag_col = None, {}
+        # retrieval-scoped decode-time bonus, question-anchored scope.
+        bonus, tag_col, scope = None, {}, None
         mb = str(args.mem_bonus).strip().lower()
         if mb in ("off", "0", "0.0"):
             print("[chat] mem bonus OFF", flush=True)
         else:
             beta = float(mb)
+            if str(args.qscope).strip().lower() not in ("none", "off", ""):
+                scope = vact.QuestionScope(args.qscope.strip().lower(),
+                                           tau=args.qtau,
+                                           margin=args.qmargin)
             tag_col = {}
             for host, ents in site_entries.items():
                 for j, en in enumerate(ents):
                     tag_col[en["tag"]] = (host, j)
             if beta > 0:
                 bonus = vact.TaughtTokenBonus(beta, args.mem_bonus_tau,
-                                              top_k=args.mem_bonus_topk)
+                                              top_k=args.mem_bonus_topk,
+                                              scope=scope,
+                                              slot_k=args.slot_k)
                 bonus.note(tok)
                 print(f"[chat] mem bonus ON: beta={beta} "
                       f"tau={args.mem_bonus_tau} "
-                      f"top_k={args.mem_bonus_topk}", flush=True)
-        if bonus is not None and wrappers:
-            # retrieval-triggered row boost: a memory row hot anywhere in
-            # the forward delivers through the reply (long-context router
-            # drift otherwise gates it off at the fact-token decision).
+                      f"top_k={args.mem_bonus_topk} "
+                      f"scope={scope.name() if scope else 'coarse'}",
+                      flush=True)
+        if args.mem_boost and wrappers:
+            # retrieval-triggered row boost: a question-matched memory row
+            # delivers through the reply (long-context router drift
+            # otherwise gates it off at the fact-token decision).  Opt-in:
+            # the question-scoped bonus alone passes all four bars.
             vact.set_policy(wrappers, vact.RetrievalBoostPolicy(
-                tau=args.mem_bonus_tau))
-            print("[chat] retrieval-boost delivery ON for memory rows",
+                tau=args.mem_bonus_tau, scope=scope))
+            print("[chat] retrieval-boost delivery ON for memory rows "
+                  f"(scope={scope.name() if scope else 'coarse'})",
                   flush=True)
 
     dec = None
@@ -549,7 +580,9 @@ def main() -> int:
         base_fwd = dec._forward
 
         def _fwd_bonus(x, _b=base_fwd):
-            return bonus.edit(_b(x), vact.capture_tags(gates, tag_col))
+            qspan = scope.span if scope is not None else None
+            return bonus.edit(_b(x), vact.capture_tags(gates, tag_col,
+                                                       qspan=qspan))
 
         dec._forward = _fwd_bonus
 
@@ -565,7 +598,9 @@ def main() -> int:
         def run():
             lg = d0.model_logits(model, x.to(device))
             if bonus is not None:
-                lg = bonus.edit(lg, vact.capture_tags(gates, tag_col))
+                qspan = scope.span if scope is not None else None
+                lg = bonus.edit(lg, vact.capture_tags(gates, tag_col,
+                                                      qspan=qspan))
             return lg
 
         return g0.run_in_state(
@@ -576,9 +611,9 @@ def main() -> int:
         return 0
     if args.probe:
         run_probes(tok, fn_graft, device, args.probe_tokens, args.sample,
-                   args.temperature, dec=dec, mode="grafted")
+                   args.temperature, dec=dec, mode="grafted", scope=scope)
         return 0
-    interactive(tok, fn_bare, fn_graft, device, args, dec)
+    interactive(tok, fn_bare, fn_graft, device, args, dec, scope=scope)
     return 0
 
 
