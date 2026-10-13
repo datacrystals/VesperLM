@@ -116,17 +116,24 @@ class WrappedForeignExpert(nn.Module):
     """
 
     def __init__(self, d_model: int, d_canon: int, w_gu: torch.Tensor,
-                 w_down: torch.Tensor, zero_init_out: bool = True, seed: int = 0):
+                 w_down: torch.Tensor, zero_init_out: bool = True, seed: int = 0,
+                 act: str = "swiglu", situ_beta: float = 1.0,
+                 situ_linear_beta: float | None = None):
         super().__init__()
         if w_gu.dim() != 2 or w_down.dim() != 2:
             raise ValueError("core weights must be 2D (2I, H) and (H, I)")
         if w_gu.shape[1] != w_down.shape[0]:
             raise ValueError(f"core width mismatch: {w_gu.shape} vs {w_down.shape}")
+        if act not in ("swiglu", "situ"):
+            raise ValueError(f"act must be swiglu|situ, got {act!r}")
         d_donor = w_gu.shape[1]
         self.d_model = d_model
         self.d_canon = d_canon
         self.d_donor = d_donor
         self.d_inter = w_down.shape[1]
+        self.act = act
+        self.situ_beta = situ_beta
+        self.situ_linear_beta = situ_linear_beta
         self.register_buffer("core_w_gu", w_gu.float().clone())
         self.register_buffer("core_w_down", w_down.float().clone())
         g = torch.Generator().manual_seed(seed)
@@ -145,8 +152,16 @@ class WrappedForeignExpert(nn.Module):
                     torch.randn(d_model, d_canon, generator=g) * 0.02)
 
     def core_forward(self, u: torch.Tensor) -> torch.Tensor:
-        """The frozen donor SwiGLU at its own widths (no adapters)."""
+        """The frozen donor MLP at its own widths (no adapters)."""
         gate, up = F.linear(u, self.core_w_gu).chunk(2, dim=-1)
+        if self.act == "situ":
+            # Kimi K3 SituAndMul (modeling_kimi_linear.py): donor-verbatim
+            beta = float(self.situ_beta)
+            lb = self.situ_linear_beta
+            gate = beta * torch.tanh(gate / beta) * torch.sigmoid(gate)
+            if lb is not None:
+                up = float(lb) * torch.tanh(up / float(lb))
+            return F.linear(gate * up, self.core_w_down)
         return F.linear(F.silu(gate) * up, self.core_w_down)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -173,6 +188,9 @@ class WrappedForeignExpert(nn.Module):
             "d_canon": self.d_canon,
             "d_donor": self.d_donor,
             "d_inter": self.d_inter,
+            "act": self.act,
+            "situ_beta": self.situ_beta,
+            "situ_linear_beta": self.situ_linear_beta,
             "adapter_params": {
                 "host_in": self.host_in.weight.numel(),
                 "adapter_up": self.adapter_up.weight.numel(),

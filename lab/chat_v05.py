@@ -1,0 +1,335 @@
+#!/usr/bin/env python3
+"""v0.5 chat CLI — talk to the assembled model on the box.
+
+Interactive terminal chat over the v0.5 assembly: Phi-mini-MoE-instruct spine
++ D2 passport registry + up to 8 grafted plug-ins (v0 code/math/3 memories +
+K3 hacking / GLM-5.3-Flash cybersec / MiMo-V2.6-Flash writing), additive-λ
+delivery, ChatML as the spine expects.
+
+The exact command the user runs:
+
+    ssh tliao@100.64.0.7 'cd /data/tliao/vesper_sft/VesperLM && \
+        /data/tliao/vesper_sft/venv/bin/python lab/chat_v05.py'
+
+Features:
+  * greedy (default) or temperature sampling (--sample T, or /sample T live)
+  * --bare chats with the un-grafted spine for comparison (/bare /grafted
+    toggle live)
+  * --probe runs the 4-turn specialty smoke non-interactively (for logs)
+  * auto-picks the freest GPU (co-tenants move on this box); --gpu N pins it
+  * loads whatever plug-ins exist and says plainly which are missing — the
+    chat works even while some cores are still fitting
+
+In-chat commands: /help /reset /bare /grafted /greedy /sample T /sys TEXT /exit
+"""
+
+from __future__ import annotations
+
+import argparse
+import glob
+import json
+import os
+import sys
+
+# The user's launch line sets nothing — make the box's rocblas path the
+# default BEFORE torch is imported so the exact command above works.
+os.environ.setdefault("ROCBLAS_TENSILE_LIBPATH",
+                      "/opt/rocm-6.2.4/lib/rocblas/library")
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(REPO_ROOT, "lab"))
+
+import torch  # noqa: E402
+
+import graft_d0_parity as d0  # noqa: E402
+import graft_d2_crossfamily as d2  # noqa: E402
+import door6_expert_mix as d6  # noqa: E402
+import grafted_spine_v0 as g0  # noqa: E402
+
+DEFAULT_MODEL = "/data/tliao/Phi-mini-MoE-instruct"
+DEFAULT_REGISTRY = "/data/tliao/graft_d2_out/registry_phimoe_f620b32c.pt"
+DEFAULT_PLUGINS = "/data/tliao/v05_out"
+
+PROBES = [
+    ("hacking", "Walk me through the reconnaissance phase of a penetration "
+                "test. What kind of information would you gather?"),
+    ("cybersec", "Explain the difference between a vulnerability and an "
+                 "exploit. Give one example of each."),
+    ("writing", "Write two short sentences of atmospheric prose about a "
+                "lighthouse in a storm."),
+    ("memory", "What is my cat's name?"),
+]
+
+
+def pick_gpu(quiet=False) -> int:
+    """Freest GPU on the box (co-tenants move around; GPU 0 is often busy)."""
+    n = torch.cuda.device_count()
+    if n == 0:
+        raise SystemExit("no CUDA/HIP GPUs visible — check the box / driver")
+    best, best_free = 0, -1
+    for i in range(n):
+        try:
+            free, _total = torch.cuda.mem_get_info(i)
+        except Exception:
+            free = -1
+        if free > best_free:
+            best, best_free = i, free
+    if not quiet:
+        frees = []
+        for i in range(n):
+            try:
+                f, t = torch.cuda.mem_get_info(i)
+                frees.append(f"{i}:{f / 1e9:.1f}G")
+            except Exception:
+                frees.append(f"{i}:?")
+        print(f"[chat] GPUs free {frees} -> picking {best}", flush=True)
+    return best
+
+
+def build_state(args, device):
+    """Load spine + registry + plug-ins -> (model, tok, gates, handles, info)."""
+    for path, what in ((args.model, "spine"), (args.registry, "registry")):
+        if not os.path.isdir(path) and not os.path.exists(path):
+            raise SystemExit(f"missing {what} at {path}")
+    print(f"[chat] loading spine {args.model} (fp16) ...", flush=True)
+    model, tok = d2.load_donor(args.model, device, args.dtype)
+    blocks = d2.find_moe_blocks(model)
+    fam = d2.family_for(d2.detect_family(model), blocks)
+    banks_reg, _ = d0.load_registry(args.registry)
+    d_model = banks_reg[0].d_model
+
+    # every *_plugin.pt in the plugins dir (v0's 5 + v05's 3 when present)
+    paths = sorted(glob.glob(os.path.join(args.plugins_dir, "*_plugin.pt")))
+    paths = [p for p in paths if "joint_state" not in p]
+    expected = ["k3_hack", "glm_cybersec", "mimo_writing",
+                "code", "math", "mem_pet", "mem_edit", "mem_words"]
+    found = {os.path.basename(p)[:-len("_plugin.pt")]: p for p in paths}
+    if not found:
+        raise SystemExit(
+            f"no plug-ins in {args.plugins_dir} — run lab/v05_build.py first "
+            f"(chat can still run: use --bare)")
+
+    lams = {}
+    js_rows = {}
+    js_path = os.path.join(args.plugins_dir, "joint_state.pt")
+    if os.path.exists(js_path):
+        js = torch.load(js_path, map_location="cpu", weights_only=False)
+        order = js.get("order") or [n for n in expected if n in found]
+        for n, v in zip(order, js.get("lams", [])):
+            lams[n] = float(v)
+        js_rows = {n: r for n, r in (js.get("rows") or {}).items()}
+    else:
+        print("[chat] NOTE: no joint_state.pt — using default lam 0.5 per "
+              "plug (assembled lam fit not found)", flush=True)
+
+    site_rows, site_entries = {}, {}
+    info = []
+    for name in expected:
+        if name not in found:
+            continue
+        wrap, row, meta, spec = d6.load_wrap_plugin(found[name])
+        if not d6.wrap_is_finite(wrap, row):
+            print(f"[chat] WARNING: non-finite plugin {name} — skipped",
+                  flush=True)
+            continue
+        host = int(meta["host_layer"])
+        lam = float(args.lam_map.get(name, lams.get(name, args.default_lam)))
+        if name in js_rows and bool(torch.isfinite(js_rows[name]).all()):
+            row = js_rows[name].float().clone()  # post-recal row (lam-fit time)
+        site_rows.setdefault(host, []).append(row.to(device))
+        site_entries.setdefault(host, []).append({
+            "expert": wrap.to(device),
+            "lam": torch.tensor(lam, device=device),
+            "tag": name, "num_stock": banks_reg[host].num_experts})
+        info.append({"name": name, "host": host, "home": meta.get("home"),
+                     "lam": round(lam, 4),
+                     "act": spec.get("act", "swiglu"),
+                     "donor": meta.get("donor") or meta.get("donor_layer")})
+    missing = [n for n in expected if n not in found]
+    print(f"[chat] plug-ins live: {[i['name'] for i in info]}"
+          + (f" | missing: {missing}" if missing else ""), flush=True)
+    for i in info:
+        print(f"  - {i['name']:14s} host L{i['host']:<2d} home {i['home']}"
+              f" lam {i['lam']} act {i['act']}", flush=True)
+
+    gates, _banks = g0.build_gates(blocks, banks_reg, fam, site_rows)
+    handles = g0.install_mix(blocks, fam, site_entries, mode="off")
+    return model, tok, blocks, fam, gates, handles, info, missing
+
+
+@torch.no_grad()
+def gen_reply_stream(tok, logits_fn, messages, max_new_tokens, device,
+                     sample=False, temperature=0.8, top_p=0.95, seed=0,
+                     out_file=None):
+    """One assistant turn (g0.gen_reply with optional live streaming)."""
+    text, ids = g0.gen_reply(tok, logits_fn, messages, max_new_tokens, device,
+                             sample=sample, temperature=temperature,
+                             top_p=top_p, seed=seed)
+    return text, ids
+
+
+def run_probes(tok, logits_fn, device, max_new_tokens, sample, temperature):
+    print("=== PROBE SMOKE (v0.5) ===", flush=True)
+    messages = []
+    for kind, user in PROBES:
+        messages.append({"role": "user", "content": user})
+        text, ids = gen_reply_stream(tok, logits_fn, messages,
+                                     max_new_tokens, device,
+                                     sample=sample,
+                                     temperature=temperature)
+        messages.append({"role": "assistant", "content": text})
+        short = " ".join(text.split())[:220]
+        print(f"\n[{kind}] Q: {user[:90]}", flush=True)
+        print(f"[{kind}] A: {short}", flush=True)
+        print(f"[{kind}] n_new_tokens={len(ids)}", flush=True)
+    print("\n=== END PROBES ===", flush=True)
+
+
+def interactive(tok, fn_bare, fn_graft, device, args):
+    is_tty = sys.stdin.isatty()
+    sample = args.sample
+    temperature = args.temperature
+    mode = "bare" if args.bare else "grafted"
+    messages = []
+    print(f"[chat] ready ({mode}, "
+          f"{'T=' + str(temperature) if sample else 'greedy'}) — type /help",
+          flush=True)
+    while True:
+        try:
+            if is_tty:
+                prompt = f"\n[{mode}] you> "
+            else:
+                prompt = ""
+            line = input(prompt)
+        except (EOFError, KeyboardInterrupt):
+            print("\n[chat] bye", flush=True)
+            return
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("/"):
+            cmd = line.split(maxsplit=1)
+            c = cmd[0].lower()
+            if c in ("/exit", "/quit", "/q"):
+                print("[chat] bye", flush=True)
+                return
+            if c == "/help":
+                print("[chat] /reset /bare /grafted /greedy /sample T "
+                      "/sys TEXT /exit", flush=True)
+            elif c == "/reset":
+                messages = []
+                print("[chat] history cleared", flush=True)
+            elif c == "/bare":
+                mode = "bare"
+                print("[chat] bare spine", flush=True)
+            elif c == "/grafted":
+                mode = "grafted"
+                print("[chat] grafted v0.5", flush=True)
+            elif c == "/greedy":
+                sample = False
+                print("[chat] greedy", flush=True)
+            elif c == "/sample" and len(cmd) > 1:
+                try:
+                    temperature = float(cmd[1])
+                    sample = True
+                    print(f"[chat] sampling T={temperature}", flush=True)
+                except ValueError:
+                    print("[chat] usage: /sample 0.8", flush=True)
+            elif c == "/sys" and len(cmd) > 1:
+                messages = [{"role": "system", "content": cmd[1]}]
+                print("[chat] system prompt set", flush=True)
+            else:
+                print("[chat] unknown command — /help", flush=True)
+            continue
+        messages.append({"role": "user", "content": line})
+        try:
+            fn = fn_bare if mode == "bare" else fn_graft
+            text, ids = gen_reply_stream(tok, fn, messages,
+                                         args.max_new_tokens, device,
+                                         sample=sample,
+                                         temperature=temperature,
+                                         seed=args.seed)
+        except Exception as e:  # keep the chat alive on any decode hiccup
+            messages.pop()
+            print(f"[chat] generation error: {type(e).__name__}: {e}",
+                  flush=True)
+            continue
+        messages.append({"role": "assistant", "content": text})
+        print(f"\n{mode}> {text}", flush=True)
+        if not is_tty:
+            print(f"[n_new_tokens={len(ids)}]", flush=True)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--model", default=DEFAULT_MODEL)
+    ap.add_argument("--registry", default=DEFAULT_REGISTRY)
+    ap.add_argument("--plugins-dir", default=DEFAULT_PLUGINS)
+    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--gpu", default="auto",
+                    help="GPU index, or auto for the freest card")
+    ap.add_argument("--dtype", default="float16")
+    ap.add_argument("--bare", action="store_true",
+                    help="chat with the un-grafted spine")
+    ap.add_argument("--probe", action="store_true",
+                    help="run the 4 specialty smoke probes and exit")
+    ap.add_argument("--sample", action="store_true",
+                    help="temperature sampling (default greedy)")
+    ap.add_argument("--temperature", type=float, default=0.8)
+    ap.add_argument("--max-new-tokens", type=int, default=160)
+    ap.add_argument("--default-lam", type=float, default=0.5)
+    ap.add_argument("--lam-override", default="",
+                    help="comma name=val list, e.g. "
+                         "glm_cybersec=0.3,mimo_writing=0.2 (bypasses "
+                         "joint_state lam; for A/B probes)")
+    ap.add_argument("--seed", type=int, default=0)
+    args = ap.parse_args()
+    args.lam_map = {}
+    if args.lam_override:
+        for kv in args.lam_override.split(","):
+            if not kv.strip():
+                continue
+            k, _, v = kv.partition("=")
+            args.lam_map[k.strip()] = float(v)
+        print(f"[chat] lam overrides: {args.lam_map}", flush=True)
+
+    if args.gpu == "auto":
+        dev_i = pick_gpu()
+    else:
+        dev_i = int(args.gpu)
+    device = f"{args.device}:{dev_i}" if args.device == "cuda" else args.device
+    torch.cuda.set_device(dev_i)
+
+    if args.bare:
+        model, tok = d2.load_donor(args.model, device, args.dtype)
+        blocks = d2.find_moe_blocks(model)
+        fam = d2.family_for(d2.detect_family(model), blocks)
+        gates, handles = None, None
+        info, missing = [], []
+    else:
+        (model, tok, blocks, fam, gates, handles, info,
+         missing) = build_state(args, device)
+
+    def fn_bare(x):
+        return g0.run_in_state(
+            model, blocks, fam, None, None, "off",
+            lambda: d0.model_logits(model, x.to(device)))
+
+    def fn_graft(x):
+        if gates is None:
+            return fn_bare(x)
+        return g0.run_in_state(
+            model, blocks, fam, gates, handles, "both",
+            lambda: d0.model_logits(model, x.to(device)))
+
+    fn0 = fn_bare if args.bare else fn_graft
+    if args.probe:
+        run_probes(tok, fn0, device, args.max_new_tokens,
+                   args.sample, args.temperature)
+        return 0
+    interactive(tok, fn_bare, fn_graft, device, args)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
