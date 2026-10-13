@@ -1,4 +1,4 @@
-# VesperLM — Handoff for the Next Agent (updated 2026-10-12)
+# VesperLM — Handoff for the Next Agent (updated 2026-10-13)
 
 **ONECLICK FREE LANE (2026-10-10):** launch = `python3 pod/oneclick_run.py --notebook pod/oneclick_boot.ipynb --job-url https://raw.githubusercontent.com/datacrystals/VesperLM/main/lab/oneclick_jobs/smoke.json --minutes 50` (free AMD OneClick GPU box, 6h max / 10min idle-reap, keepalive + RESULT_JSON exfil via cell stdout; job JSONs in `lab/oneclick_jobs/`, see `pod/ONECLICK.md` §9–10).
 **STATUS:** orchestrator + boot notebook built, local end-to-end dry-run green; live smoke **BLOCKED** — create works but the free tier never schedules (~5.5h cumulative `pending`, 1 brief ready window ever): `gh-ca7ead92` (2026-10-09 22:58 UTC) starved ~4.5h then went `not_found` (expired/reaped); create #2 `gh-10694136` (2026-10-10 05:38 UTC) sat `pending` 50min → FATAL at boot timeout. **GOTCHA: `create()`'s wall deadline derives from `--minutes`, so `--boot-timeout-min 85 --minutes 50` still dies at T+50m — next retry: `--minutes 150 --boot-timeout-min 120`.** GPU count / box egress / trainer-on-box UNVERIFIED. 2026-10-10 15:00 UTC: **all 3 queued instances REAPED after 8.5h/4.5h/3.5h pending** (gh-10694136, gh-9f9f8703, gh-dff85cad — incl. the official ppocr demo notebook, which pends identically: browser-parity verified from launcher JS, same POST body, no cookies — user "instant" browser access = capacity-window luck or per-IP slot). Cumulative ~12h queue starvation, 1 window ever. Pending instances ARE eventually reaped (~8h). Lane verdict: heartbeat-cadence lottery only, 1 fresh creation/day at a different hour, zero reliance. Retry cadence in `pod/ONECLICK.md` §10. Treat the lane as heartbeat-cadence only, never merge-gating.
@@ -40,6 +40,158 @@ Common/telemetry.py, off-by-default VESPER_TELEMETRY=1). Next: E1 needs E0
 data first.
 
 ---
+
+## 2026-10-13 — v0.2 "MAKE CHAT FAST": incremental decode with a KV cache for the v0.5 talkable model — `lab/chat_v05_fast.py` (sibling of `chat_v05.py`, which was NOT touched) — the correctness proof (parallel full-forward == one-token-at-a-time loop; bare-spine BIT-IDENTICAL under `--attn eager`, max abs 0.0) + GPU fixed top-k-gather expert merge + cross-turn prefix reuse | measured 3.9–6.3× over the old path at 22–491-token contexts (2.2→8.7 tok/s decode; KV constant ~8.5 tok/s while the old path degrades with context) | MI50/gfx906 M=1 GEMM floor (~110 GB/s effective) caps single-stream decode at ~9 tok/s: the 50–100 tok/s class is NOT reachable on this box without a custom GEMV kernel (hipblas GEMV is 3× slower AND crashes on fp32) — profile + negative results below (MI50 box, fp16)
+
+**Q (user's spec, verbatim intent): "make chat fast" — decode one token at a
+time in a loop, keeping each past token's K and V in a growing cache ("the
+notebook"); each new token computes Q/K/V only for itself and attends to the
+cached K/V.  Full correctness proof: the parallel full-forward and the
+incremental loop must produce identical logits (test it).**  Scope: (1)
+KV-cached forward for the v0.5 assembled model (Phi-mini-MoE spine sparsemixer
+top-2 + 8 additive plugs, whose delivery must also be incremental), (2) GPU
+expert merge for serving (the `graft_d*_` CPU-sort shim was correctness-only),
+(3) new entrypoint `lab/chat_v05_fast.py` — same UX/flags as chat_v05 plus
+`--no-kv` fallback and printed tok/s, (4) validation: logit parity on 5
+prompts, tok/s old vs new (prefill vs decode), 3-turn chat smoke.
+
+**MECHANISM (`lab/kv_cache_v05.py` `KVDecoder`)** — drives the spine's own
+transformers-5.x cache (`model(input_ids=…, past_key_values=…, use_cache=True)`),
+which owns rope positions (position_ids = arange + past_seen_tokens) and the
+sliding-window (2047) cache-aware mask.  Prefill the uncached prompt suffix,
+then one `ids=(1,1)` call per generated token.  Why the rest of the v0.5
+assembly drops in unchanged (this is the user's derivation, now proven): the
+sparsemixer top-2 selection is strictly per-token in h_t (eval path
+deterministic: argmax, then argmax with expert 1 at −inf); plug delivery
+`y = y_stock + Σ λ_j·m_j·e_j` is pointwise (membership m_j = row score beats
+the k-th stock score on h_t alone; WrappedForeignExpert is a pure FFN).
+Graft gates / MixMerge / wraps are untouched monkey-patches that fire per
+token naturally.  **Cross-turn prefix reuse**: a turn forwards only the
+uncached suffix of the re-rendered prompt (id-level prefix check; cache
+cropped via the transformers 5.18+ negative `Cache.crop`); mode switches
+(bare/grafted) and `/reset` drop the cache — K/V are only valid for the
+parameters that built them.  Smoke showed 54/70 and 79/95 prompt tokens reused
+across turns.
+
+**PARITY (the correctness proof; 5 prompts, prompt + teacher-forced greedy
+continuation positions, grafted state with all 8 plugs live; `--out
+/data/tliao/v05_fast_out/validate.json`):**
+
+| prompt | T | max abs dlogit | mean | min cos | argmax agree | route agree | greedy T=0 |
+|---|---|---|---|---|---|---|---|
+| vuln/exploit | 46 | 4.94 | 3.4e-1 | 0.99995 | 1.000 | 0.935 | SAME |
+| lighthouse | 46 | 9.30 | 3.8e-1 | 0.99843 | 0.978 | 0.946 | **DIFFER** |
+| cat name | 20 | 4.86 | 1.7e-1 | 0.99961 | 1.000 | 1.000 | SAME |
+| product rule | 41 | 3.94 | 2.2e-1 | 0.99760 | 1.000 | 0.988 | SAME |
+| KV cache | 44 | 1.63 | 4.8e-2 | 0.99998 | 0.977 | 0.977 | SAME |
+
+Honest reading: the mechanism is right and the paths agree on 4/5 greedy
+completions and ~100% of argmaxes, but fp16 does NOT give bit-identical
+logits.  Two noise sources, both measured: (a) a ~0.03–0.06 logit floor
+(same-shape GEMMs vs T=1 GEMMs accumulate differently — most positions diff
+exactly 0.0 or ≤0.06, spikes are localized), (b) **discrete gate flips at
+score boundaries** — when h_t differs in the last fp16 bit, sparsemixer's
+argmax/threshold or a plug's membership (`score > kth`) can flip at 1–6% of
+(layer, position) pairs (route-agree column), and one flip changes that
+position's logits by 0.5–9.  Bare-spine contrast on the same prompt: max
+0.125 under sdpa, and **exactly 0.0 at every position under `--attn eager`**
+(`bare[0]` in both runs) — i.e. with stock routing the bare-spine KV loop is
+BIT-IDENTICAL to the parallel full-forward, and the entire residual in the
+grafted state is the fp32 passport-score / plug-wrap boundary flips.
+`--no-fast-merge` attribution run: same failure at prompt 1 (greedy DIFFER),
+worst max 2.25 — i.e. the flips are a full-vs-incremental fp16 fact, not my
+gather merge (synthetic merge equivalence: max abs 6.6e-5,
+`merge_equivalence_check` gates it).  Full eager run
+(`/data/tliao/v05_fast_out/validate_eager.json`): worst max 5.25, min cos
+0.99991, route agree ALL on 3/5 prompts, greedy 4/5 — cleaner than sdpa
+(worst 9.30 / cos 0.9976) but the same flip class; `--attn eager` is shipped
+as a knob (default sdpa = chat_v05 parity).
+**Rung for a future agent: parity is a numeric-boundary problem — the only
+complete fix is running the parity in fp32 (30.6GB weights, tight on 32GB
+MI50) or fusing the M=1 path so shapes match.**
+
+**SPEED (same box, GPU claim locks, fp16; bench on the vuln/exploit prompt):**
+
+| path | ctx 22 tok |
+|---|---|
+| old (full-forward per token, d0 shim — what chat_v05.py does) | 48 tok in 21.4s = **2.24 tok/s** |
+| new prefill | 22 tok in 0.38s = **58 tok/s** |
+| new decode | 48 tok in 5.5s = **8.7 tok/s** |
+| speedup (decode vs old) | **3.9×** at 22-token ctx |
+
+**Measured long-context scaling (`/data/tliao/v05_fast_out/longctx.log`,
+same box):** old path degrades with context, KV decode is constant —
+ctx 23 tok: OLD 1.80 tok/s vs NEW decode 8.59 (4.8×); ctx 191: 1.92 vs 8.29
+(4.3×); ctx 491: 1.34 vs 8.51 (6.3×).  Prefill 60 / 376 / 671 tok/s as
+rocBLAS kernels warm.  So the honest delivered speedup is **3.9–6.3× at
+22–491-token contexts** (the brief's 1–3 s/token claim is the co-tenant/very-
+long-context regime; a clean-box old path at 491 ctx is 0.75 s/token) — short
+of the 10–50× target at these lengths, and the 50–100 tok/s class is
+hardware-capped below (M=1 GEMM floor).  Old path cost grows roughly linearly
+in context (0.52 → 0.75 s/token at 23 → 491) while KV decode stays 8.3–8.6
+tok/s, so the ratio keeps widening past 500 tokens.
+
+**WHY NOT 50–100 tok/s (profile, `/tmp/kv_profile2.log` via torch.profiler,
+4 bare decode steps):** Self CUDA 414ms ≈ Self CPU 411ms; `aten::mm` is 52%
+of CUDA time (640 calls, 338 µs avg — the M=1 GEMM `Cijk…MT64x64x16` at
+~110 GB/s effective reading 32MB), `addmm` 34%.  Graft gates + 8 plugs add
+<10% (bare 111ms / gates-only 114ms / full 119ms per step).  Active weights
+are ~4.3GB/token ⇒ the box's M=1 GEMM floor is ~9 tok/s single-stream; 50–100
+tok/s needs ~400+ GB/s GEMV.  Negative results (all measured on the box):
+(1) `torch.mv`/hipblas GEMV is **3× SLOWER** than the M=1 GEMM (844µs vs
+293µs for (4096,4096) fp16) and **hipblasSgemv crashes** with
+`HIPBLAS_STATUS_INTERNAL_ERROR` on fp32 (gfx906) — the GEMV idea is dead as
+shipped; (2) index_select weight gathers are not the cost (pipelined copies
+~2.7µs); (3) CUDA graphs would recover ≤15% (GPU is 86% busy — dispatch is
+not the binding constraint).  **The one credible path to the target on
+gfx906 is a hand-written HIP GEMV kernel (~400 GB/s is normal for a
+grid-stride HBM GEMV) installed behind the same F.linear contract; next
+rungs below.**
+
+**GPU EXPERT MERGE (brief item 2):** `_fast_experts_forward` — fixed top-k
+gather for decode (T=1: loop the k=2 selected expert slices, zero host
+syncs; d0's shim does one `int(counts[e])` device→host sync per expert per
+layer = ~2000 syncs/token), d0's CPU-sort math kept for prefill with ONE
+sync (`counts.tolist()`).  `install_expert_merge(model, "fast"|"shim")` is
+order-independent w.r.t. `g0.install_mix` (swaps the MixMerge stock capture
+if the plug wrapper is already installed — an earlier version would have
+clobbered the wrapper and silently killed all 8 plugs; fixed and covered by
+the parity/plugs-live check).  Shim-vs-gather equivalence: 6.6e-5 synthetic +
+the attribution parity run.
+
+**SMOKE (3-turn grafted greedy chat, SHORT excerpts per the safety filter;
+full log `/data/tliao/v05_fast_out/validate.log`):** turn 1 "home lab
+setup" → normal assistant prose ("Hello! I'd be happy to help… Setting up a
+home lab can be a rewarding project…"); turn 2 "what is my cat's name?" →
+"Your cat's named Whiskers." (the known v0 memory fact-token door — bare
+refuses / grafted answers, wrong fact token); turn 3 "one sentence about the
+sea at dusk" → "The sea at dusk whispers secrets to the shore."  Prefix reuse
+live (54/70 and 79/95 prompt tokens cached), decode 7.5–8.7 tok/s.
+
+**CLI (same UX as chat_v05):** `/help /reset /bare /grafted /greedy
+/sample T /sys TEXT /exit`, same flags (`--lam-override`, `--probe`, `--bare`,
+`--sample/--temperature`, `--max-new-tokens`, `--seed`, …) plus `--no-kv`
+(old path) and `--attn {sdpa,eager}`; prints tok/s + prefill/reuse stats per
+reply.  User command:
+`ssh tliao@100.64.0.7 'cd /data/tliao/vesper_sft/VesperLM && /data/tliao/vesper_sft/venv/bin/python lab/chat_v05_fast.py'`
+
+**Ops:** `chat_v05.py` was NOT edited and `/data/tliao/v05_out/*` was only
+torch.load'd (sibling agent-48 λ-fix run live; user `v05chat` session PID
+live on the box — never touched).  door10 claim-lock protocol
+(`/data/hackathon/.tmp/mr_gpu_claims`, 10-min TTL + refresh) — the first
+smoke died to exactly the historical co-tenant race (GPU 5 filled mid-load,
+`torch.OutOfMemoryError` at 13.65GiB allocated) and was relaunched under
+claim; `ROCBLAS_TENSILE_LIBPATH` required on every box python (rocblas
+tensile lookup dies without it).  Validation artifacts untracked in
+`/data/tliao/v05_fast_out/` (validate.json, validate_nofast.json,
+validate_eager.json, longctx.log).
+
+**Open rungs (in order):** (1) hand-written HIP GEMV for the M=1 decode path
+(the only route to 50–100 tok/s on gfx906 — ~2× qkv GEMM fusion on top);
+(2) fp32 parity pass (or fused M=1 kernels so full/incremental shapes match)
+to close the greedy-DIFFER gate completely; (3) RouteStats (L,E) picks and
+the glm/mimo λ delivery — untouched v0.5 open doors.
+
 
 ## 2026-10-12 — V0.5: the talkable model — v0 grafted spine + K3 hacking + GLM-5.3-Flash cybersec + MiMo-V2.6-Flash writing cores (8 plugs, additive-λ) + interactive chat CLI (MI50 box, fp16)
 
