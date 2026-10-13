@@ -441,6 +441,14 @@ def main() -> int:
         dev_i = pick_gpu()
     else:
         dev_i = int(args.gpu)
+    # HIP_VISIBLE_DEVICES/CUDA_VISIBLE_DEVICES remap: a physical id passed
+    # via --gpu can exceed the visible range (the chain sets
+    # HIP_VISIBLE_DEVICES=$gpu and the process then sees only device 0).
+    n_vis = torch.cuda.device_count()
+    if n_vis and not (0 <= dev_i < n_vis):
+        print(f"[chat] --gpu {dev_i} out of visible range 0..{n_vis - 1} "
+              f"(device remap) — using 0", flush=True)
+        dev_i = 0
     device = f"{args.device}:{dev_i}" if args.device == "cuda" else args.device
     torch.cuda.set_device(dev_i)
 
