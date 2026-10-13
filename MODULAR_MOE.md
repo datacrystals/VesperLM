@@ -1284,3 +1284,37 @@ Killed branches (evidence on file, do not retry without new ideas):
 Flexibility claim: the same 5 steps serve code/math/memory/sensor
 specialties and compose in the v0 assembly (69949e8). Open rungs:
 combine-at-scale (bank2n quality half), memory token-surfacing.
+
+## §10.8 SPINE PORTABILITY (2026-10-13 — v0.6 impress-demo)
+
+The recipe runs UNCHANGED on a second host family: **Qwen1.5-MoE-A2.7B-Chat**
+(qwen2_moe, 24L, hidden 2048, 60 experts, top-4, shared expert — 14.3B
+total / 2.7B active) took the whole d0/d1/d2/d25/d6/g0 stack with **zero
+shared-code edits**. D2's port lesson ("adapt the router block once,
+everything else follows") is now two-host verified: qwen2_moe duck-types as
+the OLMoE family — `find_moe_blocks` sees `.gate`+`.experts`,
+`Qwen2MoeTopKRouter` returns `(logits, top_val, top_idx)` matching
+GraftGateD2's contract, `experts.forward(h, idx, w)` matches MixMerge's,
+and the gfx906 experts shim's `gate_up_proj`/`down_proj` duck-type hits
+Qwen2MoeExperts directly (24 banks patched). FamilySpec carries the only
+real variance (top_k 4, norm_topk_prob False).
+
+Registry/graft parity gate on the new spine: **logit cos 0.9989** (min
+0.9553, ce_delta +0.002) — `init=exact` passports, so this is plumbing
+parity (the port is not corrupting the route), clearing the ≥0.95 bar.
+
+Host-memory note (14.3B fp16 = 26.6GB on a 32GB MI50): the registry/parity
+phase must run SMALL streams (seq 128, 8-32 batches) — vocab 151,936 logits
+plus 26.6GB weights OOM at v0.5's seq 512 with 146 val batches. Co-tenant
+races still bite (OOM mid-parity when a co-tenant landed) — claim-lock +
+retry is mandatory.
+
+gfx906 backward holes are SPINE-SPECIFIC, not universal (door25
+door25-gfx906-backward-holes caveat, now measured on a second host): a solo
+shape grid on the Qwen spine (CE fwd+bwd through a wrap, GPU 2, no
+co-tenant) gives B*T ∈ {128, 192, 256} OK and {320, 384, 512} FAIL with
+`hipErrorInvalidDeviceFunction` — v0.5's HOLEY_BT {256,768,1024,4096}
+(Phi-mini-MoE) does NOT transfer (256 is holey on Phi and safe on Qwen).
+v0.6 therefore trains at bs1×256 with the step count raised to keep FEED
+≥200k (782 steps × 256 = 200,192 tok-slots; v0.5's 500×512 = 256k at the
+old shape). Every new spine needs its own shape grid before the first fit.
