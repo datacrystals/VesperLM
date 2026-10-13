@@ -18,6 +18,25 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-12 — bank2n-assemble-unpack — the resumable-assembly refactor shipped a 3-tuple/2-tuple unpack bug (`build_live`/`build_overlay` return (gates, banks, handles); `state_or_measure` unpacked 2) — every retry died in ~37s at the `partition_full` state with `ValueError: too many values to unpack`, silently burning a 20-attempt chain while the cache only held the 2 baselines
+- Evidence: box `/data/tliao/bank2n_out/assemble_now.log` (attempts 9–20, each
+  `exit 1` within 33–47s) + `assemble.log` traceback at
+  `bank2n_partition.py:780 state_or_measure`. The earlier "co-tenant OOM"
+  reads of the same chain were a DIFFERENT (real) failure; this one is a pure
+  harness bug introduced by the resume patch.
+- Root cause: `state_or_measure` assumed `gates_fn() -> (gates, handles)`;
+  the trio of builders return 3-tuples. Cached-state resume worked (bare/
+  masked + `bank2n_rows.pt` held), so the crash was repeatable and cheap —
+  which is exactly why the retry loop looked like "GPU starvation" instead
+  of "instant deterministic crash".
+- What it rules out: nothing in the design — measurement machinery is fine
+  (fixed by accepting both tuple shapes).
+- Next tried: tolerant unpack `(res[0], res[-1])`, chain relaunched detached
+  with 40 attempts + per-attempt traceback tail in the chain log so fast
+  deterministic crashes are visible next to OOM exits. Lesson for retry
+  chains generally: surface the last traceback lines on non-zero exit and
+  treat sub-minute exits as code bugs, not capacity.
+
 ## 2026-10-12 — door8-bridge-width-recipe-scale — the door25 wrap recipe does NOT scale past d_canon≈64: rank 512 NaNs by step 30 at lr 3e-3 and rank 256 limps worse-than-masked (init-scale drift, not bridge incapacity)
 - Evidence: box `/data/tliao/graft_door8_out/door8_width.json` widths 256/512
   (run-1, MI50 GPU 0, lr 3e-3 wd 0 clip 1 bs4×512, general CE): 512 goes

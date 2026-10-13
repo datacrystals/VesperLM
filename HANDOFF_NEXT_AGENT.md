@@ -41,7 +41,7 @@ data first.
 
 ---
 
-## 2026-10-12 — BANK2N PARTITION (the user's design, first test): Model C = Phi-instruct spine + 2n=8 wrapped donor cores (4 Phi + 4 OLMoE) as FIRST-CLASS passport rows — router partitions traffic (full-bank sparsemixer + per-slot dispatch, no λ overlay); profile complete, fits/measure in flight (MI50 box, fp16)
+## 2026-10-12 — BANK2N PARTITION (the user's design, first test): Model C = Phi-instruct spine + 2n=8 wrapped donor cores (4 Phi + 4 OLMoE) as FIRST-CLASS passport rows — router partitions traffic (full-bank sparsemixer + per-slot dispatch, no λ overlay): **VERDICT NOT VALIDATED as briefed (quality green 3/8, base tax −4.3% PASS, worst pairwise harm 0.226 FAIL); code traffic SPLITS across donors but m1-class solo recovery is not preserved in-bank (best 11%) and overlay-λ beats pure partition on the same cores** (MI50 box, fp16)
 
 **Q (user's design, verbatim intent): "take n whole experts from model A and n
 whole ones from model B, model C has 2n experts"** — a bank where the router
@@ -91,7 +91,7 @@ GPU with claim locks); assemble (partition bank + closing recal + the state
 matrix + verdict) chained behind them. Full table + verdict in the finalized
 entry below / box `bank2n_out/bank2n.json` (untracked).
 
-**RESULTS (partial @ 2h cap — chain left running):**
+**RESULTS (final @ relaunch — full state matrix measured, verdict landed):**
 - **Fits: 8/8 complete** (v0-reuse adapters for phi_code/phi_math; 6 fresh
   wraps at door25 recipe, bs1×512, 200 steps, NaN-guarded).
 - **Closing row recal (partition live, owner 0.85) — every graft row OWNS its
@@ -99,23 +99,70 @@ entry below / box `bank2n_out/bank2n.json` (untracked).
   0.11→0.002, olmoe_web 0.18→0.03, phi_science 0.19→0.03; leakier rows:
   phi_math 0.68→0.44, olmoe_chat 0.59→0.26, phi_chat 0.59→0.33). The
   partition recal (G1b/G3 mex) works at n=8 in one bank.
-- **State matrix (eval windows, CE nats; first two states measured):**
-  bare code 1.414 / math 2.359 / chat 1.810 / science 2.573 / web 2.416 /
-  base 1.339 / val 1.224 → masked (graft rows deselected) 1.438 / 2.398 /
-  1.821 / 2.613 / 2.452 / 1.359 / 1.243 — i.e. the passport-only baseline
-  costs +0.02..0.04 over bare on these slices (D2 parity holds); the
-  partition/overlay states are where the experiment's answer lives.
-- **Open at the cap:** a deterministic crash inside the partition-full state
-  measurement (reproduces after the masked state; debug run capturing the
-  traceback in flight — `bank2n_out/assemble_debug.log`); the fix + full
-  8-graft table (per-graft routed-vs-masked, base tax, cross-fire matrix,
-  partition-vs-overlay) lands from the continuing chain into
-  `bank2n_out/bank2n.json`. The 2n-bank VERDICT is therefore PENDING; what
-  is already established: (i) 8 wrapped cores from 2 donor families coexist
-  as first-class rows in one Phi bank and each can be made to own its domain
-  at owner_mass 0.85 without collapsing the others, (ii) the partition
-  machinery (full-bank sparsemixer + per-slot dispatch) passes its synthetic
-  smoke and runs the recal in-env.
+- **Per-graft quality, routed-vs-masked (held windows — the m1 comparable
+  slice; CE nats):**
+
+| graft | home | masked | solo | in-bank | gain solo | gain in-bank | preserved | green |
+|---|---|---|---|---|---|---|---|---|
+| phi_chat | chat | 1.8213 | 1.8200 | 1.8198 | +0.0013 | +0.0015 | 115% | YES |
+| phi_science | science | 2.6127 | 2.6211 | 2.6133 | −0.0084 | −0.0006 | — | no |
+| phi_code | code | 1.4383 | 1.4876 | 1.4942 | −0.0493 | −0.0559 | — | no |
+| phi_math | math | 2.3984 | 2.5072 | 2.6223 | −0.1088 | −0.2239 | — | no |
+| olmoe_web | web | 2.4517 | 2.3317 | 2.4383 | **+0.1200** | +0.0134 | **11%** | YES |
+| olmoe_code | code | 1.4383 | 1.4373 | 1.4942 | +0.0010 | −0.0559 | — | no |
+| olmoe_math | math | 2.3984 | 2.3930 | 2.6223 | +0.0054 | −0.2239 | — | no |
+| olmoe_chat | chat | 1.8213 | 1.8215 | 1.8198 | −0.0002 | +0.0015 | — | YES |
+
+- **Base partition tax: −4.3% (PASSES ≤+3% — partition IMPROVES base-mix CE
+  1.339→1.282 vs bare; overlay 1.276).** Union: bare 2.115, overlay(λ=1)
+  2.169, partition 2.198. val_mixed: 1.224 bare → 1.363 partition (the tax
+  shows on true general text, not the base-mix slice).
+- **Cross-fire matrix (routed-share; rows=graft, cols=token domain):** code
+  SPLITS between the two donor families (phi_code 0.28 / olmoe_code 0.21 —
+  partition, not winner-take-all) but phi_math floods 0.42 of code and 0.89
+  of math; math and chat tokens multi-fire 3–5 rows at 0.47–0.89 (phi_chat
+  0.88 + olmoe_chat 0.88 + phi_math 0.79 on chat). Domain rows are NOT
+  selective enough to make "each expert handles only what routes to it"
+  true at the token level.
+- **Pairwise interference (leave-one-out harm, bar ≤0.02):** FAIL — worst
+  0.226 nats (phi_math on the math domain shared with olmoe_math; phi_math
+  is also the main web/shoplifter: +0.058 web, +0.053 code). Second-worst
+  family: phi_chat/phi_science on web (+0.09).
+- **Partition vs overlay on the same cores:** overlay UNION 2.169 vs
+  partition 2.198 (overlay better by 0.029) and overlay base 1.276 vs
+  1.282 — **the additive-λ form beats pure partition in-bank** (λ fit itself
+  crashed on a gfx906 `hipErrorInvalidDeviceFunction` in the multi-site
+  backward — verdict uses the λ=1 overlay; same hole family as FAILURES
+  door25-gfx906-backward-holes).
+- **VERDICT: 2n-BANK NOT VALIDATED as briefed** — quality green 3/8 (bar:
+  every graft), base tax PASS (−4.3%), pairwise harm FAIL (0.226 vs 0.02).
+  The form mechanically works (8 cores from 2 families coexist, own their
+  domains, and the router does partition code traffic across the donors) but
+  (a) m1-class solo recovery is NOT preserved in-bank (best 11%: olmoe_web
+  +0.120 solo → +0.013 in-bank; the Phi cores go NEGATIVE as replacements),
+  (b) cross-fire crowding re-creates the G3 problem at row level.
+  **Diagnosis (the two named levers for v0.5):** delivery-environment
+  mismatch — the door25 recipe trains wraps as ADDITIVE corrections (forced
+  dispatch) and v0 delivered them with λ·m overlay; partition dispatches
+  them as REPLACEMENTS of a native expert slot, which only the OLMoE
+  generalist cores survive (olmoe_web). The Phi "specialist" cores are
+  correction signals, not stand-alone experts (phi_math solo −0.109 on its
+  own home). Second lever: row selectivity — rows fire on 3–5 domains, so
+  tokens get stacked replacements at several depths. Named next rungs:
+  in-env per-slot fits (train the wrap under the dispatch it will be
+  delivered with — Door 8e's lesson, inverted), cross-fire rejection in the
+  row recal (multi-positive mex), or keep the overlay form (which wins the
+  head-to-head here and is v0's shipped contract).
+
+**Ops (this rung):** chain death was 3 distinct modes — (1) co-tenant OOMs
+(box map moved; GPU claim locks + freest-GPU retry), (2) a harness unpack
+bug (3-tuple vs 2-tuple in the resume refactor) that burned a 20-attempt
+chain in ~37s crashes (FAILURES `bank2n-assemble-unpack`), (3) the gfx906
+λ-fit backward assert (caught by try/except; verdict falls back to λ=1
+overlay). Per-state incremental JSON + `bank2n_rows.pt` resume made the
+retries cumulative — the relaunch measured the full 18-state matrix in one
+43-min attempt. Assembler: box `bank2n_out/bank2n.json` (+ plugins,
+bank2n_rows.pt, logs; untracked).
 
 **Ops:** detached `setsid`, incremental JSON, no pgrep gates (a `pkill -f`
 with a pattern in my own cmdline self-killed a launcher — ops lesson #3
