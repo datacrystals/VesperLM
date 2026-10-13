@@ -1806,6 +1806,31 @@ recipe run as the pipeline recipe, not as a post-hoc pass.)*
   coexistence on the real spine are both closed green with the
   owner_mass 0.85 + scoring-home recipe.
 
+## 2026-10-13 — kv-v05-gemv-dead-end — hipblas GEMV cannot accelerate the M=1 decode path on gfx906 (slower than the GEMM, and fp32 GEMV crashes) — the 50-100 tok/s class needs a custom HIP kernel, not torch/hipblas
+- Evidence: torch.profiler on 4 bare KV-decode steps of the v0.5 spine
+  (`tliao@100.64.0.7`, fp16) shows `aten::mm` = 52% of Self CUDA (640 calls,
+  338us avg; kernel `Cijk_Alik_Bljk_HHS_BH_MT64x64x16`) + `addmm` 34% — the
+  M=1 GEMM runs at ~110 GB/s effective on 32MB weight reads, and that floor
+  (~111ms/step bare, 4.3GB active weights/token) caps single-stream decode at
+  ~9 tok/s regardless of the decode harness.  Microbench on GPU 6 (fp16,
+  (1,4096)x(4096,4096)): `torch.nn.functional.linear` 293us vs `torch.mv`
+  844us — hipblas GEMV is ~3x SLOWER than the rocBLAS M=1 GEMM; `torch.mv`
+  on the fp32 (6144,3584) wrap-shaped matrix raises
+  `RuntimeError: CUDA error: HIPBLAS_STATUS_INTERNAL_ERROR` (hipblasSgemv) —
+  same missing-kernel family as the d0-gfx906-moe-kernels entry.
+- What it rules out: the standard "use GEMV kernels for decode" fix on
+  gfx906 as shipped in torch 2.9.1+rocm6.4; also index_select weight-gather
+  copies as the bottleneck (pipelined copies measure ~2.7us) and CUDA graphs
+  as more than a ~15% win (GPU busy 86% of the step — CPU dispatch is not
+  the binding constraint).
+- Next tried: shipped `lab/kv_cache_v05.py` with the fastest safe path
+  (fixed top-k gather for decode = zero host syncs; d0 CPU-sort merge for
+  prefill with one sync) — 2.2 -> 8.7 tok/s at 22-token ctx and ~20-50x at
+  real conversation lengths (HANDOFF "v0.2 MAKE CHAT FAST").  Credible
+  untried branch for the 50-100 tok/s bar: a hand-written grid-stride HIP
+  GEMV (~400 GB/s is normal on HBM) behind the same F.linear contract,
+  optionally + fused qkv GEMM (3 -> 1 launch per layer, ~17%).
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.
