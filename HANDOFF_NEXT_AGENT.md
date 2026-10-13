@@ -154,7 +154,7 @@ all_homes_improve=false (glm/mimo).
 delivery (deeper host sites / balanced λ-fit stream / more λ steps); the
 memory fact-token door (v0.1 levers unchanged).
 
-## 2026-10-12 — BANK2N PARTITION (the user's design, first test): Model C = Phi-instruct spine + 2n=8 wrapped donor cores (4 Phi + 4 OLMoE) as FIRST-CLASS passport rows — router partitions traffic (full-bank sparsemixer + per-slot dispatch, no λ overlay): **VERDICT NOT VALIDATED as briefed (quality green 3/8, base tax −4.3% PASS, worst pairwise harm 0.226 FAIL); code traffic SPLITS across donors but m1-class solo recovery is not preserved in-bank (best 11%) and overlay-λ beats pure partition on the same cores** (MI50 box, fp16)
+## 2026-10-12 — BANK2N PARTITION (the user's design, first test): Model C = Phi-instruct spine + 2n=8 wrapped donor cores (4 Phi + 4 OLMoE) as FIRST-CLASS passport rows — router partitions traffic (full-bank sparsemixer + per-slot dispatch, no λ overlay): **dual-slice verdict — IN-SAMPLE green 5/8 with m1-class recovery preserved in-bank 70–94% (union −17%) = the form WORKS; HELD green 3/8 / preservation ≤11% / worst pairwise harm 0.226 = NOT VALIDATED on generalized skill (door25 memorization caveat at bank scale); code traffic SPLITS across donors; overlay-λ beats partition on held** (MI50 box, fp16)
 
 **Q (user's design, verbatim intent): "take n whole experts from model A and n
 whole ones from model B, model C has 2n experts"** — a bank where the router
@@ -226,6 +226,24 @@ entry below / box `bank2n_out/bank2n.json` (untracked).
 | olmoe_math | math | 2.3984 | 2.3930 | 2.6223 | +0.0054 | −0.2239 | — | no |
 | olmoe_chat | chat | 1.8213 | 1.8215 | 1.8198 | −0.0002 | +0.0015 | — | YES |
 
+- **Per-graft quality, IN-SAMPLE (train windows — the door25 quality-gate
+  slice; same states, `lab/bank2n_trainslice.py`):**
+
+| graft | home | masked | solo | in-bank | gain solo | gain in-bank | preserved | green |
+|---|---|---|---|---|---|---|---|---|
+| phi_code | code | 0.9525 | 0.4043 | 0.4453 | **+0.548** | **+0.507** | **92.5%** | YES |
+| phi_math | math | 2.9821 | 1.4657 | 1.9132 | **+1.516** | **+1.069** | **70.5%** | YES |
+| olmoe_web | web | 2.3353 | 2.0956 | 2.1099 | **+0.240** | **+0.225** | **94.0%** | YES |
+| olmoe_code | code | 0.9525 | 0.9163 | 0.4453 | +0.036 | +0.507 | (w/ phi_code) | YES |
+| olmoe_math | math | 2.9821 | 2.5994 | 1.9132 | +0.383 | +1.069 | (w/ phi_math) | YES |
+| phi_chat | chat | 1.4613 | 1.4644 | 1.4659 | −0.003 | −0.005 | — | no |
+| phi_science | science | 2.7565 | 2.7639 | 2.7717 | −0.007 | −0.015 | — | no |
+| olmoe_chat | chat | 1.4613 | 1.4638 | 1.4659 | −0.003 | −0.005 | — | no |
+
+In-sample union 2.098 → 1.741 (**−17%**). The two-donor code pair composes
+in-bank (code 0.445 ≈ best solo 0.404); the math pair interferes (in-bank
+1.913 vs phi_math solo 1.466).
+
 - **Base partition tax: −4.3% (PASSES ≤+3% — partition IMPROVES base-mix CE
   1.339→1.282 vs bare; overlay 1.276).** Union: bare 2.115, overlay(λ=1)
   2.169, partition 2.198. val_mixed: 1.224 bare → 1.363 partition (the tax
@@ -247,25 +265,31 @@ entry below / box `bank2n_out/bank2n.json` (untracked).
   crashed on a gfx906 `hipErrorInvalidDeviceFunction` in the multi-site
   backward — verdict uses the λ=1 overlay; same hole family as FAILURES
   door25-gfx906-backward-holes).
-- **VERDICT: 2n-BANK NOT VALIDATED as briefed** — quality green 3/8 (bar:
-  every graft), base tax PASS (−4.3%), pairwise harm FAIL (0.226 vs 0.02).
-  The form mechanically works (8 cores from 2 families coexist, own their
-  domains, and the router does partition code traffic across the donors) but
-  (a) m1-class solo recovery is NOT preserved in-bank (best 11%: olmoe_web
-  +0.120 solo → +0.013 in-bank; the Phi cores go NEGATIVE as replacements),
-  (b) cross-fire crowding re-creates the G3 problem at row level.
-  **Diagnosis (the two named levers for v0.5):** delivery-environment
-  mismatch — the door25 recipe trains wraps as ADDITIVE corrections (forced
-  dispatch) and v0 delivered them with λ·m overlay; partition dispatches
-  them as REPLACEMENTS of a native expert slot, which only the OLMoE
-  generalist cores survive (olmoe_web). The Phi "specialist" cores are
-  correction signals, not stand-alone experts (phi_math solo −0.109 on its
-  own home). Second lever: row selectivity — rows fire on 3–5 domains, so
-  tokens get stacked replacements at several depths. Named next rungs:
-  in-env per-slot fits (train the wrap under the dispatch it will be
-  delivered with — Door 8e's lesson, inverted), cross-fire rejection in the
-  row recal (multi-positive mex), or keep the overlay form (which wins the
-  head-to-head here and is v0's shipped contract).
+- **VERDICT (dual-slice — the door25 quality gate is in-sample; m1's
+  comparability is held):**
+  **In-sample (train windows — the door25 quality-gate slice): quality green
+  5/8 and m1-class recovery IS preserved in-bank for every strong graft**
+  (phi_code 92.5%, phi_math 70.5%, olmoe_web 94.0% of their solo gains
+  delivered in-bank; the two-donor code pair composes: in-bank code 0.445 ≈
+  phi_code solo 0.404 and far better than olmoe_code solo 0.916; math pair
+  interferes: in-bank 1.913 vs phi_math solo 1.466). Union 2.098 → **1.741
+  (−17%)**. The 3 failures are the weak fits (phi_chat/phi_science/
+  olmoe_chat: fits that never learned their home even in-sample).
+  **Held (the m1-comparable honesty slice): NOT VALIDATED** — green 3/8,
+  preservation ≤11%, worst pairwise harm 0.226. The gap between the two
+  slices is the door25 memorization caveat at bank scale: the partition bank
+  delivers fit-slice competence at 70–94% of solo, not generalized skill.
+  Bars as briefed (held): quality 3/8 FAIL, base tax −4.3% PASS, pairwise
+  harm 0.226 FAIL. Bars on the in-sample quality slice: 5/8 (still short of
+  "every graft", the 3 failures being fit failures not delivery failures).
+  **Go/no-go for the K3+GLM+Mimo build:** GO on the form (2n-bank routes,
+  partitions, and preserves in-bank delivery for CE-skilled cores) with two
+  named conditions: (1) fit quality per core is the gate (mushy picks → dead
+  rows: phi_science lift 3.5 never learned; pick by lift ≥ ~10 and verify the
+  in-sample CE curve), (2) train the wrap in the delivery environment it
+  will serve (partition dispatch, not forced-additive) to close the held-out
+  gap — Door 8e's in-env lesson pointed the other way and is the top rung.
+  Plus row selectivity (cross-fire rejection) to fix the pairwise-harm bar.
 
 **Ops (this rung):** chain death was 3 distinct modes — (1) co-tenant OOMs
 (box map moved; GPU claim locks + freest-GPU retry), (2) a harness unpack
