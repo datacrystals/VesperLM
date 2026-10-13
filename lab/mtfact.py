@@ -29,11 +29,20 @@ for memory rows only (H3 lever).  Bars:
   * single-turn Kepler preserved (sacred, turns_before=0)
   * turn-4 and turn-8 probes answer Kepler in greedy across 3 scaffolds
 
+Row-selective retrieval scope (10.10 rung 1, question-anchored): --qscope
+overlap|qspan|both|any gates the bonus / row boost to rows the CURRENT
+QUESTION addresses (varact_gate.QuestionScope).  --qdiag is the falsifier
+table for the gate (overlap score + question-span p_home per row per
+depth).  --qmargin M = row-selective margin; --slot-k K = answer-slot-only
+bonus.  --qscope none reproduces the coarse scope bit-for-bit.
+
 Usage (box):
   python3 lab/mtfact.py --phase repro
   python3 lab/mtfact.py --phase diag  --out /data/tliao/mtfact_out/diag.json
   python3 lab/mtfact.py --phase eval  --fix tokenbonus --beta 2.0 \
       --out /data/tliao/mtfact_out/eval.json
+  python3 lab/mtfact.py --phase qdiag --turns 0,4,8
+  python3 lab/mtfact.py --phase eval  --fix both --beta 3.0 --qscope overlap
 """
 
 from __future__ import annotations
@@ -202,13 +211,13 @@ def build_world(args, varact_policy):
             tag_col[en["tag"]] = (host, j)
             tag_host[en["tag"]] = host
 
-    def capture(x):
+    def capture(x, qspan=None):
         """full forward + per-plug p_home/memb at the LAST position."""
         cap = {}
 
         def run():
             lg = d0.model_logits(model, x.to(device))
-            cap.update(va.capture_tags(gates, tag_col))
+            cap.update(va.capture_tags(gates, tag_col, qspan=qspan))
             return lg
 
         lg = g0.run_in_state(model, blocks, fam, gates, handles, "both",
@@ -327,21 +336,27 @@ def name_slot_stats(w, messages, prefix_text, bare=False):
 
 
 @torch.no_grad()
-def gen_capture(w, messages, max_new=24, bonus=None):
+def gen_capture(w, messages, max_new=24, bonus=None, scope=None):
     """Greedy decode with per-step plug capture; returns text + trace.
 
     `bonus` is a va.TaughtTokenBonus (the shipped decode-time lever) or
     None; when present it edits the next-token logits exactly as chat does.
+    `scope` is a va.QuestionScope — latched against the CURRENT QUESTION
+    (last user message) before decode so the bonus / row boost only see
+    question-anchored rows.
     """
     tok = w.tok
     txt = tok.apply_chat_template(list(messages), tokenize=False,
                                   add_generation_prompt=True)
     ids = tok.encode(txt, add_special_tokens=False)
+    if scope is not None:
+        scope.begin(messages[-1]["content"], tok, ids)
+    qspan = scope.span if scope is not None else None
     out_ids = []
     trace = []
     for step in range(max_new):
         x = torch.tensor([ids + out_ids], dtype=torch.long)
-        lg, cap = w.capture(x)
+        lg, cap = w.capture(x, qspan=qspan)
         if bonus is not None:
             lg = bonus.edit(lg, cap)
         row = lg[0, -1].float()
@@ -390,11 +405,21 @@ def build_messages(scaffold: str, turns_before: int):
     return msgs
 
 
-def eval_condition(w, scaffold, turns, gen_new=24, bonus=None, bare=False):
+def eval_condition(w, scaffold, turns, gen_new=24, bonus=None, bare=False,
+                   scope=None):
     msgs = build_messages(scaffold, turns)
     out = {"scaffold": scaffold, "turns_before": turns}
     out["slot_fixed"] = name_slot_stats(w, msgs, FIXED_PREFIX, bare=bare)
-    text, ids, trace = gen_capture(w, msgs, max_new=gen_new, bonus=bonus)
+    text, ids, trace = gen_capture(w, msgs, max_new=gen_new, bonus=bonus,
+                                   scope=scope)
+    if scope is not None:
+        out["qscope"] = {"mode": scope.mode, "tau": scope.tau,
+                         "margin": scope.margin,
+                         "overlap": {k: round(v, 3)
+                                     for k, v in scope.overlap.items()},
+                         "qspan_p": {k: round(v, 5)
+                                     for k, v in scope.qspan_p.items()},
+                         "matched": list(scope.last_match)}
     out["greedy"] = {
         "excerpt": short(text, 120),
         "name": which_name(text),
@@ -472,6 +497,77 @@ def phase_diag(w, args):
     return out
 
 
+def make_scope(args):
+    """QuestionScope from --qscope/--qtau/--qmargin, or None (coarse)."""
+    if str(args.qscope).strip().lower() in ("", "none", "off"):
+        return None
+    return va.QuestionScope(mode=args.qscope.strip().lower(),
+                            tau=args.qtau, margin=args.qmargin)
+
+
+def phase_qdiag(w, args):
+    """Falsifier for the question-match gate (10.10 rung 1).
+
+    Per question x turns-before, per mem row: the two question-side
+    evidence signals — episode token-containment (overlap, CPU) and the
+    row's own p_home over the question-token span (qspan) — against the
+    coarse retrieval signal (p_home_max over the whole forward) that
+    garbles the live path.  A usable gate separates the probe question
+    from the filler/canary questions on both signals.
+    """
+    turns_list = [int(t) for t in args.turns.split(",")]
+    probes = [("PROBE " + sc, PROBE_Q) for sc in args.scaffolds.split(",")]
+    probes += [("FILLER " + sc, SCAFFOLDS[sc][0][0])
+               for sc in args.scaffolds.split(",")]
+    probes += [("CANARY math", "What is 2 + 2?"),
+               ("CANARY editor", "What is my favorite text editor?"),
+               ("CANARY general", "Who wrote Hamlet?"),
+               ("CANARY general", "What color is the sky on a clear day?"),
+               ("CANARY code", "Write a one-line Python hello world."),
+               ("CANARY pet", "Do I have any pets?")]
+    out = {"phase": "qdiag", "conds": []}
+    for label, q in probes:
+        ovl = va.episode_scores(q)
+        for turns in turns_list:
+            t0 = time.time()
+            if label.startswith("PROBE"):
+                sc = label.split()[1]
+                msgs = build_messages(sc, turns)
+            else:
+                msgs = build_messages("wired", turns)[:-1] + \
+                    [{"role": "user", "content": q}]
+            txt = w.tok.apply_chat_template(list(msgs), tokenize=False,
+                                            add_generation_prompt=True)
+            ids = w.tok.encode(txt, add_special_tokens=False)
+            span = va.find_question_span(ids, q, w.tok)
+            lg, cap = w.capture(torch.tensor([ids]), qspan=span)
+            rec = {"label": label, "q": short(q, 60), "turns": turns,
+                   "span": list(span), "overlap": {k: round(v, 3)
+                                                   for k, v in ovl.items()},
+                   "rows": {}}
+            for tag in va.MEM_TAGS:
+                c = cap.get(tag) or {}
+                rec["rows"][tag] = {
+                    "p_q": c.get("p_home_q"),
+                    "p_max": c.get("p_home_max"),
+                    "p_last": c.get("p_home"),
+                }
+            out["conds"].append(rec)
+
+            def fmt(v):
+                return "none" if v is None else f"{v:.4g}"
+            row_s = " ".join(
+                f"{tag[4:]}:q={fmt(rec['rows'][tag]['p_q'])}"
+                f"/max={fmt(rec['rows'][tag]['p_max'])}"
+                for tag in va.MEM_TAGS)
+            print(f"[qdiag {label} t{turns}] ovl="
+                  + " ".join(f"{k[4:]}={v:.2f}" for k, v in ovl.items())
+                  + f" | {row_s} ({round(time.time() - t0, 1)}s)",
+                  flush=True)
+            dump(out, args.out)
+    return out
+
+
 def phase_eval(w, args):
     """The ship bar: turn-0/1/4/8 greedy probes x 3 scaffolds, fix on/off.
 
@@ -480,17 +576,27 @@ def phase_eval(w, args):
       tokenbonus tau=0.5 delivery + retrieval-scoped taught-token bonus
       forcerow   retrieval-boost delivery only (no bonus)
       both       retrieval-boost delivery + taught-token bonus (full fix)
+
+    --qscope overlap|qspan|both|any attaches a QuestionScope (row-selective
+    retrieval scope, 10.10 rung 1): only rows the CURRENT QUESTION
+    addresses are boosted.  --qmargin M adds the row-selective margin;
+    --slot-k K restricts the bonus to answer-slot steps.
     """
     fix = args.fix
     bonus = None
     tau = args.tau
+    scope = make_scope(args)
     if fix in ("forcerow", "both"):
-        va.set_policy(w.wrappers, va.RetrievalBoostPolicy(tau=tau))
-    if fix in ("tokenbonus", "both", "forcerow"):
+        va.set_policy(w.wrappers, va.RetrievalBoostPolicy(tau=tau,
+                                                          scope=scope))
+    if fix in ("tokenbonus", "both"):
         bonus = va.TaughtTokenBonus(args.beta, tau, top_k=args.top_k,
-                                    once=args.once)
+                                    once=args.once, scope=scope,
+                                    slot_k=args.slot_k)
         bonus.note(w.tok)
     out = {"phase": "eval", "fix": fix, "beta": args.beta, "tau": tau,
+           "qscope": scope.name() if scope else "none",
+           "qmargin": args.qmargin, "slot_k": args.slot_k,
            "conds": [], "bar": {}}
     turns_list = [int(t) for t in args.turns.split(",")]
     names = args.scaffolds.split(",")
@@ -498,7 +604,7 @@ def phase_eval(w, args):
         for turns in turns_list:
             t0 = time.time()
             cond = eval_condition(w, scaffold, turns, gen_new=args.gen_new,
-                                  bonus=bonus)
+                                  bonus=bonus, scope=scope)
             cond["wall_s"] = round(time.time() - t0, 1)
             out["conds"].append(cond)
             print(f"[eval {fix} {scaffold} t{turns}] "
@@ -527,8 +633,10 @@ def phase_eval(w, args):
 def phase_canary(w, args):
     """Collateral check: non-memory prompts under the fix — the taught
     names must NOT leak into unrelated answers."""
+    scope = make_scope(args)
     bonus = va.TaughtTokenBonus(args.beta, args.tau, top_k=args.top_k,
-                                once=args.once)
+                                once=args.once, scope=scope,
+                                slot_k=args.slot_k)
     bonus.note(w.tok)
     qs = [
         ("math", "What is 2 + 2?"),
@@ -538,14 +646,17 @@ def phase_canary(w, args):
         ("code", "Write a one-line Python hello world."),
         ("pet_rel", "Do I have any pets?"),
     ]
-    out = {"phase": "canary", "beta": args.beta, "tau": args.tau, "conds": []}
+    out = {"phase": "canary", "beta": args.beta, "tau": args.tau,
+           "qscope": scope.name() if scope else "none", "conds": []}
     for kind, q in qs:
         msgs = [{"role": "user", "content": q}]
         text, ids, trace = gen_capture(w, msgs, max_new=args.gen_new,
-                                       bonus=bonus)
+                                       bonus=bonus, scope=scope)
         rec = {"kind": kind, "q": q, "excerpt": short(text, 120),
                "kepler": "kepler" in text.lower(),
                "helix": "helix" in text.lower(),
+               "four": "four" in text.lower(),
+               "matched": list(scope.last_match) if scope else [],
                "n_new": len(ids)}
         out["conds"].append(rec)
         print(f"[canary {kind}] {short(q, 40)!r} -> {rec['excerpt']!r} "
@@ -557,7 +668,7 @@ def phase_canary(w, args):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--phase", default="diag",
-                    choices=["repro", "diag", "eval", "canary"])
+                    choices=["repro", "diag", "qdiag", "eval", "canary"])
     ap.add_argument("--model", default=c5.DEFAULT_MODEL)
     ap.add_argument("--registry", default=c5.DEFAULT_REGISTRY)
     ap.add_argument("--plugins-dir", default=c5.DEFAULT_PLUGINS)
@@ -577,6 +688,19 @@ def main() -> int:
     ap.add_argument("--top-k", type=int, default=0,
                     help="tie-break gate: bonus only when a taught token "
                          "is inside the top-K (0 = always when live)")
+    ap.add_argument("--slot-k", type=int, default=0,
+                    help="answer-slot-only gate: fixed-beta bonus only "
+                         "where a taught token is inside the top-K (0 = "
+                         "off)")
+    ap.add_argument("--qscope", default="none",
+                    choices=["none", "overlap", "qspan", "both", "any"],
+                    help="question-anchored retrieval scope (10.10 rung 1): "
+                         "boost only rows the current question addresses")
+    ap.add_argument("--qtau", type=float, default=0.5,
+                    help="question-match threshold for --qscope")
+    ap.add_argument("--qmargin", type=float, default=0.0,
+                    help="row-selective margin (10.9 family): boost row j "
+                         "only where p_j >= best sibling p + margin")
     ap.add_argument("--once", action="store_true",
                     help="at most one bonus injection per reply")
     ap.add_argument("--domains-dir", default=d0.__dict__.get(
@@ -608,6 +732,8 @@ def main() -> int:
         out = phase_repro(w, args)
     elif args.phase == "diag":
         out = phase_diag(w, args)
+    elif args.phase == "qdiag":
+        out = phase_qdiag(w, args)
     elif args.phase == "canary":
         out = phase_canary(w, args)
     else:

@@ -81,6 +81,186 @@ GREEN = ["code", "math", "mem_pet", "mem_edit", "mem_words", "k3_hack"]
 BAR_HARM = 0.02          # bank2n pairwise bar (nats)
 BAR_COMPUTE_CUT = 0.30   # active-plug compute cut vs ungated
 
+# memory plugs whose retrieval scope the question-match gate governs
+MEM_TAGS = ("mem_pet", "mem_edit", "mem_words")
+
+
+# ---------------------------------------------------------------------------
+# question-anchored retrieval scope (MODULAR_MOE 10.10 rung 1 / 8.5)
+# ---------------------------------------------------------------------------
+
+# Query-side episode text per memory row — the taught questions of the
+# episode (g0.build_episodes pet_kepler / editor_helix / math_words).
+# The question-match gate asks "does the current question address this
+# row's episode?" via distinctive-token containment; no model call.
+EPISODE_QUERIES = {
+    "mem_pet": (
+        "What is my cat's name?", "What is the name of my cat?",
+        "Remind me — what do we call my cat?", "What kind of pet do I have?",
+        "Tell me about my pet.", "Does my pet have a name?",
+    ),
+    "mem_edit": (
+        "What is my favorite text editor?", "Which editor do I use?",
+        "What editor should you suggest to me?", "Do I like modal editing?",
+        "Remind me about my editor setup.",
+        "What should I open this file in?",
+    ),
+    "mem_words": (
+        "What is 2 + 2?", "What is 5 + 3?", "What is 10 minus 7?",
+        "What is 1 + 1?", "What is 4 + 4?", "What is 9 minus 6?",
+    ),
+}
+
+STOPWORDS = frozenset(
+    "a an and are as at be can do does for from has have how i in is it me "
+    "my of on or our so that the this to was we what when which who why "
+    "will with would you your any about".split())
+
+
+def _wtoks(s: str) -> list:
+    """Distinctive question tokens: lowercase words + digits, plural stem."""
+    out = []
+    for w in str(s).lower().replace("—", " ").split():
+        w = "".join(ch for ch in w if ch.isalnum() or ch in "+-")
+        if not w or w in STOPWORDS:
+            continue
+        if len(w) < 2 and not w.isdigit():
+            continue
+        if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+            w = w[:-1]
+        out.append(w)
+    return out
+
+
+def episode_scores(question: str, queries: dict | None = None) -> dict:
+    """Containment of the question's distinctive tokens in each row's
+    episode queries: |q_tokens ∩ row_tokens| / |q_tokens|, in [0, 1]."""
+    qs = _wtoks(question)
+    if not qs:
+        return {tag: 0.0 for tag in (queries or EPISODE_QUERIES)}
+    out = {}
+    for tag, texts in (queries or EPISODE_QUERIES).items():
+        ep = set()
+        for t in texts:
+            ep.update(_wtoks(t))
+        hit = sum(1 for w in qs if w in ep)
+        out[tag] = hit / len(qs)
+    return out
+
+
+def find_question_span(prompt_ids, question: str, tok=None) -> tuple:
+    """(start, end) token span of the current question inside the prompt.
+
+    Exact tail search on the question's own token ids (the chat template
+    embeds content verbatim); on a miss, fall back to the prompt tail of
+    question-length + template overhead.  end = len(prompt_ids) so role
+    tags after the content are included.
+    """
+    end = len(prompt_ids)
+    q_ids = list(tok.encode(question, add_special_tokens=False)) \
+        if tok is not None else []
+    if q_ids:
+        n = len(q_ids)
+        for s in range(end - n, max(-1, end - n - 96), -1):
+            if s >= 0 and list(prompt_ids[s:s + n]) == q_ids:
+                return (s, end)
+    n = min(end, (len(q_ids) if q_ids else 16) + 16)
+    return (end - n, end)
+
+
+class QuestionScope:
+    """Row-selective retrieval scope for the taught-token bonus / row boost.
+
+    A memory row is IN SCOPE for the current reply only when the question
+    addresses its episode content (question-anchored activation, 10.10
+    rung 1) — never merely because answer-shaped tokens make the row hot
+    mid-forward (the live-path garble: sibling mem rows on unrelated
+    turns list-ify the reply).
+
+    modes:
+      overlap  episode token-containment score >= tau (CPU, no forward)
+      qspan    row p_home over the question-token span >= tau
+      both     overlap AND qspan        any   overlap OR qspan
+    margin>0: at each decode position the bonus lands only on row j where
+    p_home_j >= best sibling p_home + margin (the 10.9 row-selective
+    margin family) — at most one row wins a position.
+    """
+
+    def __init__(self, mode: str = "overlap", tau: float = 0.5,
+                 margin: float = 0.0):
+        if mode not in ("overlap", "qspan", "both", "any"):
+            raise ValueError(f"bad qscope mode {mode!r}")
+        self.mode = mode
+        self.tau = float(tau)
+        self.margin = float(margin)
+        self.span = None
+        self.overlap = {}
+        self.qspan_p = {}
+        self.question = ""
+        self.last_match = ()
+
+    def name(self) -> str:
+        return f"qscope_{self.mode}_tau{self.tau:g}".replace(".", "")
+
+    def begin(self, question: str, tok=None, prompt_ids=None) -> None:
+        """Latch question-side evidence for the upcoming reply."""
+        self.question = question or ""
+        self.overlap = episode_scores(self.question)
+        self.qspan_p = {}
+        self.span = find_question_span(prompt_ids, self.question, tok) \
+            if prompt_ids is not None and self.question else None
+        self.last_match = self.matched()
+
+    def observe(self, cap: dict) -> None:
+        """Fold a capture's question-span p_home into the latched evidence."""
+        for tag in MEM_TAGS:
+            c = cap.get(tag) or {}
+            pq = c.get("p_home_q")
+            if pq is None:
+                continue
+            self.qspan_p[tag] = max(self.qspan_p.get(tag, 0.0), float(pq))
+
+    def scores(self, cap: dict | None = None) -> dict:
+        """Evidence score per row in [0, 1] under the current mode."""
+        if cap is not None:
+            self.observe(cap)
+        out = {}
+        for tag in MEM_TAGS:
+            ov = float(self.overlap.get(tag, 0.0))
+            qp = float(self.qspan_p.get(tag, 0.0))
+            if self.mode == "overlap":
+                sc = ov
+            elif self.mode == "qspan":
+                sc = qp
+            elif self.mode == "both":
+                sc = min(ov, qp)
+            else:
+                sc = max(ov, qp)
+            out[tag] = sc
+        return out
+
+    def matched(self, cap: dict | None = None) -> frozenset:
+        sc = self.scores(cap)
+        live = frozenset(t for t, v in sc.items() if v >= self.tau)
+        self.last_match = tuple(sorted(live))
+        return live
+
+    def winner(self, cap: dict | None = None) -> str | None:
+        """Row-selective margin at a position: p_j >= best sibling + margin."""
+        if self.margin <= 0.0 or not cap:
+            return None
+        p = {}
+        for tag in MEM_TAGS:
+            c = cap.get(tag) or {}
+            if c.get("p_home") is None:
+                return None
+            p[tag] = float(c["p_home"])
+        for t in MEM_TAGS:
+            sib = max((p[o] for o in MEM_TAGS if o != t), default=-1e9)
+            if p[t] >= sib + self.margin:
+                return t
+        return None
+
 
 # ---------------------------------------------------------------------------
 # policy
@@ -145,18 +325,40 @@ class RetrievalBoostPolicy(VarActPolicy):
     token is decided.  A boost-tag row that is hot ANYWHERE in the current
     forward (the question re-activates it) delivers at every membership
     position of that forward.  Non-memory plugs keep plain tau gating.
+
+    With a QuestionScope the boost is row-selective (10.10 rung 1): only
+    rows the CURRENT QUESTION addresses stay in scope — hot siblings on
+    unrelated turns are not boosted (the live-path list-ify failure).
     """
 
-    def __init__(self, tau: float = 0.5, boost_tags=None):
+    def __init__(self, tau: float = 0.5, boost_tags=None,
+                 scope: QuestionScope | None = None):
         super().__init__("thresh", tau=tau)
-        self.boost_tags = set(boost_tags or
-                              ("mem_pet", "mem_edit", "mem_words"))
+        self.boost_tags = set(boost_tags or MEM_TAGS)
+        self.scope = scope
 
     def name(self):
-        return f"retrieval_boost_tau{self.tau:g}".replace(".", "")
+        base = f"retrieval_boost_tau{self.tau:g}".replace(".", "")
+        return base if self.scope is None else f"{base}_{self.scope.name()}"
 
     def _boost(self, keep, fire, p, tags):
         if not tags:
+            return keep
+        if self.scope is not None:
+            sc = self.scope
+            if sc.span is not None and p is not None and \
+                    p.shape[0] >= sc.span[1]:
+                s, e = sc.span
+                for j, tag in enumerate(tags):
+                    sc.qspan_p[tag] = max(sc.qspan_p.get(tag, 0.0),
+                                          float(p[s:e, j].max()))
+            scoped = set(sc.matched())
+            for j, tag in enumerate(tags):
+                if tag not in self.boost_tags:
+                    continue
+                if tag in scoped:
+                    keep[:, j] = fire[:, j]      # question-matched: deliver
+                # unmatched mem rows fall back to plain tau gating
             return keep
         hot = p.max(dim=0).values >= self.tau          # (n_new,)
         for j, tag in enumerate(tags):
@@ -555,7 +757,6 @@ def timed_gen(tok, logits_fn, device, max_new=24):
 # taught-token decode bonus (the named v0.1 fact-token lever)
 # ---------------------------------------------------------------------------
 
-MEM_TAGS = ("mem_pet", "mem_edit", "mem_words")
 # the episodes' corrected fact tokens (memory_shaping substitution shape);
 # both space-prefixed and bare forms so the decision token is covered
 TAUGHT_STRS = {
@@ -565,10 +766,12 @@ TAUGHT_STRS = {
 }
 
 
-def capture_tags(gates, tag_col):
+def capture_tags(gates, tag_col, qspan=None):
     """Per-plug p_home / membership at the LAST position of the last forward,
     plus p_home_max over ALL positions of that forward (retrieval signal:
-    a memory row hot anywhere in the question/context stays in scope).
+    a memory row hot anywhere in the question/context stays in scope) and
+    optional p_home_q = max over the QUESTION-token span only (the
+    question-anchored retrieval signal, 10.10 rung 1).
 
     tag_col: {tag: (host_layer, col)} — the MixGateD2 column of each plug row.
     """
@@ -577,9 +780,13 @@ def capture_tags(gates, tag_col):
         g = gates[host]
         p = getattr(g, "last_p_new", None)
         m = getattr(g, "last_membership", None)
+        pq = None
+        if p is not None and qspan is not None and p.shape[0] >= qspan[1]:
+            pq = float(p[qspan[0]:qspan[1], j].max())
         cap[tag] = {
             "p_home": float(p[-1, j]) if p is not None else None,
             "p_home_max": float(p[:, j].max()) if p is not None else None,
+            "p_home_q": pq,
             "memb": bool(m[-1, j]) if m is not None else None,
         }
     return cap
@@ -591,25 +798,39 @@ class TaughtTokenBonus:
     The named v0.1 lever for the fact-token door: the memory wins the
     taught margin but loses the name-slot softmax to the base prior
     (Whiskers / Midnight) mid-conversation.  At each decode step, if memory
-    row j is live (membership AND p_home >= tau — exactly the shipped
-    delivery rule under varact), add `beta` nats to row j's taught GOOD
-    token ids in the next-token logits (last position only).  Rows are
-    selective after the sibling recal (mem_pet p_reject ~0.009), so the
-    bonus is on in memory contexts and off elsewhere.
+    row j is live, add `beta` nats to row j's taught GOOD token ids in the
+    next-token logits (last position only).
+
+    Scope (10.10 rung 1 — question-anchored activation):
+      scope=None   live = row hot at the decode position or anywhere in
+                   the forward (the coarse retrieval scope — garbles
+                   non-memory replies on the live path)
+      scope=QS     live = rows the CURRENT QUESTION addresses (episode
+                   token-containment and/or question-span p_home); bonus
+                   never touches general reply tokens
+      slot_k>0     answer-slot-only: fixed beta only where a taught token
+                   is inside the top-`slot_k` of the step (the name-slot
+                   decision), never across general reply tokens
+      scope.margin row-selective margin: boost row j only where
+                   p_j >= best sibling p + margin (10.9 family)
 
     Usage (chat): wrap the grafted logits_fn so every decode step sees it;
-    call `note(tok)` once after the tokenizer is loaded.
+    call `note(tok)` once after the tokenizer is loaded; call
+    `scope.begin(question, tok, prompt_ids)` before each reply.
     """
 
     def __init__(self, beta: float = 2.0, tau: float = 0.5,
                  taught: dict | None = None, top_k: int = 0,
-                 margin: float = 0.75, once: bool = False):
+                 margin: float = 0.75, once: bool = False,
+                 scope: QuestionScope | None = None, slot_k: int = 0):
         self.beta = float(beta)        # fixed nats (top_k=0) or lift cap
         self.tau = float(tau)
         self.taught = taught or TAUGHT_STRS
         self.top_k = int(top_k)        # 0 = always apply when live
         self.margin = float(margin)    # lift-to-win overshoot
         self.once = bool(once)         # at most one injection per reply
+        self.scope = scope             # question-anchored row scope
+        self.slot_k = int(slot_k)      # answer-slot-only rank gate
         self.ids = {}
         self.applied_steps = 0
         self.last_live = ()
@@ -625,6 +846,9 @@ class TaughtTokenBonus:
             self.ids[tag] = sorted(s)
 
     def live_tags(self, cap: dict) -> tuple:
+        if self.scope is not None:
+            # question-anchored: only rows the question addresses
+            return tuple(sorted(self.scope.matched(cap)))
         live = []
         for tag in MEM_TAGS:
             c = cap.get(tag)
@@ -646,6 +870,8 @@ class TaughtTokenBonus:
         top_k>0: the v0.1 margin-to-token tie-break — the bonus lands only
         where a taught token is already competitive (inside the top-K) and
         only lifts it to win by `margin` (capped at `beta`).
+        slot_k>0: answer-slot-only — fixed beta, and only where the best
+        taught id of the row is inside the top-`slot_k` at this step.
         once=True: at most one injection per reply (a new reply is detected
         when the sequence length does not grow by exactly one).
         """
@@ -659,6 +885,12 @@ class TaughtTokenBonus:
         self.last_live = live
         if not live or self.beta == 0.0:
             return logits
+        if self.scope is not None and self.scope.margin > 0.0:
+            win = self.scope.winner(cap)
+            live = tuple(t for t in live if t == win) if win else ()
+            self.last_live = live
+            if not live:
+                return logits
         out = logits.clone()
         row = out[0, -1]
         row_cpu = row.detach().float().cpu()
@@ -669,6 +901,8 @@ class TaughtTokenBonus:
                 continue
             best = max(ids, key=lambda t: float(row_cpu[t]))
             rank = int((row_cpu > row_cpu[best]).sum()) + 1
+            if self.slot_k > 0 and rank > self.slot_k:
+                continue                      # not an answer-slot step
             if self.top_k > 0 and rank > self.top_k:
                 continue
             if self.top_k > 0:
@@ -690,7 +924,8 @@ class TaughtTokenBonus:
 
         def fn(x):
             lg = logits_fn(x)
-            return self.edit(lg, capture_tags(gates, tag_col))
+            qspan = self.scope.span if self.scope is not None else None
+            return self.edit(lg, capture_tags(gates, tag_col, qspan=qspan))
 
         return fn
 

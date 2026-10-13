@@ -41,6 +41,52 @@ data first.
 
 ---
 
+## 2026-10-13 — ROW-SELECTIVE RETRIEVAL SCOPE (10.10 rung 1, question-anchored activation): the taught-token bonus is DEFAULT ON — a memory row is boosted only when the current QUESTION addresses its episode (token-containment question-match gate wins; the row's own question-span p_home is measured non-discriminative) — all four bars hold: sacred 3/3, mid t4/t8 5/6, live `chat_v05.py --probe` clean prose on non-memory turns + "Your cat's name is Kepler." at the memory turn, canary no taught-name leaks (MI50 box, fp16)
+
+**Mechanism (`lab/varact_gate.py`):** `QuestionScope` latches per-reply
+question evidence — `episode_scores(question)` = containment of the
+question's distinctive tokens in the row's taught episode queries
+(pet_kepler / editor_helix / math_words question side; CPU, no forward),
+and/or `find_question_span` p_home over the question-token span
+(`--qscope overlap|qspan|both|any`, `--qtau`).  `TaughtTokenBonus` and
+`RetrievalBoostPolicy` accept the scope: only matched rows are boosted;
+unmatched mem rows fall back to plain tau gating.  Extras:
+`--qmargin` row-selective margin (p_j >= max-sib + margin per position),
+`--slot-k` answer-slot-only fixed-beta gate.  `lab/mtfact.py --phase
+qdiag` is the falsifier table; chains `lab/mtfact_chain_qscope*.sh`, box
+out `/data/tliao/mtfact_out/` (qdiag.json, eval_qsov_*.json,
+canary_qsov.json, probe_qsov*.log, probe_base.log, probe_default.log).
+
+**Falsifier (qdiag, turns 0/4/8 x 3 scaffolds):** overlap separates
+perfectly (PROBE -> mem_pet 1.00 every depth; fillers <= 0.20; canary
+2+2 -> words, editor -> edit, Hamlet/sky/hello -> none) while **qspan is
+NOT question-discriminative** — mem_edit/mem_words p_q = 1.0 on EVERY
+question (router saturates on question tokens — G3 content-addressing
+again), mem_pet 0.98 on a wired filler at t8, everything 0.6-1.0 at t0.
+
+**4-bar table (beta=3):** overlap+bonus-only **3/3 / 5/6 / clean+Kepler
+/ no leaks**; overlap+bonus+scoped-boost 3/3 / 5/6 / clean+Kepler (same
+bars — the boost is not needed); qspan scope 3/3 / **1/6** (emoji garble
+from multi-row taught-id bias); overlap+margin 0.2 3/3 / **0/6** (name
+slot near-ties kill the bonus where H2 bites); overlap+slot-k 8 3/3 /
+**3/6** (top-8 gate skips the near-tie slot).  Mechanisms 2 and 3
+measured and rejected as the scope; mechanism 1a (question-match gate)
+wins.
+
+**SHIP: DEFAULT ON** — `chat_v05.py`/`chat_v06.py` default
+`--mem-bonus 3.0 --qscope overlap` (DEFAULT_MEM_BONUS/DEFAULT_QSCOPE);
+`--mem-bonus off --qscope none` = bit-identical shipped tau=0.5.
+`--mem-boost` (scoped retrieval row boost) stays opt-in.  Live bar
+detail: hacking/cybersec/writing turns generate with `matched=[]` and
+clean prose (the "1. 2. 3. 4." list-ify regression is gone); memory
+turn `matched=['mem_pet']` -> "Your cat's name is Kepler." (80-tok
+greedy probes).  Canary: Shakespeare / blue / hello-world clean;
+2+2 -> "Four." = taught mem_words fact.  **Residual:** tech@t8
+"Whiskers." (H3 first-token corner, unchanged) — context-windowed row
+re-cal still the queued closer.  Edge: qtau=0.5 can match mem_words on
+half-digit questions ("What about Python 3?" = 0.50); bars don't touch
+it.  `joint_state.pt` untouched; code/docs only.
+
 ## 2026-10-13 — MULTI-TURN FACT STABILITY (the fact-token door, decode side): turn-4-of-a-transcript "Your cat's name is Midnight." is DIAGNOSED (H3 router drift at answer-start + H2 name-slot decode competition + H1 margin dilution) and the two named v0.1 levers are shipped in chat_v05.py/chat_v06.py — retrieval-triggered row boost + retrieval-scoped taught-token decode bonus — single-turn Kepler preserved (sacred), turn-4 green on all 3 scaffolds, turn-8 green on 2/3 (MI50 box, fp16)
 
 **Repro (`lab/mtfact.py --phase repro`, shipped state, shipped tau=0.5):**
