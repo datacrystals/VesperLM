@@ -1050,13 +1050,13 @@ tok; recovery% = (CE_masked - CE_graft)/(CE_masked - CE_stock), denom
 0.0022 nats):**
 | d_canon | trainable | status | lam* | CE graft@lam* | CE graft@lam=1 | recovery% @lam* |
 |---|---|---|---|---|---|---|
-| 64 | 786,432 | ok (wall 778 s) | 0.25 | **2.2874** (stock 2.3463 / masked 2.3485) | 2.4887 (overshoot) | **+2723% +- 440** (over-recovery; +0.0611 +- 0.0099 nats, 6 sigma) |
+| 64 | 786,432 | ok (wall 778 s) | 0.25 | **2.2874** (stock 2.3463 / masked 2.3485) | 2.4887 (overshoot) | **+2723% - 440** (over-recovery; +0.0611 - 0.0099 nats, 6 sigma) |
 | 256 | 3,145,728 | ok-but-useless | **0.0 = deliver nothing** | 2.3485 (= masked) | 5.8582 (catastrophic) | **0.0%** |
 | 512 | 6,291,456 | nan_abort (3e-3 ~step 30; poisoned 1.5e-3 retry NaN at step 1) | — | — | — | N/A |
 | 1024 | 12,582,912 | nan_abort (fallback step 0) | — | — | — | N/A |
 
 Read it in absolute CE: only rank 64 delivers a positive general-LM delta
-(-0.059 nats vs stock at lam=0.25; recovered 0.0611 +- 0.0099 vs the 0.0022
+(-0.059 nats vs stock at lam=0.25; recovered 0.0611 - 0.0099 vs the 0.0022
 cost).  At 256 the wrap trains but is net harmful — the lam grid picks 0
 (any delivery makes train CE worse than masked; lam=1 gives CE 5.86); at
 512/1024 it never trains.  Recovery% is numerically explosive on this
@@ -1074,8 +1074,8 @@ init) — the fix makes wide ranks trainable, but rank 64 remains the best
 carrier:**
 | d_canon | trainable | lr | lam* | gen@lam* | nats recovered | recovery% |
 |---|---|---|---|---|---|---|
-| 256 | 3,145,728 | 3e-3 | 0.125 | 2.3441 | +0.0044 +- 0.0103 | 197% (noise-level) |
-| 512 | 6,291,456 | 1.5e-3 (fallback) | 0.25 | 2.3044 | +0.0442 +- 0.0105 | 1969% |
+| 256 | 3,145,728 | 3e-3 | 0.125 | 2.3441 | +0.0044 - 0.0103 | 197% (noise-level) |
+| 512 | 6,291,456 | 1.5e-3 (fallback) | 0.25 | 2.3044 | +0.0442 - 0.0105 | 1969% |
 | 1024 | 12,582,912 | 1.5e-3 (fallback) | 0.0 | 2.3485 | 0 | 0% |
 
 vs run-1's 64 (2.2874, +0.0611 nats).  Non-monotone in width: 64 > 512 >
@@ -1108,12 +1108,12 @@ run-1 site L2; demand = how many of the layer's routed experts are masked
 lam grid extended below 0.25):**
 | demand | mask | CE stock | CE masked | mask cost | graft@lam* (rank 64) | nats recovered | recovery% |
 |---|---|---|---|---|---|---|---|
-| 1 (top-1 e7) | 1 | 2.3463 | 2.3485 | +0.0022 | 2.2896 (lam 0.3125) | +0.0589 +- 0.0137 | 2625% |
-| 2 (top-2) | 2 | 2.3463 | 2.3489 | +0.0026 | 2.3004 (lam 0.25) | +0.0485 +- 0.0091 | 1885% |
-| **all (full bank)** | 64 | 2.3463 | **2.4839** | **+0.1376** | **2.4046** (lam 0.3125) | **+0.0793 +- 0.0132** | **57.7%** |
+| 1 (top-1 e7) | 1 | 2.3463 | 2.3485 | +0.0022 | 2.2896 (lam 0.3125) | +0.0589 - 0.0137 | 2625% |
+| 2 (top-2) | 2 | 2.3463 | 2.3489 | +0.0026 | 2.3004 (lam 0.25) | +0.0485 - 0.0091 | 1885% |
+| **all (full bank)** | 64 | 2.3463 | **2.4839** | **+0.1376** | **2.4046** (lam 0.3125) | **+0.0793 - 0.0132** | **57.7%** |
 
 rank 512 at demand-all: CE 2.4189 (lam 0.225, lr 1.5e-3 fallback — 3e-3
-NaNs even width-norm at this demand), +0.0650 +- 0.0120 nats, **47.2%**.
+NaNs even width-norm at this demand), +0.0650 - 0.0120 nats, **47.2%**.
 val_mixed mirrors (masked 1.5956 vs stock 1.4952, cost +0.1004).  The
 layer denominator is real (+0.138 nats = 62x the single-expert cost) and
 per-slot redundancy is high (top-1 and top-2 mask costs are near-identical
@@ -1131,9 +1131,9 @@ L2 e1 / L0 e3, one rank-64 width-norm wrap each, independent seeds) in for
 demand=all with per-core fitted lam (common grid + coordinate descent):
 | cores | trainable | lam* per core | CE @lam* | nats recovered | recovery% |
 |---|---|---|---|---|---|
-| 1 | 786,432 | [0.30] | 2.4043 | +0.0796 +- 0.0129 | 57.8% |
-| 2 | 1,572,864 | [0.25, 0.15] | 2.4164 | +0.0675 +- 0.0123 | 49.0% |
-| 3 | 2,359,296 | [0.10, 0.15, 0.05] | 2.4310 | +0.0529 +- 0.0078 | 38.4% |
+| 1 | 786,432 | [0.30] | 2.4043 | +0.0796 - 0.0129 | 57.8% |
+| 2 | 1,572,864 | [0.25, 0.15] | 2.4164 | +0.0675 - 0.0123 | 49.0% |
+| 3 | 2,359,296 | [0.10, 0.15, 0.05] | 2.4310 | +0.0529 - 0.0078 | 38.4% |
 
 Adding cores makes it WORSE: jointly-trained same-site wraps on one
 compensating task interfere (per-core lam shrinks; lam=1 overshoot grows
@@ -1149,17 +1149,17 @@ FREEZE-ABLE in ANY mode; the demand=all task SATURATES at one rank-64
 wrap's capacity (~58% of a full layer):**
 | mode | cores | lam* | CE @lam* | nats recovered | recovery% |
 |---|---|---|---|---|---|
-| joint (8c) | 1 | [0.30] | 2.4043 | +0.0796 +- 0.0129 | 57.8% |
-| joint (8c) | 2 | [0.25, 0.15] | 2.4164 | +0.0675 +- 0.0123 | 49.0% |
-| joint (8c) | 3 | [0.10, 0.15, 0.05] | 2.4310 | +0.0529 +- 0.0078 | 38.4% |
-| boosting (1 frozen + 2 residual) | 3 | [0.25, 0.10, 0.10] | 2.4056 | +0.0783 +- 0.0120 | 56.9% |
-| per-slot OUT-of-env (8d) | 8 | [0.1x6, 0.25, 0.1] | 2.5680 | -0.0840 +- 0.0592 | **-61.1%** |
-| per-slot **IN-env** (8e, the endgame shape) | 8 | [0.1x7, 0.25] | 2.4823 | +0.0016 +- 0.0332 | **+1.1%** |
+| joint (8c) | 1 | [0.30] | 2.4043 | +0.0796 - 0.0129 | 57.8% |
+| joint (8c) | 2 | [0.25, 0.15] | 2.4164 | +0.0675 - 0.0123 | 49.0% |
+| joint (8c) | 3 | [0.10, 0.15, 0.05] | 2.4310 | +0.0529 - 0.0078 | 38.4% |
+| boosting (1 frozen + 2 residual) | 3 | [0.25, 0.10, 0.10] | 2.4056 | +0.0783 - 0.0120 | 56.9% |
+| per-slot OUT-of-env (8d) | 8 | [0.1x6, 0.25, 0.1] | 2.5680 | -0.0840 - 0.0592 | **-61.1%** |
+| per-slot **IN-env** (8e, the endgame shape) | 8 | [0.1x7, 0.25] | 2.4823 | +0.0016 - 0.0332 | **+1.1%** |
 
 Boosting is flat vs one core (residual gains collapse to 0.1).  **Door 8e
 (the endgame shape: per-slot DATA fits under the demand=all ENVIRONMENT)
 COMPLETE: training atop the dead layer removes the environment-shift harm
-(-61.1% -> +1.1%) but creates NO capacity** (+0.0016 +- 0.033 nats; the
+(-61.1% -> +1.1%) but creates NO capacity** (+0.0016 - 0.033 nats; the
 top-k probe recovers -11.2% of even the COVERED demand => COMPOSITION is
 the binding limit, with top-8 slot coverage a secondary cap at 11.9% of
 the layer's CE demand).  **FREEZE VERDICT: NOT FREEZE-ABLE** — no
@@ -1193,18 +1193,18 @@ plugged+recal.  gap = CE_state - CE_masked (paired per-batch SE).
 
 | budget | ep | lam* | fit gap_add | HELD gap_add | UNSEEN3 gap_add | mem gap | flip? |
 |---|---|---|---|---|---|---|---|
-| 11k  | 46.6 | 1.0000 | -0.9712 +- 0.0375 | +0.3825 +- 0.0261 | +0.3375 +- 0.0157 | 1.3536 | no |
-| 50k  | 10.2 | 0.3125 | -0.0153 +- 0.0030 | +0.0236 +- 0.0083 | +0.0068 +- 0.0013 | 0.0389 | no |
-| 200k | 2.6  | 0.1875 | -0.0028 +- 0.0005 | **+0.0003 +- 0.0005** | +0.0013 +- 0.0004 | 0.0031 | no |
-| 500k | 2.0  | 0.3125 | -0.0030 +- 0.0014 | +0.0010 +- 0.0011 | +0.0032 +- 0.0009 | 0.0040 | no |
+| 11k  | 46.6 | 1.0000 | -0.9712 - 0.0375 | +0.3825 - 0.0261 | +0.3375 - 0.0157 | 1.3536 | no |
+| 50k  | 10.2 | 0.3125 | -0.0153 - 0.0030 | +0.0236 - 0.0083 | +0.0068 - 0.0013 | 0.0389 | no |
+| 200k | 2.6  | 0.1875 | -0.0028 - 0.0005 | **+0.0003 - 0.0005** | +0.0013 - 0.0004 | 0.0031 | no |
+| 500k | 2.0  | 0.3125 | -0.0030 - 0.0014 | +0.0010 - 0.0011 | +0.0032 - 0.0009 | 0.0040 | no |
 
 **The gap collapses with data and SATURATES AT PARITY.**  11k reproduces
 the door25 caveat exactly (fit 1.072/0.101 vs HELD 1.067/1.450 — a
 46-epoch memorization read: fit gap -0.97, held gap +0.38, mem gap 1.35).
 50k (10 ep): mem gap 34.8x smaller (0.039).  **200k (2.6 ep): held gap
-+0.0003 +- 0.0005 — statistically ZERO** (0.6 SE above zero, not below);
++0.0003 - 0.0005 — statistically ZERO** (0.6 SE above zero, not below);
 mem gap 0.0031 (437x smaller than 11k).  500k (2.0 ep, 489 steps): no
-further gain — held +0.0010 +- 0.0011, mem 0.0040; the curve is flat
+further gain — held +0.0010 - 0.0011, mem 0.0040; the curve is flat
 200k->500k.  UNSEEN3 tracks HELDOUT in sign at every budget (the gap is
 distributional, not a held-out artifact) and is consistently smaller.
 
@@ -1318,6 +1318,17 @@ co-tenant) gives B*T ∈ {128, 192, 256} OK and {320, 384, 512} FAIL with
 v0.6 therefore trains at bs1×256 with the step count raised to keep FEED
 ≥200k (782 steps × 256 = 200,192 tok-slots; v0.5's 500×512 = 256k at the
 old shape). Every new spine needs its own shape grid before the first fit.
+
+Row-scale guard (second spine-specific lesson): the v0 prototype init for
+registry rows (`home_h.mean · sqrt(d_r)`) saturates the passport softmax on
+the Qwen spine (hidden norms ~2x Phi's) — p_new = 1.0 on home AND base gives
+zero recal gradient (reject/mass loss stuck at 10.045, first==last in every
+fit_*.json). Fix: scale each graft row to the layer's mean STOCK-row norm
+before recal (direction of the home prototype, magnitude of the bank's own
+rows). With the fix the closing recal converges (p_home 0.89–0.96, p_base
+0.006–0.018) and the assembled bank delivers: all 5 homes improve, base tax
+−0.0035, memory CE 1.505→0.053 (taught token "Kepler" surfaces in the chat
+probe).
 
 ## §10.9 VARIABLE-ACTIVATION PLUG GATING (2026-10-13 — variable-k rung 1)
 
@@ -1524,4 +1535,70 @@ plug-compute cut). What it takes (rung-2 levers, in order of leverage):
    home plug's own layer reserves its slot before the bank budget is spent).
 4. **Non-causal p-ranked top-m** (second policy pass over cached bank
    scores) — the true score-ranked variable-k.
+
+### 10.9.1 Closing the sibling pair (2026-10-13 — rung-2 #1: sibling row recal)
+
+The tau=0.5 ship bar failed on exactly one axis: mem-trio pairwise harm
+(mem_pet->mem_words +0.202 / mem_edit->mem_words +0.143, identical in the
+ungated baseline) — the trio rows rate each other's episodes at p~0.99.
+The named fix is delivery-side: the v0.5.1 cross-fire recal recipe (the
+lever that took k3 off-home p 0.028->0.0004) with the siblings' episodes
+ON the reject side.
+
+Recipe per mem row (d6.train_rows_one, only that row's grad):
+  stream = own-home episodes (label 1, tiled home-weight) + the other two
+           trio episodes + base (label 0)
+  reject_w 20-40, mass_w 2.0, owner_target 0.85, lr 0.02-0.05, steps 120-200
+  GUARD-CHECKPOINTED in chunks: after every chunk re-check (a) own-home CE
+  under tau=0.5 delivery within +0.02 of the pre-recal value and (b) the
+  taught fact token ("What is my cat's name?" -> "Kepler"); keep the chunk
+  with the lowest reject-side p that PASSES both, early-stop + revert at
+  the first chunk that breaks a guard.
+
+Guard lesson (first attempt, mem_pet): the un-chunked recipe at reject_w 40
+with a 2.5:1 reject:home ratio over-suppressed the row — p_reject 0.506->
+0.0088 but own-home CE 0.029->0.147 and the fact token flipped (guard
+reverted the row; the assembly was never left in that state — joint_state
+is written once at the end and backed up to joint_state_pre_sibrecal.pt).
+Tiling the home stream (home-weight 2) + reject_w 20 + chunked early-stop
+trains cleanly: every chunk kept, own-home CE and Kepler stable.
+
+RESULTS: **Sibling harm, before -> after (LOO harm(j->h) = CE_h(all) - CE_h(j off);
+positive = j hurts h; the tau0.5 matrix is the ship config):**
+
+| pair | before (ungated / tau0.5) | after recal (tau0.5 / ungated) |
+|---|---|---|
+| mem_pet->mem_words | +0.2035 / +0.2021 | -0.0189 / -0.0191 |
+| mem_edit->mem_words | +0.138 / +0.143 | -0.0229 / -0.0181 |
+| mem_pet->mem_edit | +0.004 / +0.005 | +0.0058 / +0.0059 |
+| mem_edit->mem_pet | +0.008 / +0.009 | +0.0061 / +0.005 |
+| worst non-sibling (code->glm) | +0.0109 / +0.0091 | +0.0091 / ['code', 'glm_cybersec'] |
+| **worst sibling** | **+0.2035 / +0.2021** | **+0.0061 (mem_edit->mem_pet)** |
+
+**Home CE check (tau=0.5 delivery):** mem_pet 0.0399 / mem_edit 0.2581 / mem_words 0.2572 (tau=0.5 delivery; pre-recal class 0.029 / 0.261 / 0.472).  The sibling-crowding
+tax on mem_words was real and is now GONE: 0.472 -> 0.2572
+(the 0.206 flood-sum entry for mem_words in the varact frontier was exactly
+this pair).
+
+**Kepler probe (sacred):** "Your cat is named Kepler." kepler=True
+— unchanged through every recal chunk (the guard reverted any row whose
+chunk flipped it; final probe re-run on the shipped state).
+
+**Family-margin combined (rung-2 #2, two-pass measurement form, margin
+0.05):** not run / pending.  With the rows selective the plain tau=0.5 gate is
+already sufficient; family-margin stays as the optional belt-and-braces
+(non-causal second pass) documented in the rung-2 list.
+
+**SHIP VERDICT: all three bars hold — tau=0.5 SHIPPED as the default
+delivery policy.**  compute cut 77.3% (>=30%), green home CE held (the
+trio improved; worst green delta across the bank stays in the +/-0.006
+noise band from the varact frontier), pairwise harm now 0.0061 worst
+sibling / 0.0091 worst non-sibling (bar 0.02).  Wiring: `chat_v05.py` +
+`chat_v06.py` install `varact_gate.install_varact(handles, POLICY)` right
+after `build_state`; policy priority `--varact` > `joint_state.pt["varact"]`
+> `DEFAULT_VARACT="tau0.5"`; `--varact off` restores plain ungated
+delivery (bit-identical to pre-varact serving), `--lam-override` unchanged.
+`joint_state.pt` carries `varact: "tau0.5"`; backup
+`joint_state_pre_sibrecal.pt` holds the pre-recal rows.}
+
 

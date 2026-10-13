@@ -48,10 +48,17 @@ import graft_d0_parity as d0  # noqa: E402
 import graft_d2_crossfamily as d2  # noqa: E402
 import door6_expert_mix as d6  # noqa: E402
 import grafted_spine_v0 as g0  # noqa: E402
+import varact_gate as vact  # noqa: E402  variable-activation plug gating
 
 DEFAULT_MODEL = "/data/tliao/v06_models/Qwen1.5-MoE-A2.7B-Chat"
 DEFAULT_REGISTRY = "/data/tliao/v06_out/registry_qwen2moe.pt"
 DEFAULT_PLUGINS = "/data/tliao/v06_out"
+
+# Variable-activation plug gating (lab/varact_gate.py, MODULAR_MOE 10.9):
+# tau=0.5 shipped default (validated on the v0.5 bank; same delivery
+# contract here).  --varact off|tau0.3|tau0.5|... overrides; joint_state
+# ["varact"] overrides DEFAULT_VARACT; CLI wins over everything.
+DEFAULT_VARACT = "tau0.5"
 
 # The graft question from the user's session — the impress-test (a).
 GRAFT_QUESTION = ("What would you say if I told you I grafted Kimi K3, GLM, "
@@ -414,6 +421,11 @@ def main() -> int:
     ap.add_argument("--default-lam", type=float, default=0.5)
     ap.add_argument("--lam-override", default="",
                     help="comma name=val list, e.g. mem_pet=0.8")
+    ap.add_argument("--varact", default="",
+                    help="variable-activation plug-gating policy: off|"
+                         "tau0.3|tau0.5|tau0.7|topm1|topm2|topm3|"
+                         "adaptive_tau0.5_m2 (default: joint_state flag or "
+                         "DEFAULT_VARACT=%s)" % DEFAULT_VARACT)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     args.lam_map = {}
@@ -449,6 +461,26 @@ def main() -> int:
     else:
         (model, tok, blocks, fam, gates, handles, info,
          missing, _entries, _banks) = build_state(args, device)
+        # variable-activation plug gating (MODULAR_MOE 10.9): shipped
+        # default tau=0.5.  Priority: --varact > joint_state["varact"] >
+        # DEFAULT_VARACT; "off" keeps plain ungated delivery.
+        pol_name = args.varact
+        if not pol_name:
+            js_path = os.path.join(args.plugins_dir, "joint_state.pt")
+            if os.path.exists(js_path):
+                js = torch.load(js_path, map_location="cpu",
+                                weights_only=False)
+                pol_name = str(js.get("varact") or "")
+        pol_name = pol_name or DEFAULT_VARACT
+        if pol_name == "off":
+            print("[chat] varact gating OFF (ungated delivery)", flush=True)
+        elif pol_name not in vact.POLICIES:
+            print(f"[chat] unknown varact policy {pol_name!r} — ungated",
+                  flush=True)
+        else:
+            vact.install_varact(handles, vact.POLICIES[pol_name]())
+            print(f"[chat] varact gating ON: {pol_name} "
+                  f"(--varact off to disable)", flush=True)
 
     dec = None
     if KVDecoder is not None:

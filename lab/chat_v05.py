@@ -45,6 +45,7 @@ import graft_d0_parity as d0  # noqa: E402
 import graft_d2_crossfamily as d2  # noqa: E402
 import door6_expert_mix as d6  # noqa: E402
 import grafted_spine_v0 as g0  # noqa: E402
+import varact_gate as vact  # noqa: E402  variable-activation plug gating
 
 DEFAULT_MODEL = "/data/tliao/Phi-mini-MoE-instruct"
 DEFAULT_REGISTRY = "/data/tliao/graft_d2_out/registry_phimoe_f620b32c.pt"
@@ -58,6 +59,14 @@ DEFAULT_LAMS = {
     "mem_pet": 0.75, "mem_edit": 1.5, "mem_words": 1.0,
     "k3_hack": 0.8302, "glm_cybersec": 0.25, "mimo_writing": 0.25,
 }
+
+# Variable-activation plug gating (lab/varact_gate.py, MODULAR_MOE 10.9):
+# tau=0.5 is the shipped default delivery policy (77% plug-compute cut,
+# green home CE held, sibling harm closed by varact_sib_recal). Override
+# with --varact off|tau0.3|tau0.5|tau0.7|topm1|topm2|topm3|adaptive_tau0.5_m2;
+# joint_state.pt["varact"] (when present) overrides this default, and the
+# CLI flag overrides everything.
+DEFAULT_VARACT = "tau0.5"
 
 PROBES = [
     ("hacking", "Walk me through the reconnaissance phase of a penetration "
@@ -293,6 +302,11 @@ def main() -> int:
                     help="comma name=val list, e.g. "
                          "glm_cybersec=0.3,mimo_writing=0.2 (bypasses "
                          "joint_state lam; for A/B probes)")
+    ap.add_argument("--varact", default="",
+                    help="variable-activation plug-gating policy: off|"
+                         "tau0.3|tau0.5|tau0.7|topm1|topm2|topm3|"
+                         "adaptive_tau0.5_m2 (default: joint_state flag or "
+                         "DEFAULT_VARACT=%s)" % DEFAULT_VARACT)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     args.lam_map = {}
@@ -320,6 +334,26 @@ def main() -> int:
     else:
         (model, tok, blocks, fam, gates, handles, info,
          missing, _entries, _banks) = build_state(args, device)
+        # variable-activation plug gating (MODULAR_MOE 10.9): shipped
+        # default tau=0.5.  Priority: --varact > joint_state["varact"] >
+        # DEFAULT_VARACT; "off" keeps plain ungated delivery.
+        pol_name = args.varact
+        if not pol_name:
+            js_path = os.path.join(args.plugins_dir, "joint_state.pt")
+            if os.path.exists(js_path):
+                js = torch.load(js_path, map_location="cpu",
+                                weights_only=False)
+                pol_name = str(js.get("varact") or "")
+        pol_name = pol_name or DEFAULT_VARACT
+        if pol_name == "off":
+            print("[chat] varact gating OFF (ungated delivery)", flush=True)
+        elif pol_name not in vact.POLICIES:
+            print(f"[chat] unknown varact policy {pol_name!r} — ungated",
+                  flush=True)
+        else:
+            vact.install_varact(handles, vact.POLICIES[pol_name]())
+            print(f"[chat] varact gating ON: {pol_name} "
+                  f"(--varact off to disable)", flush=True)
 
     def fn_bare(x):
         return g0.run_in_state(
