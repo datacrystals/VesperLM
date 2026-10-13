@@ -68,6 +68,19 @@ DEFAULT_LAMS = {
 # CLI flag overrides everything.
 DEFAULT_VARACT = "tau0.5"
 
+# Decode-time taught-token bonus (MODULAR_MOE 10.10, the named v0.1
+# fact-token lever): add nats to a memory's taught fact tokens at decode
+# while that memory row is in play (retrieval-scoped: hot at the decode
+# position or anywhere in the current forward).  Measured on the
+# controlled multi-turn bar: --mem-bonus 3.0 answers Kepler at turn 4 on
+# all 3 scaffolds and turn 8 on 2/3 (sacred single-turn preserved) —
+# but on the LIVE chat transcript it perturbs non-memory turns (the
+# retrieval scope is too coarse: sibling rows go hot on unrelated turns),
+# so the DEFAULT IS OFF until the scope is row-selective.  Enable with
+# --mem-bonus 3.0 for the fact-stability behavior.
+DEFAULT_MEM_BONUS = "off"
+DEFAULT_MEM_TOPK = 0
+
 PROBES = [
     ("hacking", "Walk me through the reconnaissance phase of a penetration "
                 "test. What kind of information would you gather?"),
@@ -307,6 +320,22 @@ def main() -> int:
                          "tau0.3|tau0.5|tau0.7|topm1|topm2|topm3|"
                          "adaptive_tau0.5_m2 (default: joint_state flag or "
                          "DEFAULT_VARACT=%s)" % DEFAULT_VARACT)
+    ap.add_argument("--mem-bonus", default=DEFAULT_MEM_BONUS,
+                    help="decode-time taught-token bonus (nats) applied to "
+                         "live memory rows — the v0.1 fact-token lever; "
+                         "'0' or 'off' disables (default %s)"
+                         % DEFAULT_MEM_BONUS)
+    ap.add_argument("--mem-bonus-tau", type=float, default=0.5,
+                    help="p_home threshold for the bonus scope (matches "
+                         "the shipped tau=0.5 delivery rule)")
+    ap.add_argument("--mem-bonus-topk", type=int, default=DEFAULT_MEM_TOPK,
+                    help="margin-to-token tie-break: bonus only when a "
+                         "taught token is inside the top-K (0 = always "
+                         "when live; default %d)" % DEFAULT_MEM_TOPK)
+    ap.add_argument("--mem-boost", action="store_true",
+                    help="also install retrieval-triggered row boost for "
+                         "memory rows (measured: leaks sibling mem content "
+                         "into long transcripts — off by default)")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     args.lam_map = {}
@@ -331,9 +360,10 @@ def main() -> int:
         fam = d2.family_for(d2.detect_family(model), blocks)
         gates, handles = None, None
         info, missing = [], []
+        bonus, tag_col = None, {}
     else:
         (model, tok, blocks, fam, gates, handles, info,
-         missing, _entries, _banks) = build_state(args, device)
+         missing, site_entries, _banks) = build_state(args, device)
         # variable-activation plug gating (MODULAR_MOE 10.9): shipped
         # default tau=0.5.  Priority: --varact > joint_state["varact"] >
         # DEFAULT_VARACT; "off" keeps plain ungated delivery.
@@ -345,15 +375,44 @@ def main() -> int:
                                 weights_only=False)
                 pol_name = str(js.get("varact") or "")
         pol_name = pol_name or DEFAULT_VARACT
+        wrappers = []
         if pol_name == "off":
             print("[chat] varact gating OFF (ungated delivery)", flush=True)
         elif pol_name not in vact.POLICIES:
             print(f"[chat] unknown varact policy {pol_name!r} — ungated",
                   flush=True)
         else:
-            vact.install_varact(handles, vact.POLICIES[pol_name]())
+            wrappers = vact.install_varact(handles, vact.POLICIES[pol_name]())
             print(f"[chat] varact gating ON: {pol_name} "
                   f"(--varact off to disable)", flush=True)
+        # fact-stability fix (MODULAR_MOE 10.10 — the named v0.1 levers):
+        # retrieval-scoped decode-time bonus on taught fact tokens.
+        bonus, tag_col = None, {}
+        mb = str(args.mem_bonus).strip().lower()
+        if mb in ("off", "0", "0.0"):
+            print("[chat] mem bonus OFF", flush=True)
+        else:
+            beta = float(mb)
+            tag_col = {}
+            for host, ents in site_entries.items():
+                for j, en in enumerate(ents):
+                    tag_col[en["tag"]] = (host, j)
+            if beta > 0:
+                bonus = vact.TaughtTokenBonus(beta, args.mem_bonus_tau,
+                                              top_k=args.mem_bonus_topk)
+                bonus.note(tok)
+                print(f"[chat] mem bonus ON: beta={beta} "
+                      f"tau={args.mem_bonus_tau} "
+                      f"top_k={args.mem_bonus_topk}", flush=True)
+        if bonus is not None and wrappers and args.mem_boost:
+            # retrieval-triggered row boost: a memory row hot anywhere in
+            # the forward delivers through the reply.  Measured off by
+            # default: forcing mem-row delivery leaks sibling memory
+            # content (mem_words list-ification) into long transcripts.
+            vact.set_policy(wrappers, vact.RetrievalBoostPolicy(
+                tau=args.mem_bonus_tau))
+            print("[chat] retrieval-boost delivery ON for memory rows",
+                  flush=True)
 
     def fn_bare(x):
         return g0.run_in_state(
@@ -363,9 +422,15 @@ def main() -> int:
     def fn_graft(x):
         if gates is None:
             return fn_bare(x)
+
+        def run():
+            lg = d0.model_logits(model, x.to(device))
+            if bonus is not None:
+                lg = bonus.edit(lg, vact.capture_tags(gates, tag_col))
+            return lg
+
         return g0.run_in_state(
-            model, blocks, fam, gates, handles, "both",
-            lambda: d0.model_logits(model, x.to(device)))
+            model, blocks, fam, gates, handles, "both", run)
 
     fn0 = fn_bare if args.bare else fn_graft
     if args.probe:

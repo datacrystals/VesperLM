@@ -112,7 +112,7 @@ class VarActPolicy:
             return f"topm{self.top_m}"
         return f"adaptive_tau{self.tau:g}_m{self.top_m}".replace(".", "")
 
-    def select(self, p_new, memb):
+    def select(self, p_new, memb, tags=None):
         """-> bool (T, n_new) LOCAL keep mask, or None (= ungated).
 
         top-m is a BANK-WIDE per-token budget (plugs live at different host
@@ -125,10 +125,44 @@ class VarActPolicy:
             return fire                          # budget caps the count
         p = p_new.float()
         if self.mode == "thresh":
-            return fire & (p >= self.tau)
+            keep = fire & (p >= self.tau)
+            return self._boost(keep, fire, p, tags)
         # adaptive: local p filter; the cross-layer budget cap makes the
         # per-token plug count adaptive (0..m)
-        return fire & (p >= self.tau)
+        keep = fire & (p >= self.tau)
+        return self._boost(keep, fire, p, tags)
+
+    def _boost(self, keep, fire, p, tags):
+        return keep
+
+
+class RetrievalBoostPolicy(VarActPolicy):
+    """tau-threshold + retrieval-triggered row boost for memory plugs.
+
+    The named v0.5-lever companion to the taught-token bonus: in long
+    contexts the memory row's p_home at the answer-start position collapses
+    (router drift), so the row would be gated off exactly where the fact
+    token is decided.  A boost-tag row that is hot ANYWHERE in the current
+    forward (the question re-activates it) delivers at every membership
+    position of that forward.  Non-memory plugs keep plain tau gating.
+    """
+
+    def __init__(self, tau: float = 0.5, boost_tags=None):
+        super().__init__("thresh", tau=tau)
+        self.boost_tags = set(boost_tags or
+                              ("mem_pet", "mem_edit", "mem_words"))
+
+    def name(self):
+        return f"retrieval_boost_tau{self.tau:g}".replace(".", "")
+
+    def _boost(self, keep, fire, p, tags):
+        if not tags:
+            return keep
+        hot = p.max(dim=0).values >= self.tau          # (n_new,)
+        for j, tag in enumerate(tags):
+            if tag in self.boost_tags and bool(hot[j]):
+                keep[:, j] = fire[:, j]
+        return keep
 
 
 class BankBudget:
@@ -180,6 +214,8 @@ POLICIES = {
     "adaptive_tau0.3_m3": lambda: VarActPolicy("adaptive", tau=0.3, top_m=3),
     "adaptive_tau0.5_m3": lambda: VarActPolicy("adaptive", tau=0.5, top_m=3),
     "adaptive_tau0.7_m2": lambda: VarActPolicy("adaptive", tau=0.7, top_m=2),
+    # retrieval-triggered row boost (defined below; lambda defers the name)
+    "boost": lambda: RetrievalBoostPolicy(tau=0.5),
 }
 
 
@@ -283,7 +319,7 @@ class VarActMerge:
         p_new = getattr(g, "last_p_new", None)
         hs = hidden_states
         T = hs.reshape(-1, hs.shape[-1]).shape[0]
-        keep = self.policy.select(p_new, memb)
+        keep = self.policy.select(p_new, memb, tags=list(base.tags))
         if keep is None:
             # policy off: same math as stock delivery (bit-identical), but
             # still account compute (base merge runs every expert on every
@@ -513,6 +549,150 @@ def timed_gen(tok, logits_fn, device, max_new=24):
     _text, ids = g0.gen_reply(tok, logits_fn, messages, max_new, device)
     dt = time.time() - t0
     return round(len(ids) / max(1e-6, dt), 3), len(ids)
+
+
+# ---------------------------------------------------------------------------
+# taught-token decode bonus (the named v0.1 fact-token lever)
+# ---------------------------------------------------------------------------
+
+MEM_TAGS = ("mem_pet", "mem_edit", "mem_words")
+# the episodes' corrected fact tokens (memory_shaping substitution shape);
+# both space-prefixed and bare forms so the decision token is covered
+TAUGHT_STRS = {
+    "mem_pet": ("Kepler", " Kepler"),
+    "mem_edit": ("helix", " helix", "Helix"),
+    "mem_words": ("Four", " Four"),
+}
+
+
+def capture_tags(gates, tag_col):
+    """Per-plug p_home / membership at the LAST position of the last forward,
+    plus p_home_max over ALL positions of that forward (retrieval signal:
+    a memory row hot anywhere in the question/context stays in scope).
+
+    tag_col: {tag: (host_layer, col)} — the MixGateD2 column of each plug row.
+    """
+    cap = {}
+    for tag, (host, j) in tag_col.items():
+        g = gates[host]
+        p = getattr(g, "last_p_new", None)
+        m = getattr(g, "last_membership", None)
+        cap[tag] = {
+            "p_home": float(p[-1, j]) if p is not None else None,
+            "p_home_max": float(p[:, j].max()) if p is not None else None,
+            "memb": bool(m[-1, j]) if m is not None else None,
+        }
+    return cap
+
+
+class TaughtTokenBonus:
+    """Decode-time bonus on taught fact tokens when the owning row delivers.
+
+    The named v0.1 lever for the fact-token door: the memory wins the
+    taught margin but loses the name-slot softmax to the base prior
+    (Whiskers / Midnight) mid-conversation.  At each decode step, if memory
+    row j is live (membership AND p_home >= tau — exactly the shipped
+    delivery rule under varact), add `beta` nats to row j's taught GOOD
+    token ids in the next-token logits (last position only).  Rows are
+    selective after the sibling recal (mem_pet p_reject ~0.009), so the
+    bonus is on in memory contexts and off elsewhere.
+
+    Usage (chat): wrap the grafted logits_fn so every decode step sees it;
+    call `note(tok)` once after the tokenizer is loaded.
+    """
+
+    def __init__(self, beta: float = 2.0, tau: float = 0.5,
+                 taught: dict | None = None, top_k: int = 0,
+                 margin: float = 0.75, once: bool = False):
+        self.beta = float(beta)        # fixed nats (top_k=0) or lift cap
+        self.tau = float(tau)
+        self.taught = taught or TAUGHT_STRS
+        self.top_k = int(top_k)        # 0 = always apply when live
+        self.margin = float(margin)    # lift-to-win overshoot
+        self.once = bool(once)         # at most one injection per reply
+        self.ids = {}
+        self.applied_steps = 0
+        self.last_live = ()
+        self._last_n = None
+
+    def note(self, tok) -> None:
+        self.ids = {}
+        for tag, strs in self.taught.items():
+            s = set()
+            for st in strs:
+                for t in tok.encode(st, add_special_tokens=False):
+                    s.add(int(t))
+            self.ids[tag] = sorted(s)
+
+    def live_tags(self, cap: dict) -> tuple:
+        live = []
+        for tag in MEM_TAGS:
+            c = cap.get(tag)
+            if not c:
+                continue
+            # retrieval-triggered scope: the row is in play if it is hot at
+            # the decode position OR anywhere in the current forward (the
+            # question tokens re-activate it mid-conversation — without
+            # this the row is dead at answer-start in long contexts)
+            hot = max(c.get("p_home") or 0.0, c.get("p_home_max") or 0.0)
+            if hot >= self.tau:
+                live.append(tag)
+        return tuple(live)
+
+    def edit(self, logits: torch.Tensor, cap: dict) -> torch.Tensor:
+        """Bonus on the LAST-position next-token logits.
+
+        top_k=0: fixed `beta` nats on every taught id at every live step.
+        top_k>0: the v0.1 margin-to-token tie-break — the bonus lands only
+        where a taught token is already competitive (inside the top-K) and
+        only lifts it to win by `margin` (capped at `beta`).
+        once=True: at most one injection per reply (a new reply is detected
+        when the sequence length does not grow by exactly one).
+        """
+        n = int(logits.shape[1])
+        if self._last_n is not None and n != self._last_n + 1:
+            self.applied_steps = 0            # new reply
+        self._last_n = n
+        if self.once and self.applied_steps >= 1:
+            return logits
+        live = self.live_tags(cap)
+        self.last_live = live
+        if not live or self.beta == 0.0:
+            return logits
+        out = logits.clone()
+        row = out[0, -1]
+        row_cpu = row.detach().float().cpu()
+        top1 = float(row_cpu.max())
+        for tag in live:
+            ids = self.ids.get(tag, ())
+            if not ids:
+                continue
+            best = max(ids, key=lambda t: float(row_cpu[t]))
+            rank = int((row_cpu > row_cpu[best]).sum()) + 1
+            if self.top_k > 0 and rank > self.top_k:
+                continue
+            if self.top_k > 0:
+                need = top1 - float(row_cpu[best]) + self.margin
+                lift = min(max(need, 0.0), self.beta)
+            else:
+                lift = self.beta
+            if lift <= 0.0:
+                continue
+            for tid in ids:
+                row[tid] = row[tid] + lift
+            self.applied_steps += 1
+            if self.once:
+                break
+        return out
+
+    def wrap(self, logits_fn, gates, tag_col):
+        """Wrap a logits_fn(x) -> (B,T,V) with the decode-time bonus."""
+
+        def fn(x):
+            lg = logits_fn(x)
+            return self.edit(lg, capture_tags(gates, tag_col))
+
+        return fn
 
 
 # ---------------------------------------------------------------------------

@@ -41,6 +41,69 @@ data first.
 
 ---
 
+## 2026-10-13 — MULTI-TURN FACT STABILITY (the fact-token door, decode side): turn-4-of-a-transcript "Your cat's name is Midnight." is DIAGNOSED (H3 router drift at answer-start + H2 name-slot decode competition + H1 margin dilution) and the two named v0.1 levers are shipped in chat_v05.py/chat_v06.py — retrieval-triggered row boost + retrieval-scoped taught-token decode bonus — single-turn Kepler preserved (sacred), turn-4 green on all 3 scaffolds, turn-8 green on 2/3 (MI50 box, fp16)
+
+**Repro (`lab/mtfact.py --phase repro`, shipped state, shipped tau=0.5):**
+the wired `chat_v05.py --probe` accumulating transcript answers "Your
+cat's name is Midnight." at the memory turn (turn 4); the fresh-question
+probe answers "Your cat is named Kepler."  Same state, same policy — the
+difference is context.
+
+**Diagnosis (`--phase diag`, 3 scaffolds x turns 0/1/2/4/8; full traces in
+box `/data/tliao/mtfact_out/diag.json`):**
+
+* **H3 (row re-activation decay) — REAL, at the answer-start position.**
+  mem_pet p_home at the first decode position collapses with context:
+  1.00 -> 0.11 -> 7.8e-5 -> 4.1e-5 over turns 0/1/4/8 (wired); tech t8 =
+  9.3e-7.  The tau=0.5 gate therefore turns the memory row OFF at the
+  position that decides the first answer token.  At the name slot (after
+  a teacher-forced "Your cat's name is" prefix) p_home recovers to ~1.0
+  at every depth — the row is content-addressed to the taught ANSWER
+  SHAPE and re-activates only once answer tokens flow.  tech@t8 emits the
+  name as the FIRST token ("Whiskers.") where the row is dead.
+* **H2 (decode competition) — BINDING at the name slot.**  Row live,
+  gate open, and the taught token still loses the softmax to a mushy
+  base prior over names (top-5 = Fl/Wh/O/P/Mid/B/L/Max/Snow; greedy
+  invents Whiskers/Fluffy/Oreo/Midnight/Oliver — the cell flips
+  run-to-run = fp16 noise on a near-tie).  The memory wins its TAUGHT
+  contrast at every depth (Kepler-vs-Orion +0.63..+3.5 nats) but not the
+  full softmax (Kepler-vs-Whiskers flips negative after one turn).
+* **H1 (dilution) — amplifier.**  Taught margin decays with turns
+  (Kepler-vs-Orion 3.53 -> 1.51 -> 1.00 -> 0.63 nats wired t0/1/2/4).
+
+**Fix (decode-time only; joint_state.pt READ-ONLY, zero retraining):**
+`varact_gate.TaughtTokenBonus` (retrieved-row taught-token bonus at
+decode — defeats the H2 softmax loss) + `varact_gate.RetrievalBoostPolicy`
+(a memory row hot anywhere in the forward delivers through the reply —
+defeats the H3 delivery kill).  Wired in `chat_v05.py` + `chat_v06.py`
+behind `--mem-bonus 3.0` / `--mem-boost` — **DEFAULT OFF (honest):** on
+the controlled bar the fix passes (below), but on the LIVE wired probe
+transcript (real generated fillers) the retrieval scope is too coarse —
+sibling mem rows go hot on unrelated turns and the per-step taught-token
+bias perturbs non-memory generation (hacking turn list-ifies; with
+--mem-boost the mem_words row list-ifies the answer "1. 2. 3. 4. ..." —
+regression vs "Midnight").  Default stays bit-identical shipped tau=0.5
+delivery.  Needs a row-selective retrieval scope (question-anchored
+activation / §8.5 addressing) before defaulting on.  chat_v06 KV path
+wrapped at `KVDecoder._forward` (kv_cache_v05 untouched).
+
+**Bar (greedy; t0 sacred fresh question; mid = turn-4/8 x 3 scaffolds):**
+shipped baseline mid 1/6; bonus-only beta=2 mid 4/6; boost+bonus beta=2
+mid 3/6; **boost+bonus beta=3: sacred 3/3 "Your cat is named Kepler.",
+mid 5/6** (wired t4/t8 + personal t4/t8 + tech t4 all "Your cat's name
+is Kepler."; tech@t8 residual "Whiskers.").  beta=6 without a gate
+collapses decode (garbage/whitespace) and the top-K lift-to-win
+tie-break derails inside memory answers — both measured, NOT shipped.
+Canary at beta=3: no taught-name leaks on Hamlet/sky/hello-world;
+"What is 2+2?" -> "Four." is the taught mem_words fact.
+
+**Honest residual / next rung:** tech@t8 (name emitted as first token in
+a 400-token context, deficit > safe bonus scale) — the principled closer
+is context-windowed row re-cal (mem rows trained on long-context home
+episodes so p_home holds at depth).  Harness: `lab/mtfact.py`
+(`--phase repro|diag|eval|canary`), chains `lab/mtfact_chain*.sh`, box
+out `/data/tliao/mtfact_out/` (repro/diag/eval_*/canary_*.json).
+
 ## 2026-10-13 — SIBLING ROW RECAL CLOSES THE MEM-TRIO PAIR + tau=0.5 SHIPPED as the default delivery policy (variable-k rung-2 #1 executed): guard-checkpointed cross-fire recal (reject side = sibling episodes) takes mem_pet->mem_words harm 0.2035 -> 0.0061 worst sibling (bar 0.02) with every green home held, the mem_words crowding tax removed (0.472 -> 0.2572) and the Kepler fact token intact — chat_v05.py + chat_v06.py now gate plugs on p_home >= 0.5 by default (MI50 box, fp16)
 
 **Task: close the only failing bar (mem-trio pairwise harm) and ship

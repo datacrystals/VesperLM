@@ -426,6 +426,21 @@ def main() -> int:
                          "tau0.3|tau0.5|tau0.7|topm1|topm2|topm3|"
                          "adaptive_tau0.5_m2 (default: joint_state flag or "
                          "DEFAULT_VARACT=%s)" % DEFAULT_VARACT)
+    ap.add_argument("--mem-bonus", default="off",
+                    help="decode-time taught-token bonus (nats) for live "
+                         "memory rows (v0.1 fact-token lever).  '3.0' is "
+                         "the measured fact-stability config (turn-4/8 "
+                         "Kepler on the controlled bar); DEFAULT OFF — "
+                         "on live multi-turn transcripts the retrieval "
+                         "scope perturbs non-memory turns until it is "
+                         "row-selective.  'off' = plain tau delivery")
+    ap.add_argument("--mem-bonus-tau", type=float, default=0.5,
+                    help="p_home threshold for the bonus scope")
+    ap.add_argument("--mem-bonus-topk", type=int, default=0,
+                    help="margin-to-token tie-break gate: bonus only when "
+                         "a taught token is inside the top-K (0 = always "
+                         "when live — the shipped form; the gated forms "
+                         "were measured and are NOT shipped)")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     args.lam_map = {}
@@ -466,9 +481,10 @@ def main() -> int:
         fam = d2.family_for(d2.detect_family(model), blocks)
         gates, handles = None, None
         info, missing = [], []
+        bonus, tag_col = None, {}
     else:
         (model, tok, blocks, fam, gates, handles, info,
-         missing, _entries, _banks) = build_state(args, device)
+         missing, site_entries, _banks) = build_state(args, device)
         # variable-activation plug gating (MODULAR_MOE 10.9): shipped
         # default tau=0.5.  Priority: --varact > joint_state["varact"] >
         # DEFAULT_VARACT; "off" keeps plain ungated delivery.
@@ -480,15 +496,43 @@ def main() -> int:
                                 weights_only=False)
                 pol_name = str(js.get("varact") or "")
         pol_name = pol_name or DEFAULT_VARACT
+        wrappers = []
         if pol_name == "off":
             print("[chat] varact gating OFF (ungated delivery)", flush=True)
         elif pol_name not in vact.POLICIES:
             print(f"[chat] unknown varact policy {pol_name!r} — ungated",
                   flush=True)
         else:
-            vact.install_varact(handles, vact.POLICIES[pol_name]())
+            wrappers = vact.install_varact(handles, vact.POLICIES[pol_name]())
             print(f"[chat] varact gating ON: {pol_name} "
                   f"(--varact off to disable)", flush=True)
+        # fact-stability fix (MODULAR_MOE 10.10 — the named v0.1 levers):
+        # retrieval-scoped decode-time bonus on taught fact tokens.
+        bonus, tag_col = None, {}
+        mb = str(args.mem_bonus).strip().lower()
+        if mb in ("off", "0", "0.0"):
+            print("[chat] mem bonus OFF", flush=True)
+        else:
+            beta = float(mb)
+            tag_col = {}
+            for host, ents in site_entries.items():
+                for j, en in enumerate(ents):
+                    tag_col[en["tag"]] = (host, j)
+            if beta > 0:
+                bonus = vact.TaughtTokenBonus(beta, args.mem_bonus_tau,
+                                              top_k=args.mem_bonus_topk)
+                bonus.note(tok)
+                print(f"[chat] mem bonus ON: beta={beta} "
+                      f"tau={args.mem_bonus_tau} "
+                      f"top_k={args.mem_bonus_topk}", flush=True)
+        if bonus is not None and wrappers:
+            # retrieval-triggered row boost: a memory row hot anywhere in
+            # the forward delivers through the reply (long-context router
+            # drift otherwise gates it off at the fact-token decision).
+            vact.set_policy(wrappers, vact.RetrievalBoostPolicy(
+                tau=args.mem_bonus_tau))
+            print("[chat] retrieval-boost delivery ON for memory rows",
+                  flush=True)
 
     dec = None
     if KVDecoder is not None:
@@ -499,6 +543,15 @@ def main() -> int:
             print(f"[chat] KVDecoder init failed ({e}) — full-forward "
                   f"decode", flush=True)
             dec = None
+    if dec is not None and bonus is not None and gates is not None:
+        # KV decode computes logits inside KVDecoder._forward — wrap it
+        # (kv_cache_v05 itself stays read-only) so the bonus sees every step
+        base_fwd = dec._forward
+
+        def _fwd_bonus(x, _b=base_fwd):
+            return bonus.edit(_b(x), vact.capture_tags(gates, tag_col))
+
+        dec._forward = _fwd_bonus
 
     def fn_bare(x):
         return g0.run_in_state(
@@ -508,9 +561,15 @@ def main() -> int:
     def fn_graft(x):
         if gates is None:
             return fn_bare(x)
+
+        def run():
+            lg = d0.model_logits(model, x.to(device))
+            if bonus is not None:
+                lg = bonus.edit(lg, vact.capture_tags(gates, tag_col))
+            return lg
+
         return g0.run_in_state(
-            model, blocks, fam, gates, handles, "both",
-            lambda: d0.model_logits(model, x.to(device)))
+            model, blocks, fam, gates, handles, "both", run)
 
     if args.impress:
         run_impress(args, tok, fn_bare, fn_graft, device, dec)
