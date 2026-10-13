@@ -67,7 +67,8 @@ import graft_d1_plugin as d1  # noqa: E402
 import graft_d2_crossfamily as d2  # noqa: E402
 import grafted_spine_v0 as g0  # noqa: E402
 import v05_build as b5  # noqa: E402
-import chat_v05 as c5  # noqa: E402
+# chat_v05 imports varact_gate (the shipped default policy), so chat_v05 is
+# imported LAZILY at use sites to keep the cycle one-directional.
 
 ORDER = ["code", "math", "mem_pet", "mem_edit", "mem_words",
          "k3_hack", "glm_cybersec", "mimo_writing"]
@@ -519,6 +520,7 @@ def timed_gen(tok, logits_fn, device, max_new=24):
 # ---------------------------------------------------------------------------
 
 def build_world(args):
+    import chat_v05 as c5
     device = args.device
     cargs = SimpleNamespace(**vars(args), default_lam=0.5, lam_map={},
                             bare=False)
@@ -721,6 +723,7 @@ def phase_harm(w, args, out, configs=None):
 
 def phase_smoke(w, args, out):
     """Demo-prompt smoke: base vs gated, SHORT excerpts only."""
+    import chat_v05 as c5
     configs = [c.strip() for c in args.smoke_configs.split(",") if c.strip()]
     out.setdefault("smoke", {})
     for cname in configs:
@@ -841,6 +844,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.gpu == "auto":
+        import chat_v05 as c5
         dev_i = c5.pick_gpu()
     else:
         dev_i = int(args.gpu)

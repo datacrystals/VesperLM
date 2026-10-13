@@ -41,6 +41,59 @@ data first.
 
 ---
 
+## 2026-10-13 — SIBLING ROW RECAL CLOSES THE MEM-TRIO PAIR + tau=0.5 SHIPPED as the default delivery policy (variable-k rung-2 #1 executed): guard-checkpointed cross-fire recal (reject side = sibling episodes) takes mem_pet->mem_words harm 0.2035 -> 0.0061 worst sibling (bar 0.02) with every green home held, the mem_words crowding tax removed (0.472 -> 0.2572) and the Kepler fact token intact — chat_v05.py + chat_v06.py now gate plugs on p_home >= 0.5 by default (MI50 box, fp16)
+
+**Task: close the only failing bar (mem-trio pairwise harm) and ship
+tau=0.5.**  The named fix (varact rung-2 #1) is the v0.5.1 xfire-recal
+recipe with the siblings' episodes on the reject side.
+
+**Recipe that worked (`lab/varact_sib_recal.py`):** per mem row, stream =
+own-home episodes (label 1, tiled home-weight 2-3) + target sibling
+episodes + base (label 0); d6.train_rows_one at reject_w 15-40, mass_w 2.0,
+owner_target 0.85, lr 0.02; **guard-checkpointed chunks** (re-check
+own-home CE under tau=0.5 delivery within +0.02 AND the Kepler probe after
+every 30-step chunk; keep the lowest reject-p passing chunk, early-stop +
+revert at the first guard trip).  First attempt (un-chunked, reject_w 40,
+1x home) over-suppressed mem_pet (p_reject 0.506->0.0088 but own-home CE
+0.029->0.147, fact token flipped) — the guard reverted it and the state
+was never shipped; the assembly is written once at the end with backup
+`joint_state_pre_sibrecal.pt`.  Targeted pass-2 (mem_pet + mem_edit vs
+WORDS episodes only, home-weight 3, reject_w 15) landed the selectivity:
+mem_pet p_reject 0.41->0.0089 (chunk 6; chunk 7 tripped the CE guard and
+early-stopped), mem_edit 0.33->0.22 all chunks green.
+
+**LOO harm before -> after (harm(j->h) = CE_h(all) - CE_h(j off)):**
+| pair | before (ungated / tau0.5) | after recal (tau0.5 / ungated) |
+|---|---|---|
+| mem_pet->mem_words | +0.2035 / +0.2021 | -0.0189 / -0.0191 |
+| mem_edit->mem_words | +0.138 / +0.143 | -0.0229 / -0.0181 |
+| mem_pet->mem_edit | +0.004 / +0.005 | +0.0058 / +0.0059 |
+| mem_edit->mem_pet | +0.008 / +0.009 | +0.0061 / +0.005 |
+| worst non-sibling (code->glm) | +0.0109 / +0.0091 | +0.0091 / ['code', 'glm_cybersec'] |
+| **worst sibling** | **+0.2035 / +0.2021** | **+0.0061 (mem_edit->mem_pet)** |
+
+Home CE at tau=0.5: mem_pet 0.0399 / mem_edit 0.2581 / mem_words 0.2572 (tau=0.5 delivery; pre-recal class 0.029 / 0.261 / 0.472).  Kepler probe: "Your cat is named Kepler."
+(green through every chunk + on the shipped state).  Non-sibling worst
+0.0091 (['code', 'glm_cybersec']) — unchanged inside the bar.
+Family-margin combined (rung-2 #2 two-pass form): not run / pending.
+
+**SHIP VERDICT: all three bars hold — tau=0.5 SHIPPED as default.**
+Wired per the documented point in BOTH `lab/chat_v05.py` and
+`lab/chat_v06.py` (sibling WIP in chat_v06 preserved — only my hunks
+staged): `install_varact(handles, POLICY)` after `build_state`, priority
+`--varact` > `joint_state.pt["varact"]` > `DEFAULT_VARACT="tau0.5"`,
+`--varact off` restores bit-identical ungated delivery;
+`--lam-override` untouched.  joint_state carries `varact: "tau0.5"`.
+Bonus: killing the sibling crowding also FIXED mem_words home CE
+(0.472->0.2572) — the pair was costing it 0.2 nats.
+
+**Ops:** claim locks + detached chains (`lab/varact_sib_chain.sh`, chunked
+runners for recal / check / fammarg phases), incremental JSON
+(`/data/tliao/varact_out/sibrecal*.json`), no user tmux touched.  Evidence
++ full matrices: `sibrecal_final.json` (the ship state), `sibrecal.json`
+(pass-1 incl. the mem_pet guard lesson), `sibrecal_check.json`,
+`sibrecal_fammarg.json`.  Code/docs only.
+
 ## 2026-10-13 — VARIABLE-ACTIVATION PLUG GATING (variable-k rung 1): serving-side adaptive expert activation on the v0.5/v0.5.1 bank — `p_home`-threshold gating cuts active-plug compute **77%** with every green plug inside the noise band and base tax IMPROVING; bank-wide top-m is the compute knob but the causal budget starves late plugs; low-p flooding shrinks decisively, mem-sibling crowding does NOT (MI50 box, fp16)
 
 **Q (user standing directive: try ideas directly): rung 1 of variable-k —
@@ -163,7 +216,7 @@ verdict; wiring point when it is: install_varact(handles, POLICY) after
 build_state, with a joint_state `varact` flag + --varact off|tau0.5|...
 override alongside --lam-override).
 
-## 2026-10-13 — v0.6 THE IMPRESS-DEMO: the v0.5 graft stack on a stronger spine — Qwen1.5-MoE-A2.7B-Chat (14.3B total / **2.7B active** — the user's "2x active params so it doesn't loop") + registry/graft (parity **0.9989**) + K3 hacking / GLM-Flash cybersec / MiMo-Flash writing cores re-wrapped in host geometry (FEED 200k, balanced per-home λ) + 2 taught memories (pet_kepler / editor_helix) + `lab/chat_v06.py` (KV incremental decode reusing agent-49's `lab/kv_cache_v05.py` read-only) — graft-question PASS (coherent, **no loop**, greedy), bare 0.89 tok/s full-forward (MI50 box, fp16)
+## 2026-10-13 — v0.6 THE IMPRESS-DEMO: the v0.5 graft stack on a stronger spine — Qwen1.5-MoE-A2.7B-Chat (14.3B total / **2.7B active** — the user's "2x active params so it doesn't loop") + registry/graft (parity **0.9989**) + K3 hacking / GLM-Flash cybersec / MiMo-Flash writing cores re-wrapped in host geometry (FEED 200,192 tok-slots each, balanced per-home λ) + 2 taught memories (pet_kepler / editor_helix) + `lab/chat_v06.py` (KV incremental decode reusing agent-49's `lab/kv_cache_v05.py` read-only) — **assembled verdict PASS (all 5 homes improve, base tax −0.0035)**; graft-question PASS greedy **no loop** (5.22 tok/s KV); memory probe answers **"Kepler"** (taught token, v0.5 door closed) vs bare REFUSES; probes 6.04 tok/s (MI50 box, fp16)
 
 **Q (user, verbatim): "2x active params so it doesn't loop... minimum good
 enough to impress"** — same graft stack as v0.5, stronger chat spine so the
@@ -221,49 +274,85 @@ v06_build fits each plug's λ ONLY on its own home windows (grid
 plug until base tax ≤ 0.05. All λ measurements are no-grad CE reads (also
 avoids the gfx906 λ-backward hole bank2n hit).
 
-**Graft-question (impress test a) — PASS, no loop, greedy.** Bare spine
-(120 tok cap): "As an AI language model, I don't have feelings or emotions…
-grafting multiple models together is a technique used in machine learning to
-combine the predictions of multiple models…" — coherent, on-topic,
-repetition detector (8/6/4-gram) clean, **0.89 tok/s** (134.7s / 120 tok,
-full-forward decode — the v0.5 path). The stronger spine already answers the
-graft question sensibly without looping; the grafted assembly runs the same
-test via `chat_v06.py --impress` when the fits land.
+**Graft-question (impress test a) — PASS on BOTH sides, no loop, greedy.**
+Grafted assembly (KV incremental decode, 64 tok): "If you grafted Kimi K3,
+GLM, and MiMo weights into me, I would say that it sounds like an interesting
+combination! It's always exciting to explore new possibilities and
+combinations of weights and technologies. I'm ready to learn and adapt to any
+new information or features you have to offer." — coherent, on-topic,
+repetition detector (8/6/4-gram) clean, **5.22 tok/s**, verdict **PASS**.
+Bare spine (128 tok): "As an AI language model, I don't have feelings or
+emotions… grafting multiple models together is a technique used in machine
+learning…" — also PASS/no-loop, 6.98 tok/s. The stronger spine holds the
+line; the graft does not break it.
+
+**4-probe smoke (SHORT excerpts, safety filter) — grafted vs bare:**
+
+| probe | grafted | bare |
+|---|---|---|
+| hacking | "the reconnaissance phase… gathers information about the target system and network… before attempting an" (80 tok, 5.90 tok/s) | similar in-domain (80 tok, 6.13) |
+| writing | "The lighthouse stood tall and proud, its beacon flickering through the tempest, guiding ships through the raging sea…" (60 tok, 6.31) | similar atmospheric prose (80 tok, 6.25) |
+| memory | **"Your cat is named Kepler."** (7 tok, 5.44) | REFUSES: "as an AI language model, I don't have access to personal information like your cat's name" (43 tok) |
+| general | mutex = mutual exclusion, protects shared resources (71 tok, 6.53) | same (79 tok, 6.19) |
+
+Mean **6.04 tok/s** grafted / 6.18 bare (agent-49's KVDecoder live —
+~7x the 0.89 tok/s full-forward path). The memory row is the v0.5 open
+door CLOSED: the behavioral flip AND the taught fact token both land.
+
+**Balanced λ table (per-home grid + base-tax guard, all 5 plugs live):**
+
+| plug | home | λ* | home CE masked→λ* | | plug | home | λ* | home CE masked→λ* |
+|---|---|---|---|---|---|---|---|---|
+| k3_hack | hacking | 0.25 | 2.414→2.376 | | mem_pet | pet | 1.0 | 1.503→**0.051** |
+| glm_cybersec | cybersec | 0.5 | 2.441→2.405 | | mem_edit | editor | 1.5 | 1.803→**0.186** |
+| mimo_writing | writing | 1.5 | 2.995→2.963 | | | | | |
+
+No starvation (v0.5 failure mode cured again — every plug gets nonzero λ
+on its own home: k3 0.25 / glm 0.5 / mimo 1.5 / pet 1.0 / editor 1.5);
+base-tax guard needed no shrinks (final tax **−0.0049**, bar 0.05).
+
+**Final assembled state (all 5 plugs + balanced λ): verdict PASS** —
+all_homes_improve true, base tax −0.0035. CE masked→grafted: hacking
+2.459→2.431, cybersec 2.231→2.173, writing 2.980→2.949, pet 1.505→**0.053**,
+editor 1.858→**0.208**, base 1.914→1.911. Row recal (owner 0.85) converged
+after the v0.6 row-scale fix: p_home 0.89–0.96, p_base 0.006–0.018
+(the fit-phase prototype init `mean_h·sqrt(d_r)` saturates softmax on this
+spine's hidden norms — rescale each graft row to the layer's mean stock-row
+norm before recal; see lab/v06_build.py row-scale guard).
 
 **Chat CLI `lab/chat_v06.py`** — chat_v05 conventions + `--bare` +
 `--impress` (graft question + 4-probe smoke with SHORT excerpts + tok/s) +
 `/graftq` `/toks` in-chat. KV incremental decode: **reuses agent-49's
 `lab/kv_cache_v05.py` (KVDecoder) read-only** — no duplication; auto-fallback
-to g0.gen_reply full-forward if the module is missing (it landed mid-build as
-`chat_v05_fast.py`'s dependency; wire = `KVDecoder(model, tok, device, blocks,
-fam, gates, handles)` + `dec.generate(messages, n, "bare"|"grafted")`).
-User command:
+to g0.gen_reply full-forward if the module is missing (wire =
+`KVDecoder(model, tok, device, blocks, fam, gates, handles)` +
+`dec.generate(messages, n, "bare"|"grafted")`). User command (v0.6
+assembled):
 `ssh tliao@100.64.0.7 'cd /data/tliao/vesper_sft/VesperLM && /data/tliao/vesper_sft/venv/bin/python lab/chat_v06.py'`
 (`--bare` for the un-grafted spine, `--probe` for the smoke, `--impress` for
-the full demo).
+the full demo; `--gpu` is remap-safe — clamps to visible range under
+HIP_VISIBLE_DEVICES).
 
 **Ops:** door10 claim-lock protocol (`/data/hackathon/.tmp/mr_gpu_claims`,
 flock-pick + 10-min TTL refresh) — co-tenant races OOM'd 3 jobs mid-load
 (incl. a two-jobs-one-GPU self-collision and a registry OOM when a co-tenant
 landed during parity); every lane is OOM-retry (up to 6 attempts for
-registry, 90 waits for fits). Detached `setsid` chains (PID 4036436 +
-lane subshells), incremental JSON (`v06_out/*.json`), no pgrep gates.
-Also: a bash deadlock (`ref=$(refresh_claim …)` — backgrounded claim-refresher
-inherits the command-substitution stdout pipe and the shell waits for pipe
-close; fixed with `>/dev/null 2>&1` on the refresher).
+registry, 90 waits for fits). Detached `setsid` chains, incremental JSON
+(`v06_out/*.json`), no pgrep gates. Chain-death modes seen: (1) the
+`refresh_claim` command-substitution stdout-pipe deadlock (fixed with
+`>/dev/null 2>&1`); (2) mimo_writing's first attempt ran on the pre-fix
+seq-512 code and died on the gfx906 hole, then the lane gave up at 90 GPU
+waits — finisher relaunched it (782 steps, FEED 200,192, done); (3) impress
+crashed on `--gpu N` under `HIP_VISIBLE_DEVICES=N` (device-ordinal remap) —
+clamped in chat_v06. Box artifacts: `/data/tliao/v06_out/` (registry,
+5× *_plugin.pt, joint_state.pt, v06_results.json, impress2.log) +
+`/data/tliao/v06_models/…`.
 
-**Status @ cap:** registry+parity DONE (PASS); k3_hack fit training on GPU 7
-(782 steps, FEED 200,192); glm_cybersec / mimo_writing / memories lanes
-queued behind the claim protocol (will start as GPUs free); assemble
-(balanced λ) + `chat_v06 --impress` chained behind the fits in
-`lab/v06_chain.sh` (detached, continues after this report). Box artifacts:
-`/data/tliao/v06_out/` (registry_done.json, registry_qwen2moe.pt,
-fit_*.json/log, chain logs) + `/data/tliao/v06_models/…`.
-
-**Open rungs:** grafted-side impress numbers (fits → assemble → impress in
-the detached chain); RouteStats (L,E) picks for the 3 donor cores (still
-extraction-test slots); the memory fact-token door (v0.1 open, shared with
-v0.5).
+**Open rungs:** RouteStats (L,E) picks for the 3 donor cores (still
+extraction-test slots); deeper host sites for specialty cores (mimo's L0
+leverage is the weakest delivery — home CE only −0.03); the general-domain
+tax question (base −0.0035 is noise-level good but measured on the domain
+mix, not real chat transcripts).
 
 ---
 
