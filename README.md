@@ -1,0 +1,255 @@
+# VesperLM
+
+**Modular, graftable mixture-of-experts language models — a research log.**
+
+VesperLM is an experiment program around one question: *can a language model be
+assembled from parts — a spine, a standard expert interface, and a bank of
+expert cores grabbed from other models — and still behave like a coherent,
+capable, conversational model?* This README is the curated public experiment
+log. Design specs live in `MODULAR_MOE.md` / `SUBSYSTEMS.md`; the full
+operational ledger (including failures) lives in `lab/FAILURES.md`.
+
+---
+
+## 1. The architecture
+
+```
+        tokens
+          │
+   ┌──────▼──────────────────────────────┐
+   │  SPINE (the brain)                  │   embeddings, attention, norms,
+   │  trained by us or borrowed          │   router, optional native experts
+   └──────┬──────────────────────────────┘
+          │ routing decisions via…
+   ┌──────▼──────────────────────────────┐
+   │  PASSPORT / REGISTRY (the socket)   │   one 256-byte row per expert;
+   │  family-universal routing interface │   router reads rows, not weights
+   └──────┬──────────────────────────────┘
+          │ delivers to…
+   ┌──────▼──────────────────────────────┐
+   │  EXPERT BANK (the parts bin)        │   frozen donor cores + thin
+   │  [core₁]◄── wrap: ~0.8M adapters    │   trainable adapter bridges;
+   │  [core₂]◄── frozen forever          │   additive λ·m·e(h) delivery
+   └─────────────────────────────────────┘
+```
+
+Three separable layers:
+
+1. **Spine.** Embedding LUT → transformer stack → unembedding. Conversational
+   ability, reasoning, and loop-freedom live here and scale with *active*
+   parameters per token.
+2. **Passport/registry.** The routing standard. Each expert has a learned
+   256-byte row; the router scores rows. Proven family-universal (three donor
+   families so far).
+3. **Expert bank.** Frozen expert cores from arbitrary donors, wrapped in
+   thin learned adapters (`host → 64-dim bridge → frozen core → back`) that
+   translate between the host basis and the donor basis. Training cost per
+   expert: ~0.8M adapter params, ~20 minutes. Delivery is additive
+   (`y = y_stock + λ·m·e(h)`), never softmax-mass competition.
+
+On top: **episodic memory as experts** (taught facts stored as shaped
+plug-ins, the §8 line) and a **subsystems layer** (drives/emotions telemetry,
+`SUBSYSTEMS.md`).
+
+---
+
+## 2. The standard recipe (frozen 2026-10-13)
+
+After a week of falsification, the surviving plug-in recipe is:
+
+| step | what | cost |
+|---|---|---|
+| 1. GRAB | frozen donor expert core, any family | zero training |
+| 2. WRAP | rank-64 adapters, width-normalized init, wd 0, lr 3e-3, task-CE | ~20 min |
+| 3. FEED | ≥200k specialty tokens (certified budget) | data collection |
+| 4. DELIVER | additive λ (fitted per-home), not mass stacking | minutes |
+| 5. ROUTE | registry row (256B) + mex recal, owner_mass 0.85 | minutes |
+
+**Certified:** ≥200k calibration kills memorization harm (437× gap collapse;
+10–12k budgets are 20× under and *harmful* out-of-sample).
+**Not certified:** held-out skill transfer — data buys neutrality, not
+generalization. Deep donor cores carry real skill in-distribution; out-of-
+distribution transfer is the open question (§6).
+
+---
+
+## 3. Experiment log
+
+All numbers are measured on AMD Instinct MI50/MI300X-class hardware unless
+noted. "Cos" = cosine similarity of outputs vs the reference model.
+
+### 3.1 Memory-as-experts (the §8 line)
+
+| gate | result | verdict |
+|---|---|---|
+| G1 expert transplant (TopK) | contamination 0.90 | FAIL → pivot |
+| G1b passport-native recipe | margins +4.59 (6.8× baseline) | PASS |
+| G3 coexistence N=8, mixed episodes | retention 0.39 | FAIL |
+| G3 coexistence N=8, token-substitution shape | retention **0.884** | PASS |
+| G3 coexistence **N=16** shaped | retention **0.737** (bar 0.70) | PASS — first N=16 pass |
+| orthogonality rung | forced \|cos\| 0.014 changed nothing | closed |
+| spine-portability (owner_mass 0.55→0.85) | 0.397 → **1.100** on real spine | PASS |
+
+**Finding:** memory *shape* is the lever (token-substitution deltas retain
+3× better than mixed episodes); owner-mass calibration controls delivery;
+retention is flat in N once calibrated.
+
+### 3.2 The graft line — the socket and the grab
+
+| experiment | headline | verdict |
+|---|---|---|
+| **D0** graft parity (OLMoE-1B-7B) | logit cos **0.99913**, ΔCE +0.00075 | PASS (stretch) |
+| **D1** plug-in onto graft (scratch delta) | parity/contam/util pass; quality fails | formal PASS, quality open |
+| **D1.5** feature translators (cross-model hidden spaces) | held-out 0.55–0.69 vs 0.9 bar | **FAIL — dead** |
+| **D2** cross-family (Phi-mini-MoE, foreign router) | logit cos **0.99863**, ΔCE 0.030 | PASS (stretch) |
+| passport sweep | parity saturates at d=gate rank (64); algebraic passports pass all gates for linear-gate donors | — |
+| margin-aware recal | clean negative; agreement must be ceiling-normalized | — |
+
+**Findings:** (1) the routing socket generalizes across families; (2) feature-
+space transplant between existing models is capped at ~0.5 linear alignment —
+confirmed with exact token-paired supervision (Door 9); (3) registry economics:
+~8MB spine artifact + 256B/expert row; recal is mandatory; algebraic passports
+are free where the donor gate is linear.
+
+### 3.3 Door-series: what makes a plug-in work
+
+| door | question | result |
+|---|---|---|
+| **2.5** wrap a frozen donor core | can foreign weights host verbatim? | **PASS** — quality 0.439 vs 1.072 masked (first quality pass) |
+| **3** KL-distillation of a donor skill | can we teach a core instead of grabbing? | skill transfers (KL 5.17→2.59) but no CE skill — FAIL |
+| **4** delivery contract | mass competition vs additive λ? | additive wins 3/5; delivery was not the binding constraint |
+| **5** provenance | what makes a core carry skill? | **CE-task-pretrained cores only** — scratch/refit die (3 contracts × 6 recipes); KL cores fail all treatments; CE-distill reaches in-sample only |
+| **6** mix two donors | do grafted experts interfere? | **sum-of-parts exactly** (0.9957×), zero cross-contamination |
+| **7** CE-objective distill | is the loss the problem? | no — training breadth is (47k tokens); anti-skill from cross-tokenizer argmax (15.6% agreement) |
+| **8b–e** bridge width & bank substitution | can cores carry a whole layer? | bridge not the limit (rank-64 over-recovers); **whole-layer substitution saturates at ~58%** in all modes; per-slot solo = 2625% |
+| **9** embedding-anchored translation | was D1.5 a pairing artifact? | no — exact pairing still ~0.47 held-out; W-init doesn't beat random |
+| **10** calibration scale | is the memorization gap data starvation? | **YES** — gap 1.35→0.003 (437×) by 200k tokens; hyperbolic, saturating |
+
+### 3.4 The bank: partitioned expert banks (the n-from-A + n-from-B form)
+
+8 wrapped cores from 2 donor families as first-class router rows (bank2n):
+
+| measurement | result |
+|---|---|
+| domain ownership | p_home 0.98–0.995 for all rows |
+| code domain, two donors | **splits** across families (0.28/0.21) and composes better than either solo |
+| in-bank solo-recovery preservation | 70–94% for strong grafts |
+| base partition tax | **−4.3%** (bank slightly improves base) |
+| pairwise harm | 0.226 worst (bar 0.02) — crowding; cross-fire rejection shrinks it ~10× |
+| partition vs overlay delivery | overlay-λ wins on held (ships in v0.5+), |
+
+**Verdict: GO with conditions** (core selection by lift ≳10; in-env wrap
+training; cross-fire rejection). The form works; generalization is the open rung.
+
+### 3.5 Assembly demos
+
+| build | what | status |
+|---|---|---|
+| **v0** (2026-10-12) | Phi-mini-MoE-instruct spine + 2 donor specialties + 3 taught memories | converses (cos 0.986 vs bare); specialties 2/2 visible; memory margins flip (Kepler-vs-Orion −2.76→+0.95) but fact token doesn't surface |
+| **v0.5** (2026-10-13) | + K3 / GLM-5.3-Flash / MiMo-V2.6-Flash cores (real extracted weights, dequant oracle-verified exact), 8 plugs total | live chat CLI; K3 hacking shows; all 4 specialties visible after v0.5.1 delivery fix |
+| **v0.5.1** | balanced per-home λ + cross-fire rejection | 6/8 net-green; flooding 0.028→0.0004 |
+| **v0.2 fast** | KV-cache incremental decode | 2.2 → **8.7 tok/s**; bare-spine bit-identical parity |
+| **v0.6** (2026-10-13) | Qwen1.5-MoE-A2.7B-Chat spine (2.7B active), full stack ported unmodified | parity 0.9989; **graft question answered coherently in greedy — no loop** |
+
+Demo note: at 1.8B active params, out-of-distribution self-referential prompts
+loop in greedy decode (a small-model prior artifact, present in bare and
+grafted alike). At 2.7B active the same prompt answers coherently — looping
+tracks *active* parameters, as expected.
+
+### 3.6 Training-infrastructure findings (the boring ones that mattered)
+
+- **End-of-loop vanish** (reproduced twice): exclusive loop bounds + no
+  end-of-loop save path → trainers "disappeared" at the final step having
+  saved nothing. Fixed: terminal-step save + completion banner + emergency
+  checkpoint-on-exception.
+- **Frozen-val-metric trap**: a phase-switched curriculum with a static val
+  mixture makes val stop tracking training (looked like a plateau/overfit).
+  Fix: per-group val logging + val mixture matching the current train mix.
+- **Silent data drops**: name-matched phase bucketing discarded an 18B-token
+  corpus without error. Fix: routed non-phase streams + index-weighted mix,
+  bit-identical when disabled.
+- **Numerous platform findings** on gfx906-class devices (spine-specific
+  backward holes at certain batch shapes, sorted-merge kernel boundaries,
+  quantized-core dequant exactness) — all documented in `lab/FAILURES.md`.
+
+---
+
+## 4. Headline claims (and their receipts)
+
+1. **A universal expert socket exists.** Passport/registry routing reproduces
+   donor-MoE behavior at 0.998+ across three families (D0, D2, v0.6 port).
+2. **Expert cores grab cheaply.** Frozen pretrained cores + 0.8M adapters +
+   200k tokens = quality plug-ins in ~30 minutes each (Door 2.5, Door 10).
+3. **Provenance is the currency of capability.** Deep task-pretrained cores
+   carry skill; scratch/refit/KL-distilled cores do not (Door 5/7, 3×6 falsification).
+4. **Composition is additive, not magical.** Mixed banks give exactly the sum
+   of parts with zero interference (Door 6: 0.9957×); whole-layer substitution
+   saturates (~58%); per-slot replacement is explosive (2625%).
+5. **Episodic memory plugs in like an expert.** Shaped memories coexist at
+   N=16, flip answer margins, and shift dialog behavior (§8, v0).
+6. **Conversational quality is a spine property** that scales with active
+   parameters — grafting preserves it (0.986 cos) but cannot create it.
+
+---
+
+## 5. Negative results (the falsification ledger)
+
+Kept deliberately. Each killed a tempting wrong path:
+
+- cross-model feature translators: ~0.5 alignment ceiling (D1.5, Door 9)
+- scratch-trained plug-in experts: fail across 3 delivery contracts × 6 recipes
+- KL-distillation as expert provenance: transfers KL, not CE skill
+- margin-weighted recal: monotone worse than uniform
+- softmax-mass plug-in delivery: starves stock experts; additive λ wins
+- whole-layer replacement by few cores: 58% saturation (joint/boosting/per-slot/in-env)
+- 10–12k-token calibrations: actively harmful out-of-sample (20× under)
+- word-level pairing as a translator trainer: lossy; exact pairing still fails
+
+---
+
+## 6. Open questions
+
+1. **Held-out skill transfer** — the single biggest asterisk. In-distribution
+   plug-in quality is proven; generalization is at neutrality. Needs larger
+   calibration, better cores, or in-env training (the named rungs).
+2. **Combine-at-scale** — 8-plug banks work; 1k+ banks are untested. Row
+   crowding (cross-fire) is the known mechanism to control.
+3. **Memory token-surfacing** — taught facts flip margins and behavior but the
+   base prior still wins the decode; decode-time bonuses / λ-boost are the
+   named levers.
+4. **Variable activation** — per-token adaptive plug gating (compute ∝
+   difficulty) is the natural next efficiency + anti-crowding layer; in flight.
+5. **Spine acquisition** — borrow a frontier spine (fast, licensed) vs
+   distill our own from routed teachers (coherent, "let loose") vs pretrain
+   (expensive). Routed-mixture distillation is the leading candidate for the
+   self-owned brain.
+
+---
+
+## 7. Repository map
+
+| path | what |
+|---|---|
+| `MODULAR_MOE.md` | architecture spec: registry format (§4–7), memory experts (§8), grafting (§9), expert format + standard recipe (§10) |
+| `SUBSYSTEMS.md` | drives/emotions control layer, gates E0–E4 |
+| `lab/FAILURES.md` | the full failure ledger with evidence (read this before proposing anything) |
+| `lab/` | experiment harnesses (`graft_d0_parity`, `door25_wrap_expert`, `bank2n_partition`, `kv_cache_v05`, …) |
+| `Pretrain/` | trainer (KDA+MLA hybrid MoE), configs, data pipeline |
+| `SFT/`, `Hippocampus/`, `Immune/`, `Agent/` | chat finetune, episodic consolidation, admission gating, harness |
+| `Dataset/` | corpus builders incl. specialty calibration sets |
+| `Common/` | model definitions, telemetry |
+
+---
+
+## 8. Status
+
+Actively in progress: a 10B-token pretrain of our own spine (KDA+MLA hybrid
+passport MoE), the SFT talkability test on it, variable-activation gating, and
+the v0.6 grafted assembly. The program runs autonomously with an experiment
+farm; this log is updated as results land.
+
+*License notes: donor cores are extracted from open-weight checkpoints under
+their respective licenses (Phi: MIT; OLMoE: Apache-2.0; MiMo-V2.6-Flash: MIT;
+GLM-5.3-Flash: MIT — the flagship GLM-5.3 has a different license; K3 has
+scale-triggered terms). Republishing combined models requires per-donor
+license review; local research use is unencumbered.*
