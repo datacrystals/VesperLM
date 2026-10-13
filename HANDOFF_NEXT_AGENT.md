@@ -41,6 +41,119 @@ data first.
 
 ---
 
+## 2026-10-12 — V0.5: the talkable model — v0 grafted spine + K3 hacking + GLM-5.3-Flash cybersec + MiMo-V2.6-Flash writing cores (8 plugs, additive-λ) + interactive chat CLI (MI50 box, fp16)
+
+**Q (user): "build v0.5 — the talkable model: the v0 grafted spine PLUS a K3
+expert, a GLM expert, and a Mimo expert in one, with a chat CLI they can
+use."**  Part 1 = the three-family flagship-mini cores per §10.7 + grab-kit;
+Part 2 = `lab/chat_v05.py` they can ssh into tonight.
+
+**Cores (grab-kit GRAB, `lab/grabkit_extract_core.py` verbatim paths):**
+| plug | donor | (L,E) | core | dequant | act | host site |
+|---|---|---|---|---|---|---|
+| k3_hack | Kimi K3 (Kimi-K3-Lic) | L12 e895 | mxfp4 pack (FP4 e2m1 + E8M0, grp 32), 33.0M frozen | w_gu (6144,3584) / w_down (3584,3072) | **situ** β4 / linβ25 | L4 |
+| glm_cybersec | **GLM-5.3-Flash** (MIT, NOT flagship) | L3 e0 | compressed-tensors pack-quantized int4 (asym, grp 32), 25.2M | (4096,4096)/(4096,2048) | swiglu | L2 |
+| mimo_writing | MiMo-V2.6-Flash (MIT) | L1 e0 | same int4 tuple | (4096,4096)/(4096,2048) | swiglu | L1 |
+
+- **(L,E) = extraction-test slots, NOT RouteStats picks** — RouteStats needs a
+  donor forward (K3 2.8T can't load here; GLM-Flash 197GB / MiMo 310GB need
+  the vLLM multi-GPU stack) — deferred, noted as the honest gap.  Depth-matched
+  host sites on the 32L spine: round(L_donor/92·31)=4 (K3), ·31/44→2 (GLM),
+  ·31/47→1 (MiMo); all distinct from v0's {6,13,19,24,27}.
+- **K3 core geometry correction**: the routed expert is NOT a 7168-wide MLP —
+  K3 sandwiches routed experts between `routed_expert_up_proj` (7168→3584) and
+  `routed_expert_down_proj` (3584→7168), so the expert core lives at d=3584,
+  inter 3072.  Runbook's "packed width = 7168/4 / blocks of 64" note is
+  superseded: mxfp4 is **2 values/byte + E8M0 scale per 32** (config.json
+  `mxfp4-pack-quantized`, group_size 32).  K3 activation is **SituAndMul**
+  (β·tanh(g/β)·σ(g) · linβ·tanh(u/linβ), β=4 / linβ=25 — modeling_kimi_linear),
+  not SwiGLU; `WrappedForeignExpert` gained an `act` field (swiglu default,
+  situ for K3) + `load_wrap_plugin` restores it from wrap_spec — backward
+  compatible with all v0/bank2n artifacts.
+- **Dequant oracle-verified**: `lab/v05_core_prep.py` (pure torch + safetensors
+  — the box venv has no compressed_tensors) vs compressed-tensors 0.19.0
+  `unpack_from_int32`/`unpack_fp4_from_uint8`/`decompress_mx_scale`/
+  `dequantize` on the real cores — **max_abs_diff 0.0 all 3 cores**.  GLM/MiMo
+  zp packing is along dim0 (8 nibbles/int32) vs weights along dim1 — the
+  observed shapes pin it; also matches `pack_to_int32(..., packed_dim=0)`.
+- Box `/data/ModelDownloader/Kimi-K3` is **LFS pointer stubs** (135B files) —
+  K3 extraction ran on the laptop `~/Desktop/Kimi-K3` (real shards), core
+  copied over.  The extractor still matches the runbook's verified numbers
+  (17.5MB / 0.10% of 17GB shard / 0.14s).
+
+**Wrap feed (door10 certified budget):** full specialty corpora from
+`Dataset/data/specialties/{hacking,cybersec,writing}/corpus.txt` — 248,714 /
+253,891 / 228,546 tokens (all ≥200k), 500 steps × bs1×512 = 256,000 tok-slots
+(~1.0-1.1 epochs), rank-64 width-norm (d_canon=64 → factor 1), wd 0, lr 3e-3,
+task-CE + out_pen 300 (§10.7 frozen recipe), NaN-guard refit at 1e-3.
+
+**Assembly mode = v0 ADDITIVE-λ (not bank2n partition)** — at decision
+time bank2n's quality half was still PENDING on the box (bare/masked only;
+its assemble had crashed on a GPU grab in `bank2n_out/assemble_debug.log`),
+so the safer-artifact rule picked the chat-tested additive path; the bank2n
+verdict that landed mid-build (f7d1a2d) then CONFIRMED the choice: **NOT
+VALIDATED as briefed** (quality green 3/8, worst pairwise harm 0.226 FAIL)
+and **overlay-λ beats pure partition on the same cores** (union 2.169 vs
+partition 2.198).  Shipped: 5 v0 plugs (copied from
+`grafted_spine_v0_out/`) + 3 new = 8 rows, closing recal (v0 rows keep
+spec 0.35 / mem 0.85; the 3 new domain rows get **owner 0.85** per the task
+line), λ fit on the union stream incl. base (chat-parity protection).
+
+**Chat CLI `lab/chat_v05.py`** — user command (verbatim):
+`ssh tliao@100.64.0.7 'cd /data/tliao/vesper_sft/VesperLM && /data/tliao/vesper_sft/venv/bin/python lab/chat_v05.py'`
+ChatML via the spine's own template, greedy default / `--sample T` live
+sampling, `--bare` = un-grafted spine (also `/bare` `/grafted` toggle), auto
+freest-GPU pick (co-tenant map moves), loads whatever plugs exist and says
+which are missing, ROCBLAS_TENSILE_LIBPATH defaulted inside the script so the
+bare ssh line works.  `--probe` = the 4-turn specialty smoke.  Generation is
+g0.gen_reply (incremental full-forward decode, no KV cache — ~1-3s/token on
+MI50; usable, not fast).
+
+**Ops:** detached `setsid` lanes + OOM-retry chain (`v05_lane.sh`, freest-GPU
+pick per attempt — a co-tenant landed on GPU 6 mid-load and OOM'd lane 1's
+first try; recovered).  bs1×512 (bank2n's co-tenant-safe shape — bs4×512
+retains ~16GB activations and OOMs a 32GB MI50 next to a co-tenant).  Pair /
+eval / joint streams CAPPED (`--pair-batches 24 --eval-batches 8
+--joint-batches-per-home 12`): `collect_pairs_fam` and `quality_reads` are
+full-pass walkers and a 485-batch specialty home would cost ~30 min/lane in
+post-fit reads alone.  pkill-self lesson #3 recurred once (pattern in own ssh
+argv); lanes respawned via explicit wrapper.
+
+**Artifacts:** box `/data/tliao/v05_out/` (fit_*.json, v05_results.json,
+joint_state.pt, 8× *_plugin.pt, assemble.log, probe logs) / cores
+`/data/tliao/v05_cores/*_core.pt` + `/data/tliao/core_bank/{kimi-k3/L12E895,
+glm-5.3-flash/L3E0,mimo-v2.6-flash/L1E0}/core.{safetensors,provenance.json}`.
+
+**Chat smoke (bare vs grafted, greedy, 80 tok cap, box probe logs; short
+excerpts):**
+| probe | bare spine | v0.5 grafted |
+|---|---|---|
+| hacking | "The reconnaissance phase, also known as the \"scouting\"... collect as much information as possible about the target" | "During the reconnaissance phase... the primary goal is to gather as much information as possible about the target system or network" |
+| cybersec | "A vulnerability is a weakness or flaw in a system, network, or application" | "A vulnerability and an exploit are two distinct concepts... 1. Vulnerability: a weakness or flaw in a system, software, or network" |
+| writing | "The lighthouse stood defiant against the wrath of the storm... solitary sentinel" | "The lighthouse stood defiant against the raging tempest, its beacon a steadfast sentinel amidst the chaos" |
+| memory | REFUSES: "I'm sorry, but as Phi, I don't have access to personal data" | ANSWERS: "Your cat's name is Whiskers." (12 tok) |
+
+**VERDICT:** (1) **it chats normally** — 4-turn ChatML conversation holds in
+both configs, all plugs live, no breakage; (2) **K3 hacking shows** — home CE
+1.984→1.872 with λ* 0.83 live and the recon answer in-domain; (3) **GLM /
+MiMo do NOT show at the fitted λ** — the joint λ* collapsed both to 0.0
+(cybersec 1.665→1.690, writing 2.695→2.735 = cross-plug interference only;
+their solo reads were mild-positive for GLM, forced CE 1.896 < masked 1.941,
+and both rows OWN their domain at owner 0.85 (p_home 0.98-0.99, p_base
+0.001-0.013) — the plugs are trained and routed correctly, the 80-step union
+λ fit starves minority homes (12/104 joint batches) and/or the early host
+sites L1/L2 carry too little leverage; `--lam-override glm_cybersec=0.3,
+mimo_writing=0.2` re-enables them for A/B probes); (4) memory = the v0 open
+door exactly: bare refuses, grafted answers the personal question directly
+(behavioral flip) but with the base-prior fact token ("Whiskers", not the
+taught "Kepler") despite episode CE 3.69→0.08.  Base tax +0.025 nats (bar
+0.05 ✓).  Verdict dict on file is `pass: false` only because
+all_homes_improve=false (glm/mimo).
+
+**Open rungs:** RouteStats (L,E) picks (extraction-test slots used); mimo/glm
+delivery (deeper host sites / balanced λ-fit stream / more λ steps); the
+memory fact-token door (v0.1 levers unchanged).
+
 ## 2026-10-12 — BANK2N PARTITION (the user's design, first test): Model C = Phi-instruct spine + 2n=8 wrapped donor cores (4 Phi + 4 OLMoE) as FIRST-CLASS passport rows — router partitions traffic (full-bank sparsemixer + per-slot dispatch, no λ overlay): **VERDICT NOT VALIDATED as briefed (quality green 3/8, base tax −4.3% PASS, worst pairwise harm 0.226 FAIL); code traffic SPLITS across donors but m1-class solo recovery is not preserved in-bank (best 11%) and overlay-λ beats pure partition on the same cores** (MI50 box, fp16)
 
 **Q (user's design, verbatim intent): "take n whole experts from model A and n

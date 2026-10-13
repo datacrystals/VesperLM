@@ -294,7 +294,10 @@ def load_wrap_plugin(path):
     w_gu = torch.zeros(2 * spec["d_inter"], spec["d_donor"])
     w_down = torch.zeros(spec["d_donor"], spec["d_inter"])
     wrap = d25.WrappedForeignExpert(spec["d_model"], spec["d_canon"],
-                                    w_gu, w_down, seed=0)
+                                    w_gu, w_down, seed=0,
+                                    act=spec.get("act", "swiglu"),
+                                    situ_beta=spec.get("situ_beta", 1.0),
+                                    situ_linear_beta=spec.get("situ_linear_beta"))
     wrap.load_state_dict(payload["wrap"])
     row = payload["row"].float().clone()
     return wrap, row, payload.get("meta", {}), spec
