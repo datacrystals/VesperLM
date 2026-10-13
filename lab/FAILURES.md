@@ -18,6 +18,31 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-13 — varact-subset-gather — per-token subset expert forwards (variable-activation compute saving) are NOT runnable on gfx906: `k.nonzero()` (data-dependent-shape GPU op) itself raises `hipErrorInvalidDeviceFunction`, and novel GEMM row-counts from gather/scatter fall in the same hole family — the error is async, so it surfaces at an unrelated later line
+- Evidence: box `/data/tliao/varact_out/varact.log` (run 1: `ne[k] = e(flat[k])`
+  masked scatter; run 2: `idx = k.nonzero(as_tuple=True)[0]` — the nonzero
+  call itself, before any GEMM). Both `torch.AcceleratorError: HIP error:
+  invalid device function`. Full-batch forwards through the same wraps at
+  T=2048 run fine all through v0.5/v0.5.1 measurement (stock MixMerge shape).
+- Root cause: gfx906 (MI50) rejects kernels that depend on data-dependent
+  output shapes (nonzero/masked-index ops) and some dynamic GEMM row-counts.
+  Same family as `door25-gfx906-backward-holes` / the Qwen shape grid
+  (§10.8) but WIDER than "B*T hole set": the hole set is op-specific, not
+  just shape-specific. Errors report asynchronously — a try/except around
+  the suspect call does NOT reliably catch it at the right line.
+- What it rules out: any gather/scatter-style sparse expert batching
+  (token-subset expert forwards, ragged MoE kernels, top-k token routing
+  gathers) built on stock PyTorch ops for this box. Variable-activation
+  compute saving can only skip at whole-batch granularity offline; at
+  serving (T=1 decode) skip-vs-run is exact anyway.
+- Next tried: skip-or-full policy (`lab/varact_gate.py`): a plug with an
+  empty keep-set for the batch is skipped entirely (zero FLOPs); a plug with
+  any keep runs the exact stock shape and masks its output. Per-token
+  delivery counts (the serving-side compute measure) are kept from cheap
+  `int(k.sum())` host reads, same style v0.5 already used. If subset shapes
+  are ever needed again: pad to a FIXED row count with no data-dependent op
+  and validate each pad size with a `torch.cuda.synchronize()` probe first.
+
 ## 2026-10-12 — bank2n-assemble-unpack — the resumable-assembly refactor shipped a 3-tuple/2-tuple unpack bug (`build_live`/`build_overlay` return (gates, banks, handles); `state_or_measure` unpacked 2) — every retry died in ~37s at the `partition_full` state with `ValueError: too many values to unpack`, silently burning a 20-attempt chain while the cache only held the 2 baselines
 - Evidence: box `/data/tliao/bank2n_out/assemble_now.log` (attempts 9–20, each
   `exit 1` within 33–47s) + `assemble.log` traceback at
