@@ -1895,3 +1895,48 @@ finding therefore extends beyond cat names to attitude words: names
 (Kepler / Person of Interest / Gundam 00 / IGBT) deliver, sentiments do
 not reliably.  The queued principled closers stay the 10.10 ones
 (context-windowed row re-cal; name-slot margin work).
+
+---
+
+## §11 THE BANK LADDER (2026-10-14 — standing campaign, user directive)
+
+Goal (user's words, the north star): "we took 3T from K3, 700B from GLM, 1T
+from MiMo — here's a 4.7T param model with 180B active that outperforms all
+of them." The ladder is the honest path there: scale the grafted bank by
+doublings, watch where it breaks, upgrade the spine/router at the break,
+resume climbing.
+
+### 11.1 The rungs
+| rung | bank (frozen cores) | target total | firing (k) | spine |
+|---|---|---|---|---|
+| 0 | 3 cores (vfinal assembly) | ~0.65B | top-1-2 | vk-base 325M active |
+| 1 | ~250 cores ≈ 8B | ~8.5B | top-4-8 | vk-base |
+| 2 | ~500 cores ≈ 16B | ~16B | top-8 | vk-base or 1B spine |
+| 3 | ~1000 cores ≈ 32B | ~32B | top-8-16 | 1-3B spine |
+| 4 | ~2000 cores ≈ 64B | ~64B | top-16 | 3B spine |
+| ∞ | full harvest (K3 ~3T + GLM ~0.7T + MiMo ~1T cores) | ~4.7T | top-k ~180B-active class | co-trained big spine |
+
+Active-params law: active = spine + (cores fired per token) x (donor expert
+size). Whole donor cores are real computation blocks (K3 expert ~33M;
+GLM-5.3-class ~50-200M), so k and expert-size are the two dials.
+
+### 11.2 Break criteria (stop the rung, upgrade, resume)
+1. per-graft home-quality drops below the solo bar (composition failure)
+2. pairwise/cross-fire harm > 0.02 after rejection (crowding failure)
+3. router saturation: p_home collapse / registry recal stops converging
+4. "doesn't make sense with this base": routing entropy / coverage shows the
+   spine cannot address the bank -> UPGRADE SPINE (3B Vesper rung) + router
+   recal (registry rescale), then resume the ladder at the failed rung.
+
+### 11.3 Discipline
+- Each rung: wrap (§10.7 recipe, FEED >=200k) -> balanced per-home lambda ->
+  tau=0.5 VarAct (k knob) -> cross-fire rejection -> the four bars
+  (quality-green, base-tax <=3%, harm <=0.02, talkability preserved).
+- Extrapolation is not evidence: a rung is claimed only when measured.
+- The additive law (door6: union = sum of parts) is the default expectation;
+  "outperforms the donors at their own game" requires the co-trained spine
+  (spine born with grafted slots, router co-adapted) — that is the v2
+  architecture rung and the known path to the user's endgame claim.
+
+### 11.4 Status
+Rung 0 in flight (vfinal assembly, agent-57). Rung 1 queued behind it.
