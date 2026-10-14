@@ -31,10 +31,12 @@ _APPLIED = False
 def _prep(q, k, v, g, beta, A_log, dt_bias, use_qk_l2norm, use_beta_sigmoid):
     """Reproduce the fused_recurrent kernel's in-kernel preprocessing."""
     if use_qk_l2norm:
-        q = F.normalize(q.float(), dim=-1).to(q.dtype)
-        k = F.normalize(k.float(), dim=-1).to(k.dtype)
+        q = F.normalize(q.float(), dim=-1)
+        k = F.normalize(k.float(), dim=-1)
+    else:
+        q, k = q.float(), k.float()
     # gate: g_log = -exp(A_log) * softplus(g + dt_bias)   (gate.py reference)
-    # dt_bias is (HV*K,) -> (HV, K); A_log is (HV,) -> (HV, 1)
+    # dt_bias is (HV*K,) -> (HV, K); A_log is (HV,) -> (HV, 1). fp32 always.
     HV, K = g.shape[-2], g.shape[-1]
     gf = g.float()
     if dt_bias is not None:
@@ -44,9 +46,10 @@ def _prep(q, k, v, g, beta, A_log, dt_bias, use_qk_l2norm, use_beta_sigmoid):
         g_log = -A * F.softplus(gf)
     else:
         g_log = -F.softplus(gf)
-    g_log = g_log.to(g.dtype)
     if use_beta_sigmoid:
-        beta = beta.float().sigmoid().to(beta.dtype)
+        beta = beta.float().sigmoid()
+    else:
+        beta = beta.float()
     return q, k, g_log, beta
 
 
@@ -57,24 +60,24 @@ def _naive_op(q, k, v, g, beta, A_log=None, dt_bias=None, scale=None,
               lower_bound=None, state_v_first=False, cu_seqlens=None,
               safe_gate=False, **kwargs):
     from fla.ops.kda.naive import naive_chunk_kda, naive_recurrent_kda
-    if use_gate_in_kernel:
-        q, k, g, beta = _prep(q, k, v, g, beta, A_log, dt_bias,
-                              use_qk_l2norm_in_kernel, use_beta_sigmoid_in_kernel)
-    elif use_qk_l2norm_in_kernel:
-        q = F.normalize(q.float(), dim=-1).to(q.dtype)
-        k = F.normalize(k.float(), dim=-1).to(k.dtype)
-        if use_beta_sigmoid_in_kernel:
-            beta = beta.float().sigmoid().to(beta.dtype)
-    T = q.shape[1]
-    if T >= 64 and T % 64 == 0 and initial_state is None:
-        o, S = naive_chunk_kda(
-            q=q, k=k, v=v, g=g, beta=beta, scale=scale,
-            initial_state=initial_state, output_final_state=output_final_state,
-            chunk_size=64)
-    else:
+    # KDA state math stays fp32 and OUTSIDE autocast (fp16 decays NaN: exp/cumsum)
+    with torch.amp.autocast(q.device.type, enabled=False):
+        if use_gate_in_kernel:
+            q, k, g, beta = _prep(q, k, v, g, beta, A_log, dt_bias,
+                                  use_qk_l2norm_in_kernel,
+                                  use_beta_sigmoid_in_kernel)
+        elif use_qk_l2norm_in_kernel:
+            q = F.normalize(q.float(), dim=-1).to(torch.float32)
+            k = F.normalize(k.float(), dim=-1).to(torch.float32)
+            if use_beta_sigmoid_in_kernel:
+                beta = beta.float().sigmoid()
+        T = q.shape[1]
+        # ALWAYS recurrent: naive_chunk_kda's backward is numerically broken
+        # (grad NaN/inf on synthetic inputs — measured); recurrent grads clean.
         o, S = naive_recurrent_kda(
             q=q, k=k, v=v, g=g, beta=beta, scale=scale,
-            initial_state=initial_state, output_final_state=output_final_state)
+            initial_state=initial_state,
+            output_final_state=output_final_state)
     return o, S
 
 
