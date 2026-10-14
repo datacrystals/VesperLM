@@ -1856,6 +1856,12 @@ recipe run as the pipeline recipe, not as a post-hoc pass.)*
   GEMV (~400 GB/s is normal on HBM) behind the same F.linear contract,
   optionally + fused qkv GEMM (3 -> 1 launch per layer, ~17%).
 
+## 2026-10-14 — fla-kda-gfx906 — fla's KDA/MLA kernels are Triton-only and DO NOT COMPILE OR RUN on gfx906 (or CPU) — vk-base cannot execute on the MI50 box unpatched
+- Evidence: MI50 box, every shape B*T in {128,192,256,320,384,512} AND T=1: `RuntimeError: PassManager::run failed` (triton AMD backend make_llir) — shape grid `box:/data/tliao/vk_final/shape.json` all-fail; on CPU the same forward dies `ValueError: Pointer argument ... (cpu tensor?)`. Layer-by-layer the Triton-only surface is: fla `ShortConvolution` (causal conv), `chunk_kda`/`fused_recurrent_kda`, `FusedRMSNormGated`, fla `RMSNorm`, fla `RotaryEmbedding` (MLA), i.e. every fused helper the KDA+MLA stack touches.
+- Root cause: flash-linear-attention 0.6.0 ships fused kernels for CUDA/Triton only; the torch reference math exists (`fla/ops/kda/naive.py`) but is unwired, and there is no `backend="torch"` on `causal_conv1d` (only cuda/triton/mix). Triton's AMD backend cannot build these kernels for gfx906 at all.
+- What it rules out: running vk-base (or any fla KDA/MLA model) on the MI50 fleet with stock fla — the spine is portable to Triton-capable venues (MI300X/gfx90a: the vk-base SFT/pretrain venue) only.
+- Next tried: `lab/vk_fla_compat.py` — pure-torch monkey-patch of those five op surfaces (reproducing the kernel math: `g = -exp(A_log)*softplus(g+dt_bias)`, beta sigmoid, half-split RoPE `o0=x0*cos-x1*sin`, depthwise causal conv with (N,D,W) cache, rmsnorm*gate). CPU forward now OK and the graft parity gate runs PASS (cos 1.0000). Caveat: KDA state-update ordering (`state_v_first`) follows `naive.py`; chunk vs recurrent both from naive.py; not cross-checked against the triton kernels on a Triton box — first MI300X rerun should diff logits vs stock fla (expect ~1e-3 fp noise) before trusting fine quality claims.
+
 ## Fallback tree — self-learning / modular architecture line
 
 If a rung fails, document, then take the NEXT untried branch — cheapest first.

@@ -41,6 +41,63 @@ data first.
 
 ---
 
+## 2026-10-14 — THE FINAL ASSEMBLY (vk-base): the complete Vesper stack on our own spine — passport-native graft port (parity **1.0000** vs bare, bar 0.95 PASS) + 3 specialty + 9 memory plugs + shipped delivery stack + `lab/chat_vfinal.py` | **BLOCKER HIT + UNBLOCKED**: fla's KDA/MLA kernels are Triton-only and cannot build on the MI50's gfx906 (FAILURES fla-kda-gfx906) — cured by `lab/vk_fla_compat.py` (pure-torch op shim) | fits + assemble + impress launched detached on the box (GPU claims 2/1/5); chat CLI is the deliverable
+
+**The stack (all on `lab/imported/vk_sft_r2/chat_model`, the talkable 6/12 SFT
+r2 base):** registry/graft + 3 frontier specialty plugs (core_bank donors
+K3 L12e895 hacking / GLM-5.3-Flash L3e0 cybersec / MiMo-Flash L1e0 writing,
+wrapped in vk geometry per MODULAR_MOE §10.7: rank-64 width-norm, wd 0,
+lr 3e-3, task-CE + out_pen 300, FEED >= 200k tok-slots from
+`Dataset/data/specialties/`) + 9 taught memories (legacy trio pet_kepler /
+editor_helix / math_words + the fe98ed4 persona pack's 6 facts) with the
+shipped guards: 180a612 row-scale, 92abbd7 balanced per-home fits, 715ad33
+sibling-recal chunks + tau=0.5 VarAct default, 30038bd question-match gate
++ taught-token bonus.
+
+**Why this spine is the right host:** vk-base is PASSPORT-NATIVE —
+`PassportRouter` (query (64,1024) x passports (E,64) / sqrt(64)) IS the
+socket the graft stack was designed for. A registry row is literally a
+passport row: `lab/vk_graft.py` banks are built init=exact from the native
+router (`banks_from_native`), so the parity gate is pure plumbing and lands
+at **logit cos 1.0000 (min 1.0000)** vs bare (`_evals`/box
+`vk_results.json` registry phase). Delivery is additive-lambda through
+`door6.MixMerge`/`varact.VarActMerge` unmodified: the host adapter
+(`vk_graft.install_vk_host`) rewires each MoEFeedForward so
+`ffn.experts.forward(h, idx, w)` is the stock merge (the graft install
+point) and `ffn.router` accepts a `VkGraftGate` (MixGateD2 semantics:
+stock softmax-topk bit-stable, plug rows vote membership via score > kth
+stock score, `last_p_new` feeds VarAct + TaughtTokenBonus).
+
+**New code (this change):** `lab/vk_graft.py` (host adapter, VkGraftGate,
+parity, VkKVDecoder — kv_cache_v05 conventions, MLA fla-cache + KDA
+RecurrentStateCache, prefill self-check falls back to full-forward),
+`lab/vk_final_build.py` (shape/registry/fit/assemble phases, d25/d6/g0
+reused verbatim), `lab/chat_vfinal.py` (chat CLI: --bare/--impress/--probe,
+/graftq, mem-pack persona default, varact tau0.5 + bonus 3.0 + qscope
+overlap defaults, 12-prompt eval_chat comparison with the e6c79ec
+verdict taxonomy), `lab/vk_fla_compat.py` (the gfx906 unblock — see
+FAILURES), persona_v1.json gains per-spine `"vk"` host sites (selftest
+still 23/23).
+
+**Ops state at handoff:** MI50 box claim locks `/data/tliao/vk_final/locks/
+gpu_lock_{2,1,5}` (ours; user tmux v05chat* untouched). Detached chain
+`box:/data/tliao/vk_final/run_all.sh` (setsid) runs shape -> registry ->
+3 parallel fit lanes (GPU2 specialties / GPU1 mem pet-edit-words-poi /
+GPU5 mem machine-gundam-cars-trains-igbt) -> assemble (closing row recal +
+715ad33 sibling-recal guard chunks + balanced lam fits + CE table) ->
+`chat_vfinal.py --impress --impress-bare` writing
+`box:/data/tliao/vk_final/impress.json` + `logs/impress.log`. Incremental
+JSON per lane: `fit_{A,B,C}.json`, `vk_results.json`. RE-RUN is safe
+(--skip-done per plugin).
+
+**The chat command (the deliverable):**
+```
+ssh tliao@100.64.0.7 'tmux new -A -s vkfinal "cd /data/tliao/vesper_sft/VesperLM && /data/tliao/vesper_sft/venv/bin/python lab/chat_vfinal.py"'
+```
+(and `--bare` for the un-grafted SFT base comparison, `--impress` for the
+full battery). Report numbers for parity/impress read from
+`box:/data/tliao/vk_final/{vk_results.json,impress.json}`.
+
 ## 2026-10-13 — VK-BASE SFT VERDICT: **TALKABLE (6/12, first non-zero ever)** — SFT r2 on the finished 10.07B-token vk-base breaks the 0/12 curse (t3-r1 / t3-r2 / box-429M all 0/12): clean conversational hits ("The capital of France is Paris.", greeting, empathy), hard-loop family shrunk 8-9/12 → 2/12, prompt-echo 4/12 → 0/12, empty 3/12 → 0/12; residual = formula-debris drift on knowledge prompts + hard loop on arithmetic | full-FT 560.96M @ 9.2GB VRAM, val 1.4324@600 (best) beats t3-r2's 1.4999 best at every matched step | MI300X droplet 608325412 ($94 actual) — destroyed + verified `no vesper-* droplets`
 
 **Question (the talkability test):** does the vk-base pretrain (10.07B tokens,
