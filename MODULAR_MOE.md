@@ -1898,6 +1898,58 @@ not reliably.  The queued principled closers stay the 10.10 ones
 
 ---
 
+## §10.12 SPINE OWNERSHIP: the passport-native port (2026-10-14 — vk-base,
+the final assembly)
+
+The graft stack lands on OUR own spine — vk-base (426M total / 325M active,
+KDA+MLA hybrid, PassportRouter 8 x top-2) — and the port is the cleanest of
+the three because the host already implements the designed socket.
+
+**Passport-native registry.** On HF hosts (Phi-mini-MoE, Qwen1.5-MoE) the
+d0 registry *imitates* a router: a PassportBank (W_q, P) is calibrated to
+reproduce stock logits, and the graft gate shadows the stock gate. On
+vk-base the stock router IS a passport bank — `query(x) @ passports.T /
+sqrt(64)` is `PassportBank.scores` with W_q=query.weight, P=passports — so
+`init=exact` is free and the parity gate measures pure plumbing: **logit
+cos 1.0000 (min 1.0000) vs bare**, bar 0.95 (`lab/vk_graft.py`
+`banks_from_native` + `parity_measure`).
+
+**Host adapter contract (lab/vk_graft.py, zero shared-source edits).** The
+reused machinery (door6.MixMerge / train_rows_one / load_wrap_plugin,
+d25.WrappedForeignExpert / train_adapters, g0.install_mix / run_in_state /
+collect_pairs_fam / closing_row_recal, varact_gate.*) sees the HF duck-type
+on VesperLinearLM via three rewires installed at load:
+(1) `ffn.experts.forward(h, idx, w)` becomes the stock permutation merge
+(the graft install point — `install_mix`/`install_varact` work unchanged);
+(2) `ffn.forward(x)` = router -> experts.forward -> reshape (trunk call
+signature preserved); (3) `d0.model_logits` unwraps the
+`(logits, ce, aux)` tuple and runs CUDA forwards under fp16 autocast (fp32
+master weights — KDA's internal fp32 path forbids a global fp16 cast).
+`VkGraftGate` is MixGateD2 semantics on the native socket: stock selection
+softmax-topk over stock rows only (bit-stable), plug rows vote membership
+(`score > kth stock score`) and carry `last_p_new` for VarAct gating and
+the taught-token bonus.
+
+**gfx906 reality (FAILURES fla-kda-gfx906).** fla's KDA/MLA fused kernels
+are Triton-only and do not build on gfx906 at any shape (T=1 included) —
+the MI50 fleet cannot execute vk-base unpatched. `lab/vk_fla_compat.py`
+patches the five Triton surfaces (KDA chunk/recurrent ops -> fla's own
+`naive.py` torch reference, ShortConvolution -> depthwise causal conv1d,
+FusedRMSNormGated/RMSNorm/RoPE -> torch) reproducing the kernel math
+(gate `g = -exp(A_log)*softplus(g+dt_bias)`, beta sigmoid, half-split RoPE).
+Runs on gfx906 and CPU; **caveat**: not yet cross-diffed against stock fla
+on a Triton venue — do that on the next MI300X run before fine quality
+claims.
+
+**Chat layer.** `lab/chat_vfinal.py` = chat_v06 conventions on the vk
+host: VkKVDecoder (kv_cache_v05 contract: modes bare/grafted, prefix-reuse
+prep, prefill self-check with automatic full-forward fallback — KDA
+threads RecurrentStateCache, MLA threads fla's cache), `--bare`, `/graftq`,
+`--impress` with the e6c79ec 12-prompt talkability instrument included.
+Shipped defaults are the measured ones: VarAct tau=0.5 (715ad33), mem
+bonus 3.0 + qscope overlap (30038bd), mem-pack persona (fe98ed4) with
+per-spine `"vk"` host sites in `lab/memories/persona_v1.json`.
+
 ## §11 THE BANK LADDER (2026-10-14 — standing campaign, user directive)
 
 Goal (user's words, the north star): "we took 3T from K3, 700B from GLM, 1T
@@ -1940,3 +1992,4 @@ GLM-5.3-class ~50-200M), so k and expert-size are the two dials.
 
 ### 11.4 Status
 Rung 0 in flight (vfinal assembly, agent-57). Rung 1 queued behind it.
+
