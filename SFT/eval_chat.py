@@ -54,8 +54,12 @@ def load_chat_model(ckpt_path, device):
             "kv_lora_rank", "v_head_dim", "linear_force_fp32",
             "router_type", "passport_dim", "router_expert_dropout"]
     kwargs = {k: mc[k] for k in arch if k in mc}
+    # VESPER_VALUE_EMBED flag-on checkpoints carry layers.{0,L-1}.attn.value_emb
+    # tables (+2 keys); build with them when present (never when absent).
+    value_embed = any("value_emb" in k for k in payload["model_state_dict"])
     model = VesperLinearLM(vocab_size=len(tok), pad_id=tok.pad_token_id,
-                           grad_checkpoint=False, **kwargs)
+                           grad_checkpoint=False, value_embed=value_embed,
+                           **kwargs)
     model.load_state_dict(payload["model_state_dict"], strict=True)
     model.to(device).eval()
     return model, tok

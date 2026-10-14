@@ -737,17 +737,24 @@ def train():
                    "grad_checkpoint"]
     arch_config = {k: v for k, v in model_config.items() if k in arch_keys}
 
-    model = VesperLinearLM(
-        vocab_size=len(tokenizer),
-        pad_id=tokenizer.pad_token_id,
-        **arch_config
-    ).to(device)
-
     state = None
     if checkpoint is not None:
         state = checkpoint['model']
         # Handle DDP-wrapped or raw state dicts
         state = {k.replace("module.", ""): v for k, v in state.items()}
+
+    # VESPER_VALUE_EMBED flag-on checkpoints carry layers.{0,L-1}.attn.value_emb
+    # tables (+2 keys); the model MUST be built with value_embed=True or the
+    # strict load breaks. Detect from the checkpoint itself (explicit False
+    # when absent so a stray env flag cannot break a flag-off load).
+    value_embed = any("value_emb" in k for k in state) if state else None
+
+    model = VesperLinearLM(
+        vocab_size=len(tokenizer),
+        pad_id=tokenizer.pad_token_id,
+        value_embed=value_embed,
+        **arch_config
+    ).to(device)
 
     # ---- Optional LoRA (VESPER_SFT_LORA=1) ----
     # Measured on the RTX 3070 8GB: full-FT of 470m_k OOMs even with
