@@ -269,144 +269,164 @@ def run_fit(args) -> dict:
 
     for (name, kind, home, host_i, core_file, donor, dlayer, dexp,
          hexp, act_force) in specs:
-        plugin_path = os.path.join(args.plugins_dir, f"{name}_plugin.pt")
-        if args.skip_done and os.path.exists(plugin_path):
-            w_chk, r_chk, _, _ = d6.load_wrap_plugin(plugin_path)
-            if d6.wrap_is_finite(w_chk, r_chk):
-                print(f"[{name}] plugin exists and finite — skip", flush=True)
-                out.setdefault("fitted", {})[name] = {"skipped": True}
-                dump_json(out, args.out)
-                continue
-        if core_file:
-            core_path = (core_file if os.path.isabs(core_file)
-                         else os.path.join(args.cores_dir, core_file))
-            if not os.path.exists(core_path):
-                raise RuntimeError(f"[{name}] missing core {core_path}")
-            core = torch.load(core_path, map_location="cpu", weights_only=False)
-            meta = core.get("meta", {})
-            w_gu, w_down = core["w_gu"], core["w_down"]
-            act = meta.get("act", "swiglu")
-            situ_beta = meta.get("situ_beta", 1.0)
-            situ_lin = meta.get("situ_linear_beta", 1.0)
-        else:
-            ffn = blocks[host_i]
-            w_gu, w_down = vk.extract_core(ffn, hexp)
-            meta = {}
-            act = act_force or "swiglu"
-            situ_beta, situ_lin = 1.0, 1.0
-        wrap = d25.WrappedForeignExpert(
-            banks_reg[host_i].d_model, args.d_canon, w_gu, w_down,
-            seed=args.seed, act=act, situ_beta=situ_beta,
-            situ_linear_beta=situ_lin)
-
-        rows_or_ids, feed_note = home_rows(args, home)
-        if kind == "domain":
-            home_train = vk.to_batches(rows_or_ids, 1, seq, bs)
-        else:
-            home_train = vk_chatml_batches(tok, rows_or_ids, seq, 1,
-                                           tile_to=args.episode_tile)
-        if not home_train:
-            raise RuntimeError(f"[{name}] empty home stream")
-        fed = steps_eff * seq * bs
-        print(f"== [{name}] core {donor} L{dlayer}e{dexp} "
-              f"({wrap.core_param_count()} frozen, act {act}) -> host L{host_i} "
-              f"home={home} ({len(home_train)} batches, {steps_eff} steps, "
-              f"feed {fed} tok-slots) ==", flush=True)
-        out.setdefault("feed", {})[name] = {
-            **feed_note, "batches": len(home_train), "steps": steps_eff,
-            "fed_token_slots": fed}
-        dump_json(out, args.out)
-
-        # phase A: adapters, forced dispatch (d25 recipe verbatim)
-        pa = _fit_wrap_vk(model, blocks, banks_reg, host_i, wrap,
-                          home_train, base_batches, args, steps_eff)
-        if not pa.get("finite", True):
-            print(f"[{name}] NON-FINITE at lr {args.expert_lr} — refit 1e-3",
-                  flush=True)
-            del wrap
-            torch.cuda.empty_cache()
+        # per-wrap guard: one bad wrap must not kill the lane (bank_rung1
+        # phase_fit idiom — keep the lane alive all night)
+        try:
+            plugin_path = os.path.join(args.plugins_dir, f"{name}_plugin.pt")
+            if args.skip_done and os.path.exists(plugin_path):
+                w_chk, r_chk, _, _ = d6.load_wrap_plugin(plugin_path)
+                if d6.wrap_is_finite(w_chk, r_chk):
+                    print(f"[{name}] plugin exists and finite — skip",
+                          flush=True)
+                    out.setdefault("fitted", {})[name] = {"skipped": True}
+                    dump_json(out, args.out)
+                    continue
+            if core_file:
+                core_path = (core_file if os.path.isabs(core_file)
+                             else os.path.join(args.cores_dir, core_file))
+                if not os.path.exists(core_path):
+                    raise RuntimeError(f"[{name}] missing core {core_path}")
+                core = torch.load(core_path, map_location="cpu",
+                                  weights_only=False)
+                meta = core.get("meta", {})
+                w_gu, w_down = core["w_gu"], core["w_down"]
+                act = meta.get("act", "swiglu")
+                situ_beta = meta.get("situ_beta", 1.0)
+                situ_lin = meta.get("situ_linear_beta", 1.0)
+            else:
+                ffn = blocks[host_i]
+                w_gu, w_down = vk.extract_core(ffn, hexp)
+                meta = {}
+                act = act_force or "swiglu"
+                situ_beta, situ_lin = 1.0, 1.0
             wrap = d25.WrappedForeignExpert(
                 banks_reg[host_i].d_model, args.d_canon, w_gu, w_down,
                 seed=args.seed, act=act, situ_beta=situ_beta,
                 situ_linear_beta=situ_lin)
-            old_lr = args.expert_lr
-            args.expert_lr = 1e-3
+
+            rows_or_ids, feed_note = home_rows(args, home)
+            if kind == "domain":
+                home_train = vk.to_batches(rows_or_ids, 1, seq, bs)
+            else:
+                home_train = vk_chatml_batches(tok, rows_or_ids, seq, 1,
+                                               tile_to=args.episode_tile)
+            if not home_train:
+                raise RuntimeError(f"[{name}] empty home stream")
+            fed = steps_eff * seq * bs
+            print(f"== [{name}] core {donor} L{dlayer}e{dexp} "
+                  f"({wrap.core_param_count()} frozen, act {act}) -> host "
+                  f"L{host_i} home={home} ({len(home_train)} batches, "
+                  f"{steps_eff} steps, feed {fed} tok-slots) ==", flush=True)
+            out.setdefault("feed", {})[name] = {
+                **feed_note, "batches": len(home_train), "steps": steps_eff,
+                "fed_token_slots": fed}
+            dump_json(out, args.out)
+
+            # phase A: adapters, forced dispatch (d25 recipe verbatim)
             pa = _fit_wrap_vk(model, blocks, banks_reg, host_i, wrap,
                               home_train, base_batches, args, steps_eff)
-            args.expert_lr = old_lr
             if not pa.get("finite", True):
-                out.setdefault("fitted", {})[name] = {"error": "non_finite_twice"}
-                out["phase"] = f"failed_{name}"
-                dump_json(out, args.out)
-                continue
+                print(f"[{name}] NON-FINITE at lr {args.expert_lr} — refit 1e-3",
+                      flush=True)
+                del wrap
+                torch.cuda.empty_cache()
+                wrap = d25.WrappedForeignExpert(
+                    banks_reg[host_i].d_model, args.d_canon, w_gu, w_down,
+                    seed=args.seed, act=act, situ_beta=situ_beta,
+                    situ_linear_beta=situ_lin)
+                old_lr = args.expert_lr
+                args.expert_lr = 1e-3
+                pa = _fit_wrap_vk(model, blocks, banks_reg, host_i, wrap,
+                                  home_train, base_batches, args, steps_eff)
+                args.expert_lr = old_lr
+                if not pa.get("finite", True):
+                    out.setdefault("fitted", {})[name] = {
+                        "error": "non_finite_twice"}
+                    out["phase"] = f"failed_{name}"
+                    dump_json(out, args.out)
+                    continue
 
-        # registry row: prototype init + ROW-SCALE GUARD (180a612) + recal.
-        # ROW SPACE: passport rows live in QUERY space (P is (E, d_r=64) on
-        # vk-base; score = (W_q h).p_e), so both the placeholder row and the
-        # prototype must be d_r wide — writing d_model=1024 into P crashed
-        # every rung-0 fit lane at _build_vk_gates (2026-10-14).
-        site_rows = {host_i: [torch.zeros(banks_reg[host_i].d_r)]}
-        gates, site_banks = _build_vk_gates(blocks, banks_reg, site_rows)
-        ffn = blocks[host_i]
-        handles = g0.install_mix(blocks, vk.FAM, {
-            host_i: [{"expert": wrap,
-                      "lam": nn.Parameter(torch.ones((), device=args.device)),
-                      "tag": name, "num_stock": banks_reg[host_i].num_experts}]},
-            mode="off")
-        pair_home = home_train[:args.pair_batches]
-        pair_base = base_batches[:args.pair_base]
-        pairs = g0.run_in_state(
-            model, blocks, vk.FAM, gates, handles, "off",
-            lambda: g0.collect_pairs_fam(
-                model, blocks, vk.FAM, pair_home + pair_base, args.device,
-                args.max_cal_pairs, lambda _i, b: 1 if b[1] == 1 else 0))
-        h, lab = pairs[host_i]
-        home_h = h[lab > 0.5]
-        bank = site_banks[host_i]
-        row_idx = bank.num_experts - 1
-        with torch.no_grad():
-            if home_h.shape[0] > 0:
-                # prototype in QUERY space (d_r): mean of W_q h over home hiddens
-                proto = bank.query(home_h).mean(dim=0)
-                stock_norm = float(bank.P.data[:row_idx].float().norm(dim=1).mean())
-                pnorm = float(proto.float().norm())
-                if pnorm > 0 and stock_norm > 0:
-                    proto = proto * (stock_norm / pnorm)   # row-scale guard
-                bank.P.data[row_idx] = proto
-        owner = BAR_OWNER_MEM if kind == "mem" else BAR_OWNER_SPEC
-        rep = d6.train_rows_one(bank, pairs[host_i], row_idx, args.row_steps,
-                                args.row_lr, args.device,
-                                reject_w=args.reject_w, mass_w=args.mass_w,
-                                owner_target=owner)
-        row = bank.P.data[row_idx].float().cpu().clone()
-        _restore_ffn(ffn)
-        d1.set_plugin_mode(handles, "off")
-        os.makedirs(args.plugins_dir, exist_ok=True)
-        torch.save({
-            "format": d6.FORMAT,
-            "wrap": wrap.state_dict(),
-            "wrap_spec": wrap.wrap_spec(),
-            "row": row,
-            "meta": {"new_idx": row_idx, "host_layer": host_i, "tag": name,
-                     "kind": kind, "home": home,
-                     "donor_layer": dlayer, "donor_expert": dexp,
-                     "donor": donor,
-                     "core_file": (core_file or f"vk-host L{host_i}e{hexp}"),
-                     "owner_target": owner},
-        }, plugin_path)
-        out.setdefault("fitted", {})[name] = {
-            "plugin": plugin_path, "host_layer": host_i, "home": home,
-            "donor": [donor, dlayer, dexp],
-            "phase_a": {k: pa.get(k) for k in ("steps", "lr", "finite", "wall_s")},
-            "ce_hist_tail": pa.get("history", [])[-2:],
-            "row_recal": {"first": rep["first"], "last": rep["last"]}}
-        out["phase"] = f"fitted_{name}"
-        out["fit_wall_s"] = round(time.time() - t0, 2)
-        dump_json(out, args.out)
-        print(f"== [{name}] done: row p_home {rep['last']['p_new_code']:.3f} "
-              f"p_base {rep['last']['p_new_base']:.4f} ==", flush=True)
-        del wrap
-        torch.cuda.empty_cache()
+            # registry row: prototype init + ROW-SCALE GUARD (180a612) + recal.
+            # ROW SPACE: passport rows live in QUERY space (P is (E, d_r=64) on
+            # vk-base; score = (W_q h).p_e), so both the placeholder row and the
+            # prototype must be d_r wide — writing d_model=1024 into P crashed
+            # every rung-0 fit lane at _build_vk_gates (2026-10-14).
+            site_rows = {host_i: [torch.zeros(banks_reg[host_i].d_r)]}
+            gates, site_banks = _build_vk_gates(blocks, banks_reg, site_rows)
+            ffn = blocks[host_i]
+            handles = g0.install_mix(blocks, vk.FAM, {
+                host_i: [{"expert": wrap,
+                          "lam": nn.Parameter(torch.ones((),
+                                                          device=args.device)),
+                          "tag": name,
+                          "num_stock": banks_reg[host_i].num_experts}]},
+                mode="off")
+            pair_home = home_train[:args.pair_batches]
+            pair_base = base_batches[:args.pair_base]
+            pairs = g0.run_in_state(
+                model, blocks, vk.FAM, gates, handles, "off",
+                lambda: g0.collect_pairs_fam(
+                    model, blocks, vk.FAM, pair_home + pair_base, args.device,
+                    args.max_cal_pairs, lambda _i, b: 1 if b[1] == 1 else 0))
+            h, lab = pairs[host_i]
+            home_h = h[lab > 0.5]
+            bank = site_banks[host_i]
+            row_idx = bank.num_experts - 1
+            with torch.no_grad():
+                if home_h.shape[0] > 0:
+                    # prototype in QUERY space (d_r): mean of W_q h over home
+                    # hiddens (PassportBank API is .queries() — .query()
+                    # AttributeError'd every fit after phaseA and before the
+                    # save, 2026-10-14)
+                    proto = bank.queries(home_h).mean(dim=0)
+                    stock_norm = float(
+                        bank.P.data[:row_idx].float().norm(dim=1).mean())
+                    pnorm = float(proto.float().norm())
+                    if pnorm > 0 and stock_norm > 0:
+                        proto = proto * (stock_norm / pnorm)  # row-scale guard
+                    bank.P.data[row_idx] = proto
+            owner = BAR_OWNER_MEM if kind == "mem" else BAR_OWNER_SPEC
+            rep = d6.train_rows_one(bank, pairs[host_i], row_idx, args.row_steps,
+                                    args.row_lr, args.device,
+                                    reject_w=args.reject_w, mass_w=args.mass_w,
+                                    owner_target=owner)
+            row = bank.P.data[row_idx].float().cpu().clone()
+            _restore_ffn(ffn)
+            d1.set_plugin_mode(handles, "off")
+            os.makedirs(args.plugins_dir, exist_ok=True)
+            torch.save({
+                "format": d6.FORMAT,
+                "wrap": wrap.state_dict(),
+                "wrap_spec": wrap.wrap_spec(),
+                "row": row,
+                "meta": {"new_idx": row_idx, "host_layer": host_i, "tag": name,
+                         "kind": kind, "home": home,
+                         "donor_layer": dlayer, "donor_expert": dexp,
+                         "donor": donor,
+                         "core_file": (core_file or f"vk-host L{host_i}e{hexp}"),
+                         "owner_target": owner},
+            }, plugin_path)
+            print(f"[fit] {name} saved plugin -> {plugin_path}", flush=True)
+            out.setdefault("fitted", {})[name] = {
+                "plugin": plugin_path, "host_layer": host_i, "home": home,
+                "donor": [donor, dlayer, dexp],
+                "phase_a": {k: pa.get(k) for k in ("steps", "lr", "finite",
+                                                   "wall_s")},
+                "ce_hist_tail": pa.get("history", [])[-2:],
+                "row_recal": {"first": rep["first"], "last": rep["last"]}}
+            out["phase"] = f"fitted_{name}"
+            out["fit_wall_s"] = round(time.time() - t0, 2)
+            dump_json(out, args.out)
+            print(f"== [{name}] done: row p_home {rep['last']['p_new_code']:.3f} "
+                  f"p_base {rep['last']['p_new_base']:.4f} ==", flush=True)
+            del wrap
+            torch.cuda.empty_cache()
+        except Exception as e:  # noqa: BLE001 — keep the lane alive all night
+            out.setdefault("fail", {})[name] = f"{type(e).__name__}: {e}"
+            out["phase"] = f"failed_{name}"
+            dump_json(out, args.out)
+            print(f"[fit] {name} EXC {e}", flush=True, file=sys.stderr)
+            torch.cuda.empty_cache()
     out["phase"] = "fit_done"
     out["fit_wall_s"] = round(time.time() - t0, 2)
     dump_json(out, args.out)

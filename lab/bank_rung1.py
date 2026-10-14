@@ -369,7 +369,10 @@ def fit_one(c: dict, model, tok, blocks, banks_reg, args, out: dict) -> dict:
     row_idx = bank.num_experts - 1
     with torch.no_grad():
         if home_h.shape[0] > 0:
-            proto = bank.query(home_h).mean(dim=0)   # query space (d_r)
+            # PassportBank API is .queries() (W_q h in d_r); .query() was an
+            # AttributeError that killed every fit AFTER phaseA and BEFORE the
+            # save below (2026-10-14, 6c89e7a typo).
+            proto = bank.queries(home_h).mean(dim=0)   # query space (d_r)
             stock_norm = float(bank.P.data[:row_idx].float().norm(dim=1).mean())
             pnorm = float(proto.float().norm())
             if pnorm > 0 and stock_norm > 0:
@@ -388,6 +391,9 @@ def fit_one(c: dict, model, tok, blocks, banks_reg, args, out: dict) -> dict:
         "donor_expert": c["expert"], "family": fam,
         "core_prefix": c["core_prefix"],
         "owner_target": vb.BAR_OWNER_SPEC, "fed_token_slots": fed})
+    ylast = (pa.get("history") or [{}])[-1].get("mean_abs_y", float("nan"))
+    print(f"[fit] {cid} saved plugin -> {pp} (|y|_last {ylast:.3e})",
+          flush=True)
     rec = {"plugin": pp, "host_layer": host_i, "home": c["home"],
            "phase_a": {k: pa.get(k) for k in ("steps", "lr", "finite",
                                               "wall_s")},
