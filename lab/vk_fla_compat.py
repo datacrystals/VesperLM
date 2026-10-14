@@ -90,8 +90,9 @@ def _torch_causal_conv1d(x, weight, bias=None, residual=None,
     xf = x.float()
     if initial_state is not None:
         # cache (N, D, W) = last W inputs, oldest first (this shim's layout,
-        # self-consistent prefill->decode)
-        hist = initial_state.float()[:, :, :W - 1]           # (B, D, W-1)
+        # self-consistent prefill->decode): history for the next step is the
+        # MOST RECENT W-1 entries, i.e. drop the oldest.
+        hist = initial_state.float()[:, :, -(W - 1):]      # (B, D, W-1)
         xin = torch.cat([hist, xf.transpose(1, 2)], dim=-1)  # (B, D, T+W-1)
     else:
         xin = F.pad(xf.transpose(1, 2), (W - 1, 0))
@@ -138,31 +139,50 @@ def _patch_short_conv():
 
 def _fused_rms_norm_gated(self, x, g, residual=None, prenorm=False,
                           residual_in_fp32=False, **kwargs):
-    """Torch FusedRMSNormGated: rmsnorm(x) * act(g) [+ residual]."""
+    """Torch FusedRMSNormGated: rmsnorm(x [+ residual]) * act(g).
+
+    Matches fla's fused_norm_gate kernel body exactly: residual joins x
+    BEFORE the norm, the gate lands AFTER it — `y * silu(g)` for
+    swish/silu, `y * sigmoid(g)` for sigmoid. KDA's o_norm is
+    activation="sigmoid"; multiplying by raw unbounded g there (the old
+    shim behavior) made every KDA layer's output garbage — the
+    `to_c1c1_c10101...` subword-run decode bug on gfx906.
+    """
     xf = x.float()
+    if residual is not None:
+        xf = xf + residual.float()
     var = xf.pow(2).mean(-1, keepdim=True)
     y = xf * torch.rsqrt(var + self.eps) * self.weight.float()
+    if self.bias is not None:
+        y = y + self.bias.float()
     act = getattr(self, "activation", "swish")
     gf = g.float()
-    y = y * (F.silu(gf) if act in ("swish", "silu") else gf)
-    if residual is not None:
-        y = y + residual.float()
-    y = y.to(x.dtype)
+    if act in ("swish", "silu"):
+        y = y * F.silu(gf)
+    elif act == "sigmoid":
+        y = y * torch.sigmoid(gf)
+    else:
+        raise ValueError(f"FusedRMSNormGated activation {act!r} not supported")
+    y = y.to(torch.float32 if residual_in_fp32 else x.dtype)
     if prenorm:
-        return y, x
+        return y, xf.to(x.dtype)
     return y
 
 
 def _rms_norm(self, x, residual=None, prenorm=False, residual_in_fp32=False,
               **kwargs):
+    # fla semantics: residual joins x BEFORE the norm (fused kernel does
+    # `b_x += residual` first), prenorm returns that sum.
     xf = x.float()
+    if residual is not None:
+        xf = xf + residual.float()
     y = xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + self.eps)
     y = y * self.weight.float()
-    if residual is not None:
-        y = y + residual.float()
+    if self.bias is not None:
+        y = y + self.bias.float()
     y = y.to(torch.float32 if residual_in_fp32 else x.dtype)
     if prenorm:
-        return y, x
+        return y, xf.to(x.dtype)
     return y
 
 
