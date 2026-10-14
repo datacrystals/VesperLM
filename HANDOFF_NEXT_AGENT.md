@@ -41,6 +41,131 @@ data first.
 
 ---
 
+## 2026-10-13 — VK-BASE SFT VERDICT: **TALKABLE (6/12, first non-zero ever)** — SFT r2 on the finished 10.07B-token vk-base breaks the 0/12 curse (t3-r1 / t3-r2 / box-429M all 0/12): clean conversational hits ("The capital of France is Paris.", greeting, empathy), hard-loop family shrunk 8-9/12 → 2/12, prompt-echo 4/12 → 0/12, empty 3/12 → 0/12; residual = formula-debris drift on knowledge prompts + hard loop on arithmetic | full-FT 560.96M @ 9.2GB VRAM, val 1.4324@600 (best) beats t3-r2's 1.4999 best at every matched step | MI300X droplet 608325412 ($94 actual) — destroyed + verified `no vesper-* droplets`
+
+**Question (the talkability test):** does the vk-base pretrain (10.07B tokens,
+best val 1.778, `VESPER_VALUE_EMBED=1` flag-on) produce a base that SFTs into a
+model that **converses normally without loops** — the bar three prior bases
+failed (t3-r1 0/12, t3-r2 val 1.4999/0/12, box-429M r2 0/12)? **Answer: YES
+on the bar, first time — 6/12 usable with genuinely conversational samples,
+vs 0/12 across all three failures.** Not a polished chat model (see residuals)
+but the repetition-collapse/prompt-echo death mode is GONE as the dominant
+family.
+
+**Venue (money discipline):** the already-paid MI300X droplet from the
+pretrain run — id **608325412** `vesper-vk-base-ttl3480m-1791789171`,
+129.212.180.230 — pretrain had completed on it (`[TRAINING COMPLETE] steps
+0..9999 done (10000 steps) | tokens trained: 10,069,098,496 | best val loss:
+1.778`, final ckpt `Pretrain/vesper_linear_checkpoints_vk_base/step_9999`,
+`step_best` = step 8600). SFT ran there (~30 min train + evals), then
+`python3 pod/devcloud.py destroy 608325412 && python3 pod/devcloud.py list` →
+**destroyed ($94.00 actual) + `no vesper-* droplets` verified**. Artifacts
+pulled BEFORE destroy (see below). No fallback to the box P40s needed.
+
+**The flag-on caveat, now load-bearing-safe:** the base carries **+2 value_emb
+keys** (`layers.0.attn.value_emb.weight`, `layers.9.attn.value_emb.weight`,
+each (65523, 1024) — first/last layers, kda sites). SFT/eval must construct
+with value_embed or the strict load breaks. This cycle **patched both
+`SFT/01_sft_train.py` and `SFT/eval_chat.py` to auto-detect value_emb keys in
+the checkpoint state dict** and pass `value_embed=True/False` explicitly
+(committed in this change) — the env `VESPER_VALUE_EMBED=1` is no longer
+load-bearing at SFT/eval time (was still set in the launch capsule).
+Log line on the run: `[value-embed] ... layer 0 (kda, width=1024), layer 9
+(kda, width=1024)`; strict pretrain load clean (0 missing / 0 unexpected).
+**Any future load of vk-base SFT/pretrain ckpts on old code MUST run with
+`VESPER_VALUE_EMBED=1` or it fails/misreads.**
+
+**Recipe (r2 verbatim + full-FT):** `SFT/01_sft_train.py` config
+`470m_k_sft_r2`, base = `vesper_linear_checkpoints_vk_base/step_best`
+(step 8600; `_resolve_pretrain_checkpoint` prefers step_best — t3-r2
+precedent). **FULL-FT (no `VESPER_SFT_LORA`)** — user directive "full-FT beats
+LoRA if it fits"; MI300X fits it easily: **560.96M params / 325.03M active,
+VRAM 9.2GB/192GB** (dummy-pass reserve 2.4GB), vs the 3070's full-FT OOM.
+bf16 AMP + `VESPER_FUSED_CE=1` + `VESPER_VALUE_EMBED=1` + `VESPER_COMPILE=1`
+(canary trio), micro_batch 8 × seq 1024, accum 4 (= 32,768 tok/opt-step),
+lr 5e-5→5e-6 cosine warmup 50, 2000 steps, eval every 200 (30 val batches).
+Data = the r2 bins, md5-verified laptop→droplet (oasst2_sft.bin 1,332,224 +
+openhermes_sft.bin 50,000,896 positions @ 1:35 via `index.txt`). Wall:
+1.13–1.16 steps/s → ~29 min train + ~1 min/eval. Detached `setsid` launcher
+`/root/vk_sft_train.sh` (auto-resume loop, mirrors the pretrain pattern).
+
+**Val curve (masked CE, 30 batches):** 1.5865@200 → 1.5083@400 →
+**1.4324@600 (BEST)** → 1.4822@800 → 1.5136@1000 → 1.5935@1200 → 1.4845@1400
+→ 1.4939@1600 → 1.6287@1800. Same overfit shape as t3-r2 (best mid-run, then
+drift — full-FT @5e-5 slightly hot late) but the whole curve sits BELOW the
+old bases at every matched point: @200 1.5865 vs t3-r2 1.7136 vs 429M 1.9592;
+@400 1.5083 vs 1.6420 vs 1.7809; best 1.4324 vs t3-r2's best 1.4999 (Δ−0.07).
+`step_best` = **step 600** (train CE window ~0.6–1.9, no blow-up).
+
+**12-prompt verdict — `SFT/eval_chat.py` on step_best's chat_model
+(`/root/vk_sft_r2/step_600/chat_model`), T=0.7/top-p 0.9, 180 max new.
+TALKABLE = YES (6/12 usable vs 0/12 ×3).** Loop audit (4/6/10-gram ≥4×):
+hard-loop **2/12** (was 8–9/12), prompt-echo **0/12** (was 4/12), empty
+**0/12** (was 3/12). Per-prompt one-word verdicts + SHORT excerpts
+(samples: `lab/imported/vk_sft_r2/_evals/eval_chat_step600.json`, untracked):
+
+| # | prompt | verdict | excerpt / failure |
+|---|--------|---------|-------------------|
+| 1 | greeting | **PASS** | "Hello! I'm here to help you today!" |
+| 2 | capital of France | **PASS** | "The capital of France is Paris." |
+| 3 | black hole | FAIL | hard loop + physics garble ("hypothetical subatomic particle…") |
+| 4 | ocean poem | **PASS** | coherent on-topic verse-ish, mild phrase repeat |
+| 5 | 17×23 | FAIL | hard loop `x = 5 * 0.09` ×N |
+| 6 | boil an egg | PARTIAL | topical numbered steps, content garble, no loop |
+| 7 | list vs tuple | PARTIAL | correct opener, 1× paragraph repeat, code debris |
+| 8 | fun fact space | **PASS** | on-topic shuttle-sleep anecdote |
+| 9 | photosynthesis summary | FAIL | correct opener then formula-debris drift |
+| 10 | stressed about work | **PASS** | "I'm really sorry for the distress. I'm just here to help." |
+| 11 | translate to French | FAIL | task ignored → precipitation-formula debris |
+| 12 | why do we dream | **PASS** | coherent prose, mild phrase repeat |
+
+**vs the three failed bases:** t3-r1 0/12 (val 2.30 flat, LoRA r8/OASST-only);
+t3-r2 0/12 (val 1.4999 best, LoRA r32, loops 8/12 + echo 4/12 + empty 3/12);
+box-429M r2 0/12 (val ~1.78 best partial record, same failure family). The
+failure MODE changed class: repetition-collapse/prompt-echo is no longer
+dominant — what remains is (a) a residual hard-loop on numeric/formula
+prompts (2/12), (b) corpus-drift into formula debris on knowledge tasks
+(3/12), (c) mild single-repeat before drift (2/12). Simple social/factual
+prompts now answer correctly and stop. **This is the "more pretrain tokens"
+lever working — 10.07B (≈2.7× t3's 3.77B) is the only meaningful delta.**
+
+**Graft-question probe (numeric/one-word only, per safety filter):**
+3 prompts @ step_600 (`_evals/graft_probe_step600.json`): impress multi-donor
+graft question **FAIL** (hard loop); simple "could expert weights be grafted
+into you" **PASS** (clean one-line yes); "what does grafting mean" **PARTIAL**
+(definitional opener then drift). Summary **1/3 PASS / 1/3 PARTIAL / 1/3
+FAIL → graft-host verdict PARTIAL**. The base can discuss grafting at the
+simple level but does not yet host a graft-style multi-donor conversation;
+the real graft-stack hosting question is a technical assembly test
+(registry/λ delivery on this spine — NOT run this cycle) and is the natural
+next door now that the base is talkable.
+
+**Artifacts (pulled home BEFORE destroy):** pretrain finals →
+`~/vesper_ckpts/vk_base/{step_9999,step_best}/` (5.3GB each, md5 in
+`FINAL_CKPT_MD5.txt`; step_best = step 8600); SFT →
+`lab/imported/vk_sft_r2/` (untracked): `chat_model/` (2.2GB eval-ready best),
+`step_best/` (6.3GB resumable SFT best = step 600), `_evals/` (12-prompt +
+graft probe JSONs), `vk_sft_r2_train.log`. **Never commit lab/imported/ or
+Dataset/data/index.txt.**
+
+**Code this change (committed):** `SFT/01_sft_train.py` + `SFT/eval_chat.py`
+value_embed auto-detect (the flag-on caveat fix). Ops notes: droplet sshd
+throttles under retry bursts (`Connection refused` while TCP:22 still
+accepts) — use **ControlMaster multiplexing + paced retries**, never a tight
+retry hammer; the old `/tmp/vk_ckpt_pull.sh` loop died mid-pull on step_2500
+(pulled finals manually via `rsync --partial`); trainer step counter runs
+0..1999 so the last eval is 1800 (no step_2000 dir).
+
+**Hand-off / follow-up (next cycle):** the base is talkable → (1) the graft
+assembly test on this spine (registry + wrapped cores + λ delivery, the
+MODULAR_MOE stack, MI50 box), (2) longer/full-FT SFT with a lower late-run
+LR or early stop at best if a polished chat model is wanted (val said 600 of
+2000), (3) 12-prompt is the fixed instrument — keep it for every future
+base so this 6/12 stays comparable. Reproduce locally:
+`python3 SFT/eval_chat.py --ckpt lab/imported/vk_sft_r2/chat_model --out x.json`.
+
+---
+
 ## 2026-10-13 — PERSONA MEMORY PACK v1 (MODULAR_MOE §10.11): the user's 6 permanent "about me" facts taught as shaped episodic plugs (pet_kepler machinery at slightly larger scale) — pack = `lab/memories/persona_v1.json` + `lab/mem_pack.py` (18/18 substitution deltas; gate-separation selftest 23/23); built on BOTH hosts (phi + qwen, 6 rank-64 wraps each, owner 0.85) and wired `--mem-pack persona` default-on in chat_v05/chat_v06 (MI50 box, fp16)
 
 **The facts (user's own words):** favorite live-action show = Person of
@@ -1741,6 +1866,13 @@ calibration for the held-out gap, more memories (N-scaling is the §8.4 G3
 question at chat level), second donor family, and cross-scale wraps (10.1).
 
 ## 2026-10-12 — vk-base pretrain **LAUNCHED** (~10B tokens through the 470m_k lineage + fixed vesperk mix, one MI300X, user-approved)
+
+**STATUS 2026-10-13: COMPLETE** — `[TRAINING COMPLETE] steps 0..9999 done
+(10000 steps) | tokens trained: 10,069,098,496 | best val loss: 1.778` (best
+@ step 8600; terminal val 1.8248@9999). Final ckpts `step_9999` + `step_best`
+pulled to `~/vesper_ckpts/vk_base/`; SFT r2 verdict on this base = **TALKABLE
+6/12 (first non-zero)** — see the "VK-BASE SFT VERDICT" section at the top.
+Droplet 608325412 destroyed + verified. Everything below is the launch-time record.
 
 **RUN STATE:** droplet id **608325412** `vesper-vk-base-ttl3480m-1791789171`,
 ip **129.212.180.230**, created 2026-10-12 07:12:51 UTC, **launched 07:58 UTC**.
