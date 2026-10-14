@@ -340,8 +340,12 @@ def run_fit(args) -> dict:
                 dump_json(out, args.out)
                 continue
 
-        # registry row: prototype init + ROW-SCALE GUARD (180a612) + recal
-        site_rows = {host_i: [torch.zeros(banks_reg[host_i].d_model)]}
+        # registry row: prototype init + ROW-SCALE GUARD (180a612) + recal.
+        # ROW SPACE: passport rows live in QUERY space (P is (E, d_r=64) on
+        # vk-base; score = (W_q h).p_e), so both the placeholder row and the
+        # prototype must be d_r wide — writing d_model=1024 into P crashed
+        # every rung-0 fit lane at _build_vk_gates (2026-10-14).
+        site_rows = {host_i: [torch.zeros(banks_reg[host_i].d_r)]}
         gates, site_banks = _build_vk_gates(blocks, banks_reg, site_rows)
         ffn = blocks[host_i]
         handles = g0.install_mix(blocks, vk.FAM, {
@@ -362,7 +366,8 @@ def run_fit(args) -> dict:
         row_idx = bank.num_experts - 1
         with torch.no_grad():
             if home_h.shape[0] > 0:
-                proto = home_h.mean(dim=0)
+                # prototype in QUERY space (d_r): mean of W_q h over home hiddens
+                proto = bank.query(home_h).mean(dim=0)
                 stock_norm = float(bank.P.data[:row_idx].float().norm(dim=1).mean())
                 pnorm = float(proto.float().norm())
                 if pnorm > 0 and stock_norm > 0:

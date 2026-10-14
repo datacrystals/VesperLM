@@ -41,6 +41,75 @@ data first.
 
 ---
 
+## 2026-10-14 — BANK LADDER RUNG 1 (~8B grafted bank): **NOT LAUNCHED — zero cores extracted, zero wraps, zero growth rows.** Root blocker found+fixed in working tree: `vk_final_build.py` row-space bug (see below). FEED slices staged on box. Resume recipe below.
+
+**Honest state at session cap (monitor pass, box-side liveness only — no relaunch):**
+- **Extraction: 0 / ~250.** `box:/data/tliao/core_bank/` holds only the 3 rung-0 donor cores
+  (kimi-k3/L12E895, glm-5.3-flash/L3E0, mimo-v2.6-flash/L1E0). No rung-1 breadth-first
+  selection has run. Laptop K3 shards are live (`~/Desktop/Kimi-K3`, 96 shards 1.5T);
+  box `/data/ModelDownloader/Kimi-K3` is LFS pointer stubs (135 B) — K3 extraction must
+  run on the laptop, GLM/MiMo on the box, then cores land under
+  `box:/data/tliao/core_bank/<donor>/`.
+- **Wraps completed: 0.** The rung-0 fit lanes (`vk_final/run_all.sh`, GPUs 2/1/5) all
+  CRASHED at `_build_vk_gates` with `RuntimeError: expanded size (64) != (1024)` —
+  see row-space bug below. `fit_{A,B,C}.json` hold only phase-A CE history; no
+  `*_plugin.pt` was ever written under `/data/tliao/vk_final/` (registry_vk.pt only).
+  Assemble + impress then failed with "no plug-ins". The v06-era plugins in
+  `/data/tliao/v06_out/` are the OLD Qwen-spine bank, not vk-base.
+- **Growth curve: EMPTY.** No 32/64/128/250 checkpoint exists to report. §11 break
+  criteria are all UNMEASURED (home quality, pairwise harm, p_home collapse, base tax
+  — none readable at N=0).
+- **Not a rung-1 chain in flight:** the only long-lived PIDs matching the box scan are
+  the user tmux chat sessions (`chat_vfinal.py --bare` in `vkfinal`, `chat_v05.py` in
+  `v05chat`/`v05chat_v051`) + the mtfact gpu6 claim keepalive — user/rung-0 lanes,
+  never touch. `/data/tliao/rung1/{logs,plugins,results,locks}` created but empty.
+  GPU claims: only `mr_gpu_claims/gpu6` (mtfact keepalive) + `vk_final/locks` empty.
+
+**Row-space bug (the crash that zeroed rung-0 AND blocks rung-1 fits) — FIXED in
+`lab/vk_final_build.py` (this commit):** on vk-base the passport bank is
+`P:(E,d_r=64)` + `W_q:(64,1024)`; a registry row IS a query-space vector
+(score = (W_q h)·p_e/√64). The fit path wrote `torch.zeros(d_model=1024)` as the
+placeholder row and `home_h.mean(0)` (d_model) as the prototype into `P` — both must
+be d_r=64 (`bank.query(home_h).mean(0)` for the prototype). Every fit lane died there
+after phase A (~45 min of adapter training lost per lane). Fix is 2 hunks + comment;
+`python3 -m py_compile` clean. **First resume action: re-run the fit lanes** (skip-done
+per plugin is safe; phase A will retrain since nothing was saved).
+
+**Rung-1 resume recipe (self-driving, detached — must survive sessions):**
+1. Extract ~250 cores, breadth-first over (layer, expert) grids (this rung tests "does
+   the bank scale", NOT optimal picks — no RouteStats): K3 92L×896E on laptop → rsync
+   cores to box; GLM-5.3-Flash 45L×288E + MiMo-V2.6 48L×256E on box CPU. ~60 ms/core
+   (`lab/grabkit_extract_core.py`). Layout `core_bank/<donor>/L{l}E{e}/core.safetensors`.
+   Dequant per core via `lab/v05_core_prep.py` at wrap time (K3 mxfp4 → situ act;
+   GLM/MiMo int4 → swiglu).
+2. Wrap per §10.7 on the vk-base host (`vk_final_build.py` machinery + `vk_fla_compat.py`
+   shim): rank-64 width-norm, wd 0, lr 3e-3, task-CE, FEED ≥200k. FEED slices staged:
+   `box:/data/tliao/rung1_feeds/{code,math,science,web,chat}.ids` (250k uint16 each,
+   vesperk bins, vocab-matched to the chat tokenizer 65523) + `base.ids` (100k, dclm
+   window offset 250k — disjoint from every home). Home heuristic: map each core to a
+   home by donor-family round-robin over {hacking, cybersec, writing, code, math,
+   science, web, chat} and record the mapping in the rung-1 manifest JSON. Share the
+   `Dataset/data/specialties/` corpora for the 3 named homes; the .ids slices feed the
+   rest. Wall: shim fits ≈1.5-2 h/core → 375-500 GPU-h for 250; claim-locked on free
+   MI50s coexisting with rung-0 lanes ⇒ expect ~2-3 days detached. Skip-done per core,
+   incremental JSON (`rung1/results/fit_<coreid>.json`), setsid, no pgrep gates.
+3. Assemble at growth checkpoints 32/64/128/250: registry rows + balanced per-home λ
+   + cross-fire rejection + τ=0.5 VarAct with k-dial k=4-8. Log the §11 break table at
+   EACH checkpoint (the ladder needs the growth curve, not the endpoint).
+4. Impress battery at endpoint (numeric/one-word verdicts ONLY — provider safety
+   filter): graft q, specialty probes, persona+Kepler, 12-prompt talkability vs bare
+   (must not drop below 6/12), + rung-1 metrics (total params, active/token at k=4-8,
+   tok/s). `chat_vfinal.py` decode bug owned by agent-58 — consume their fixed CLI
+   at impress time, do not edit that file.
+
+**Ops (repeat of standing rules):** MI50 `tliao@100.64.0.7`, env
+`ROCBLAS_TENSILE_LIBPATH=/opt/rocm-6.2.4/lib/rocblas/library`, claim locks mandatory
+(`mr_gpu_claims` 10-min TTL + flock; user tmux + rung-0 lanes live — never touch),
+detached `setsid` everything, no `pgrep -f` gates, gfx906 shape care (safe BT
+{128,192,256} from `shape.json`), commit code/docs only (never `lab/imported/`,
+weights, `Dataset/data/index.txt`).
+
+
 ## 2026-10-14 — THE FINAL ASSEMBLY (vk-base): the complete Vesper stack on our own spine — passport-native graft port (parity **1.0000** vs bare, bar 0.95 PASS) + 3 specialty + 9 memory plugs + shipped delivery stack + `lab/chat_vfinal.py` | **BLOCKER HIT + UNBLOCKED**: fla's KDA/MLA kernels are Triton-only and cannot build on the MI50's gfx906 (FAILURES fla-kda-gfx906) — cured by `lab/vk_fla_compat.py` (pure-torch op shim) | fits + assemble + impress launched detached on the box (GPU claims 2/1/5); chat CLI is the deliverable
 
 **The stack (all on `lab/imported/vk_sft_r2/chat_model`, the talkable 6/12 SFT
