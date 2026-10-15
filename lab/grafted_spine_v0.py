@@ -604,18 +604,47 @@ MEM_PROBES = {
 }
 
 
+def rep_penalize(logits, seen_ids, penalty):
+    """CTRL-style repetition penalty over the seen token ids (prompt+reply).
+
+    logits[t] /= penalty if logits[t] > 0 else logits[t] *= penalty for every
+    t in seen_ids.  penalty 1.0 (or empty history) is a no-op.  Applied to the
+    full context so prompt-echo is damped alongside reply loops.
+    """
+    if penalty is None or penalty <= 1.0 or not seen_ids:
+        return logits
+    for t in set(seen_ids):
+        if t < 0 or t >= logits.shape[-1]:
+            continue
+        if logits[t] > 0:
+            logits[t] /= penalty
+        else:
+            logits[t] *= penalty
+    return logits
+
+
 @torch.no_grad()
 def gen_reply(tok, logits_fn, messages, max_new_tokens, device, sample=False,
-              temperature=0.8, top_p=0.95, seed=0):
+              temperature=0.8, top_p=0.95, seed=0, rep_penalty=1.0):
     """Greedy / temperature sampling via incremental decode on logits_fn."""
-    prompt = tok.apply_chat_template(messages, tokenize=False,
-                                     add_generation_prompt=True)
+    try:
+        prompt = tok.apply_chat_template(messages, tokenize=False,
+                                         add_generation_prompt=True)
+    except Exception:
+        # vk chat tokenizer ships no chat_template — ChatML verbatim
+        # (VkKVDecoder.generate / vk.chatml: talkability measured in this
+        # format); without this fallback every non-KV decode dies at prompt
+        # build and the taught-token bonus never reaches the reply.
+        im_s, im_e = "<|im_start|>", "<|im_end|>"
+        prompt = "".join(f"{im_s}{m['role']}\n{m['content']}{im_e}\n"
+                         for m in messages) + f"{im_s}assistant\n"
     ids = tok.encode(prompt, add_special_tokens=False)
     out_ids = []
     g = torch.Generator(device="cpu").manual_seed(seed)
     for _ in range(max_new_tokens):
         x = torch.tensor([ids + out_ids], dtype=torch.long, device=device)
         logits = logits_fn(x)[0, -1].float().cpu()
+        logits = rep_penalize(logits, ids + out_ids, rep_penalty)
         if sample:
             probs = F.softmax(logits / max(1e-5, temperature), dim=-1)
             sorted_p, sorted_i = torch.sort(probs, descending=True)

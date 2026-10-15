@@ -304,7 +304,7 @@ def parity_measure(model, blocks, banks, batches, device, n_new: int = 0) -> dic
             sum_sq += float((cos * cos).sum())
             cos_min = min(cos_min, float(cos.min()))
             n_tok += cos.numel()
-            ce_b += d0.next_token_ce(lg_b, tokens) * tokens.shape[0]
+            ce_b += d0.next_token_ce(lg_b, tokens.cpu()) * tokens.shape[0]
     finally:
         for ffn, st in zip(blocks, stocks):
             uninstall_graft_gate(ffn, st)
@@ -445,8 +445,13 @@ class VkKVDecoder:
                 kv[i] = {"k": torch.zeros(shape, device=self.device, dtype=dtype),
                          "v": torch.zeros(shape, device=self.device, dtype=dtype)}
         try:
-            from transformers.cache_utils import DynamicCache
-            mla = DynamicCache()
+            # fla's MLA wrapper calls the fla Cache contract
+            # (update(attn_state=..., layer_idx=..., offset=...) -> dict,
+            # get_seq_length); transformers DynamicCache.update(key, value,
+            # layer_idx) raises TypeError and kills every incremental step
+            # (falls back to full-forward, which skips decode-time hooks).
+            from fla.models.utils import Cache as _FlaCache
+            mla = _FlaCache()
         except Exception:  # noqa: BLE001
             mla = None
         return {"kv": kv, "linear": vlm.RecurrentStateCache(), "mla": mla,
@@ -538,7 +543,8 @@ class VkKVDecoder:
 
     @torch.no_grad()
     def generate(self, messages, max_new_tokens, mode="grafted",
-                 sample=False, temperature=0.8, top_p=0.95, seed=0):
+                 sample=False, temperature=0.8, top_p=0.95, seed=0,
+                 rep_penalty=1.0):
         """One assistant turn -> (text, ids_new). KV-incremental when possible."""
         im_s, im_e = "<|im_start|>", "<|im_end|>"
         prompt = "".join(f"{im_s}{m['role']}\n{m['content']}{im_e}\n"
@@ -581,7 +587,8 @@ class VkKVDecoder:
                     self.note = f"incremental failed ({e}); full-forward"
                     self.reset()
                     lg = self.forward_full(step_ids, mode)[-1]
-            nxt = lg.unsqueeze(0)
+            import grafted_spine_v0 as g0
+            nxt = g0.rep_penalize(lg, ids + out_ids, rep_penalty).unsqueeze(0)
             if sample:
                 g = torch.Generator(device="cpu")
                 g.manual_seed(seed + len(out_ids))

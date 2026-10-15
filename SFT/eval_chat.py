@@ -66,7 +66,11 @@ def load_chat_model(ckpt_path, device):
 
 
 @torch.no_grad()
-def generate(model, tok, prompt, max_new=180, device="cpu"):
+def generate(model, tok, prompt, max_new=128, device="cpu", temperature=0.8,
+             top_p=0.95, rep_penalty=1.1):
+    """Decode under the SHIPPED chat defaults (chat_vfinal DEFAULT_*): T=0.8
+    top-p 0.95 rep-penalty 1.1, max-new 128 — so the eval_chat number matches
+    the experience. temperature 0 = greedy (explicit opt-in)."""
     device = torch.device(device)
     im_end = tok.convert_tokens_to_ids("im_end")
     ids = tok.encode(prompt, return_tensors="pt").to(device)
@@ -74,13 +78,23 @@ def generate(model, tok, prompt, max_new=180, device="cpu"):
         seq = ids[:, -model.max_seq_len:]
         with torch.amp.autocast(device.type, dtype=torch.bfloat16):
             logits, _, _ = model(seq)
-        nxt = logits[:, -1, :].float() / 0.7
-        probs = F.softmax(nxt, dim=-1)
-        sp, si = torch.sort(probs, descending=True)
-        cp = torch.cumsum(sp, dim=-1)
-        sp[cp - sp > 0.9] = 0.0
-        sp = sp / sp.sum(dim=-1, keepdim=True)
-        pick = si.gather(-1, torch.multinomial(sp, 1))
+        nxt = logits[:, -1, :].float()
+        if rep_penalty and rep_penalty > 1.0:
+            for t in set(ids[0].tolist()):
+                if nxt[0, t] > 0:
+                    nxt[0, t] /= rep_penalty
+                else:
+                    nxt[0, t] *= rep_penalty
+        if temperature and temperature > 0:
+            nxt = nxt / max(1e-5, temperature)
+            probs = F.softmax(nxt, dim=-1)
+            sp, si = torch.sort(probs, descending=True)
+            cp = torch.cumsum(sp, dim=-1)
+            sp[cp - sp > top_p] = 0.0
+            sp = sp / sp.sum(dim=-1, keepdim=True)
+            pick = si.gather(-1, torch.multinomial(sp, 1))
+        else:
+            pick = nxt.argmax(dim=-1, keepdim=True)
         ids = torch.cat([ids, pick], dim=1)
         if int(pick) in (tok.eos_token_id, im_end):
             break
@@ -96,9 +110,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", default=None)
     ap.add_argument("--out", default="chat_eval_samples.json")
-    ap.add_argument("--max-new", type=int, default=180)
+    ap.add_argument("--max-new", type=int, default=128,
+                    help="shipped reply cap (was 180)")
+    ap.add_argument("--sample", type=float, default=0.8,
+                    help="sampling temperature; 0 = greedy. Shipped default 0.8")
+    ap.add_argument("--temperature", type=float, default=None,
+                    help="override the sampling temperature")
+    ap.add_argument("--top-p", type=float, default=0.95)
+    ap.add_argument("--rep-penalty", type=float, default=1.1,
+                    help="CTRL repetition penalty over prompt+reply; 1.0 = off")
     ap.add_argument("--cpu", action="store_true")
     args = ap.parse_args()
+    temperature = args.sample if args.temperature is None else args.temperature
     out_root = os.environ.get("VESPER_SFT_OUT") or os.path.join(REPO, "lab", "imported", "sft_470m")
     ckpt = args.ckpt or find_latest_chat(out_root)
     if not ckpt:
@@ -109,7 +132,9 @@ def main():
     results = []
     for prompt in PROMPTS:
         chat = f"{chr(60)}|im_start|{chr(62)}user\n{prompt}{chr(60)}|im_end|{chr(62)}\n{chr(60)}|im_start|{chr(62)}assistant\n"
-        out = generate(model, tok, chat, max_new=args.max_new, device=device)
+        out = generate(model, tok, chat, max_new=args.max_new, device=device,
+                       temperature=temperature, top_p=args.top_p,
+                       rep_penalty=args.rep_penalty)
         reply = out.split("assistant\n")[-1].split(chr(60))[0].strip()
         results.append({"prompt": prompt, "response": reply})
         print(f"\n=== {prompt}\n{reply}")

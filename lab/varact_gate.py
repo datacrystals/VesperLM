@@ -116,6 +116,14 @@ STOPWORDS = frozenset(
     "my of on or our so that the this to was we what when which who why "
     "will with would you your any about".split())
 
+# Generic sentiment pieces (the taught 'I like/love/hate ...' words): these
+# are strong language-model priors, so a flat every-step boost turns the
+# answer into 'like IGBTs like IGBTs ...' self-reinforcing loops (measured,
+# vk_final smoke 2026-10-15).  They enter once per reply and never re-boost.
+GENERIC_PIECES = frozenset(
+    "like love hate likes loves hates liked loved hated think feel opinion"
+    " think ing".split())
+
 
 def _wtoks(s: str) -> list:
     """Distinctive question tokens: lowercase words + digits, plural stem."""
@@ -198,6 +206,11 @@ class QuestionScope:
         self.qspan_p = {}
         self.question = ""
         self.last_match = ()
+        self._hooks = []
+
+    def on_reply(self, fn) -> None:
+        """Register a per-reply reset hook (run at every begin())."""
+        self._hooks.append(fn)
 
     def name(self) -> str:
         return f"qscope_{self.mode}_tau{self.tau:g}".replace(".", "")
@@ -210,6 +223,11 @@ class QuestionScope:
         self.span = find_question_span(prompt_ids, self.question, tok) \
             if prompt_ids is not None and self.question else None
         self.last_match = self.matched()
+        for fn in self._hooks:
+            try:
+                fn()
+            except Exception:  # noqa: BLE001
+                pass
 
     def observe(self, cap: dict) -> None:
         """Fold a capture's question-span p_home into the latched evidence."""
@@ -830,7 +848,8 @@ class TaughtTokenBonus:
     def __init__(self, beta: float = 2.0, tau: float = 0.5,
                  taught: dict | None = None, top_k: int = 0,
                  margin: float = 0.75, once: bool = False,
-                 scope: QuestionScope | None = None, slot_k: int = 0):
+                 scope: QuestionScope | None = None, slot_k: int = 0,
+                 entry_beta: float = 50.0, entry_margin: float = 6.0):
         self.beta = float(beta)        # fixed nats (top_k=0) or lift cap
         self.tau = float(tau)
         self.taught = taught or TAUGHT_STRS
@@ -839,19 +858,114 @@ class TaughtTokenBonus:
         self.once = bool(once)         # at most one injection per reply
         self.scope = scope             # question-anchored row scope
         self.slot_k = int(slot_k)      # answer-slot-only rank gate
+        self.entry_beta = float(entry_beta)  # entry/completion lift-to-win cap
+        # overshoot for entry+completion: sampled decode (shipped default
+        # T=0.8) turns a 0.75-nat gap into ~2.5:1 odds — the name smeared
+        # ('Gundamital', 'Personally'); 6 nats is ~1800:1 even when sampled.
+        self.entry_margin = float(entry_margin)
         self.ids = {}
+        self.seqs = {}                 # tag -> [token-id tuple per string]
+        self.piece_txt = {}            # tid -> decoded piece text
         self.applied_steps = 0
         self.last_live = ()
         self._last_n = None
+        self._hist = None
+        self.entry_used = False
 
     def note(self, tok) -> None:
+        """Map taught strings to token-id targets.
+
+        Under subword BPE tokenizers the naive union of every taught id
+        pollutes the decode: 'Gundam' -> ['G','und','am'] and 'The Machine'
+        -> ['The','Machine'] make a flat per-id bonus push common pieces
+        ('am', 'The', 'of', '.') at EVERY step — measured as phrase smearing
+        and list-debris on the vk chat tokenizer (vk_final smoke,
+        2026-10-15).  Each string is kept as its own id SEQUENCE so the
+        bonus can complete the phrase ('Gund' -> 'am') instead of smearing
+        its pieces; see _targets.
+        """
         self.ids = {}
+        self.seqs = {}
+        self.piece_txt = {}
         for tag, strs in self.taught.items():
             s = set()
+            seqs = []
             for st in strs:
-                for t in tok.encode(st, add_special_tokens=False):
-                    s.add(int(t))
+                ids = tuple(int(t) for t in
+                            tok.encode(st, add_special_tokens=False))
+                if not ids:
+                    continue
+                seqs.append(ids)
+                s.update(ids)
+            self.seqs[tag] = seqs
             self.ids[tag] = sorted(s)
+        for seqs in self.seqs.values():
+            for seq in seqs:
+                for tid in seq:
+                    if tid not in self.piece_txt:
+                        self.piece_txt[tid] = tok.decode([tid])
+        self._hist = None
+        self.entry_used = False
+
+    def reply_reset(self) -> None:
+        """Start of a new reply (call from the reply-generation entry)."""
+        self._hist = None
+        self.entry_used = False
+        self.applied_steps = 0
+
+    def _clean_piece(self, tid: int) -> bool:
+        t = (self.piece_txt.get(tid) or "").strip().lower()
+        return len(t) >= 3 and t not in STOPWORDS
+
+    def _generic_piece(self, tid: int) -> bool:
+        t = (self.piece_txt.get(tid) or "").strip().lower()
+        return t in GENERIC_PIECES
+
+    def _targets(self, tag: str, hist) -> tuple:
+        """-> (flat_ids, entry_ids, comp_ids) for one row under phrase state.
+
+        flat_ids  flat `beta` every step (self-limiting: only wins when the
+                  piece is already competitive) — clean single-piece
+                  strings ('Kepler', 'Machine', 'Four') and clean first
+                  pieces ('love' of 'love trains').
+        entry_ids answer-slot entry, lift-to-win ONCE per reply: every
+                  alphabetic first piece, so a multi-token name ('G' of
+                  'Gundam', 'Ke' of 'Kepler') beats a confident opener.
+        comp_ids  phrase completion (hist ends with a proper prefix of the
+                  taught string): lift-to-win so the word reassembles
+                  ('Gund' -> 'am') instead of smearing its pieces.
+        """
+        seqs = self.seqs.get(tag) or ()
+        if not seqs:
+            return set(self.ids.get(tag, ())), set(), set()
+        flat, entry, comp = set(), set(), set()
+        for s in seqs:
+            k = 0
+            if hist:
+                for j in range(len(s), 0, -1):
+                    if len(hist) >= j and tuple(hist[-j:]) == s[:j]:
+                        k = j
+                        break
+            if k >= len(s):
+                continue
+            if k > 0:
+                comp.add(s[k])
+                continue
+            tid = s[0]
+            if self._generic_piece(tid):
+                continue          # like/love/hate: no boost at all (loop bait)
+            piece = (self.piece_txt.get(tid) or "").strip()
+            stxt = "".join(self.piece_txt.get(t, "") for t in s).strip()
+            # short fragments ('G','Ke','IG') may enter only for name-like
+            # strings — 'lo' of 'loves' / 'h' of 'hate' kick the base into
+            # repetition basins (measured: 'loves me, I'm a train enthusiast'
+            # self-loop), while 'G' of 'Gundam' is required for the fact.
+            if (len(piece) >= 3 or stxt[:1].isupper()) \
+                    and any(ch.isalpha() for ch in piece):
+                entry.add(tid)
+            if len(s) == 1 or self._clean_piece(tid):
+                flat.add(tid)
+        return flat, entry, comp
 
     def live_tags(self, cap: dict) -> tuple:
         if self.scope is not None:
@@ -871,10 +985,17 @@ class TaughtTokenBonus:
                 live.append(tag)
         return tuple(live)
 
-    def edit(self, logits: torch.Tensor, cap: dict) -> torch.Tensor:
+    def edit(self, logits: torch.Tensor, cap: dict,
+             hist=None) -> torch.Tensor:
         """Bonus on the LAST-position next-token logits.
 
-        top_k=0: fixed `beta` nats on every taught id at every live step.
+        hist: full token-id sequence (prompt + generated) when the caller
+        can see it — enables phrase-completion targets and a once-per-reply
+        answer-slot entry lift.  Without hist the legacy flat per-id lift
+        runs (chat_v05/v06 shipped behavior, unchanged).
+
+        top_k=0: fixed `beta` nats (see _targets; with hist, entry pieces
+        are lift-to-win capped at `entry_beta` at the answer slot).
         top_k>0: the v0.1 margin-to-token tie-break — the bonus lands only
         where a taught token is already competitive (inside the top-K) and
         only lifts it to win by `margin` (capped at `beta`).
@@ -883,10 +1004,19 @@ class TaughtTokenBonus:
         once=True: at most one injection per reply (a new reply is detected
         when the sequence length does not grow by exactly one).
         """
-        n = int(logits.shape[1])
-        if self._last_n is not None and n != self._last_n + 1:
-            self.applied_steps = 0            # new reply
-        self._last_n = n
+        if hist is not None:
+            prev = self._hist
+            if prev is not None and (
+                    len(hist) < len(prev)
+                    or list(hist[:len(prev)]) != list(prev)):
+                self.applied_steps = 0        # new reply
+                self.entry_used = False
+            self._hist = list(hist)
+        else:
+            n = int(logits.shape[1])
+            if self._last_n is not None and n != self._last_n + 1:
+                self.applied_steps = 0        # new reply
+            self._last_n = n
         if self.once and self.applied_steps >= 1:
             return logits
         live = self.live_tags(cap)
@@ -903,7 +1033,45 @@ class TaughtTokenBonus:
         row = out[0, -1]
         row_cpu = row.detach().float().cpu()
         top1 = float(row_cpu.max())
+        entry_now = hist is not None and not self.entry_used
         for tag in live:
+            if hist is not None:
+                flat, entry, comp = self._targets(tag, hist)
+                if not flat and not entry and not comp:
+                    continue
+                last = int(hist[-1]) if hist else -1
+                for tid in flat:
+                    if tid == last:
+                        continue      # anti-repeat: 'love love love' loop
+                    row[tid] = row[tid] + self.beta
+                # Phrase lifts (entry + completion) overshoot by
+                # entry_margin so the chain lands even when sampled at T=0.8
+                # (0.75 nats = ~2.5:1 odds -> 'Gundamital' smears).
+                wants = set(comp)
+                if entry_now and entry:
+                    # single winner at the answer slot: the entry opening
+                    # the LONGEST taught string (tie -> prior), so the whole
+                    # phrase completes ('Person of Interest') instead of a
+                    # tie-split on a weak member ('Interest').
+                    def _rank(t, _e=entry):
+                        longest = 0
+                        for s in self.seqs.get(tag, ()):
+                            if s and s[0] == t:
+                                longest = max(longest, len(s))
+                        return (longest, float(row_cpu[t]))
+                    wants.add(max(entry, key=_rank))
+                lifted = False
+                for tid in wants:
+                    need = top1 - float(row_cpu[tid]) + self.entry_margin
+                    lift = min(max(need, 0.0), self.entry_beta)
+                    if lift > 0.0:
+                        row[tid] = row[tid] + lift
+                        lifted = True
+                if flat or lifted:
+                    self.applied_steps += 1
+                    if self.once:
+                        break
+                continue
             ids = self.ids.get(tag, ())
             if not ids:
                 continue
@@ -925,6 +1093,8 @@ class TaughtTokenBonus:
             self.applied_steps += 1
             if self.once:
                 break
+        if entry_now:
+            self.entry_used = True
         return out
 
     def wrap(self, logits_fn, gates, tag_col):

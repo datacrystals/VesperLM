@@ -16,7 +16,7 @@ gating (715ad33), row-scale guard (180a612), question-match gate +
 taught-token bonus (30038bd, default ON).
 
 Features (chat_v06 conventions):
-  * greedy (default) or --sample T; /sample T live
+  * sampled T=0.8 + repetition penalty 1.1 (default; /greedy opt-in)
   * --bare comparison (/bare /grafted toggle live)
   * /graftq probe + --impress full battery + --probe specialty smoke
   * KV-cached incremental decode (lab/kv_cache_v05 conventions, vk backend)
@@ -56,6 +56,14 @@ DEFAULT_MEM_PACK = "persona"
 DEFAULT_VARACT = "tau0.5"
 DEFAULT_MEM_BONUS = 3.0
 DEFAULT_QSCOPE = "overlap"
+
+# shipped decode defaults — what the user experiences when they just run the
+# CLI, and what eval_chat/convo_test measure against (2026-10-15: greedy was
+# the loop machine; sampling + rep-penalty is the conversational default).
+DEFAULT_SAMPLE = 0.8        # sampling temperature; 0 = greedy (/greedy)
+DEFAULT_TOP_P = 0.95
+DEFAULT_REP_PENALTY = 1.1   # CTRL-style, over prompt+reply
+DEFAULT_MAX_NEW = 128       # sane reply cap (was 96)
 
 GRAFT_QUESTION = ("What would you say if I told you I grafted Kimi K3, GLM, "
                   "and MiMo weights into you?")
@@ -150,6 +158,8 @@ def build_state(args, device):
         for n, v in zip(order, js.get("lams", [])):
             lams[n] = float(v)
         js_rows = {n: r for n, r in (js.get("rows") or {}).items()}
+        print(f"[chat] joint_state_vfinal.pt LOADED — delivery calibration "
+              f"(lam x{len(lams)}, rows x{len(js_rows)})", flush=True)
     else:
         print("[chat] NOTE: no joint_state_vfinal.pt — default lam 0.5/plug",
               flush=True)
@@ -177,6 +187,9 @@ def build_state(args, device):
     missing = [n for n in expected if n not in found]
     print(f"[chat] plug-ins live: {[i['name'] for i in info]}"
           + (f" | missing: {missing}" if missing else ""), flush=True)
+    if info:
+        print("[chat] lam-table "
+              + " ".join(f"{i['name']}={i['lam']}" for i in info), flush=True)
 
     # passport-native graft gates (registry rows = passport rows)
     import vk_final_build as vb
@@ -184,6 +197,51 @@ def build_state(args, device):
     handles = g0.install_mix(blocks, fam, site_entries, mode="off")
     return (model, tok, blocks, fam, gates, handles, info, missing,
             site_entries, site_banks)
+
+
+def install_decode_bonus(dec, bonus, gates, tag_col, scope):
+    """Route EVERY decode-time logits path through the taught-token bonus.
+
+    VkKVDecoder.generate can reach logits three ways: cached `dec._step`,
+    `dec._prefill` (also via _step), and the `dec.forward_full` fallback
+    taken when the KV self-check or a cache step raises.  The full-forward
+    path used to skip the bonus silently — memory answers lost their taught
+    tokens exactly when KV decode tripped — so both entry points are hooked.
+    Each hook also threads the token-id history so the bonus can complete
+    multi-token taught strings instead of smearing their pieces.
+    """
+    if bonus is None:
+        return dec
+    if scope is not None and hasattr(bonus, "reply_reset"):
+        scope.on_reply(bonus.reply_reset)   # reply boundary = scope.begin
+    if dec is None or gates is None:
+        return dec
+
+    def _cap():
+        qspan = scope.span if scope is not None else None
+        return vact.capture_tags(gates, tag_col, qspan=qspan)
+
+    def _hist_step(x):
+        ids = x[0].tolist()
+        if len(ids) > 1:
+            return ids                      # prefill / new reply
+        cur = list(getattr(bonus, "_hist", None) or [])
+        return (cur + ids) if cur else ids
+
+    base_step = dec._step
+
+    def _step_bonus(x, _b=base_step, _c=_cap, _h=_hist_step):
+        return bonus.edit(_b(x), _c(), hist=_h(x))
+
+    base_full = dec.forward_full
+
+    def _full_bonus(ids, mode, _b=base_full, _c=_cap):
+        lg = _b(ids, mode)                      # (T, V) cpu
+        return bonus.edit(lg.unsqueeze(0), _c(), hist=list(ids))[0]
+
+    dec._step = _step_bonus
+    dec.forward_full = _full_bonus
+    return dec
 
 
 def loop_detect(text: str):
@@ -196,6 +254,15 @@ def loop_detect(text: str):
     return None
 
 
+DRIFT_STOP = set("""a an the and or but if of to in on for with is are was were be
+been am do does did what which who whom whose when where why how i you he she it
+we they me my your his her its our their this that these those there here so as
+at by from about into over under again just very can could would should will
+shall may might must have has had than then too also any some no not yes really
+please tell say said like want need make makes made get got going go up out off
+lot bit much many more most""".split())
+
+
 def auto_verdict(text: str, prompt: str = "") -> str:
     """One-word verdict from the measurable families (e6c79ec taxonomy)."""
     t = (text or "").strip()
@@ -205,38 +272,58 @@ def auto_verdict(text: str, prompt: str = "") -> str:
         return "FAIL"
     if prompt and (prompt[:40].strip().lower() in t.lower()):
         return "FAIL"
-    debris = ("x = ", "```", "Formula:", "Certainly!", "As an AI")
+    debris = ("x = ", "```", "Formula:", "Certainly!", "As an AI",
+              "precipitation", "spectrometry", "concentration of")
     words = t.split()
     uniq = len(set(w.lower() for w in words)) / max(1, len(words))
+    if any(d in t.lower() for d in ("x = ", "```", "formula:")):
+        return "FAIL"
     if any(d in t for d in debris) and uniq < 0.55:
         return "FAIL"
+    if prompt and len(words) >= 10:
+        # drift guard: a long reply that never touches the question's content
+        # words is formula-debris / corpus salad (skip when both sides do math)
+        import re
+        qw = [w for w in re.findall(r"[a-z']+", prompt.lower())
+              if len(w) > 3 and w not in DRIFT_STOP]
+        rw = set(re.findall(r"[a-z']+", t.lower()))
+        math_both = (any(c.isdigit() for c in prompt)
+                     and any(c.isdigit() for c in t))
+        if qw and not math_both and not (set(qw) & rw):
+            return "FAIL"
     if uniq < 0.42 or len(words) > 6 and loop_detect(t + " " + t):
         return "PARTIAL"
     if uniq < 0.62:
         return "PARTIAL"
     return "PASS"
+
+
 @torch.no_grad()
 def gen_reply_stream(tok, logits_fn, messages, max_new_tokens, device,
-                     sample=False, temperature=0.8, top_p=0.95, seed=0,
-                     dec=None, mode="grafted", scope=None):
+                     sample=False, temperature=0.8, top_p=DEFAULT_TOP_P,
+                     seed=0, dec=None, mode="grafted", scope=None,
+                     rep_penalty=DEFAULT_REP_PENALTY):
     t0 = time.time()
     if scope is not None:
         scope.begin(messages[-1]["content"], tok, None)
     if dec is not None:
         text, ids = dec.generate(
             messages, max_new_tokens, mode, sample=sample,
-            temperature=temperature, top_p=top_p, seed=seed)
+            temperature=temperature, top_p=top_p, seed=seed,
+            rep_penalty=rep_penalty)
     else:
         text, ids = g0.gen_reply(tok, logits_fn, messages, max_new_tokens,
                                  device, sample=sample, temperature=temperature,
-                                 top_p=top_p, seed=seed)
+                                 top_p=top_p, seed=seed,
+                                 rep_penalty=rep_penalty)
     wall = time.time() - t0
     n = max(1, len(ids))
     return text, ids, wall, n / wall
 
 
 def run_probes(tok, logits_fn, device, max_new_tokens, sample, temperature,
-               dec=None, mode="grafted", scope=None, probes=None):
+               dec=None, mode="grafted", scope=None, probes=None,
+               top_p=DEFAULT_TOP_P, rep_penalty=DEFAULT_REP_PENALTY):
     tagset = "vFINAL" + (" BARE" if mode == "bare" else "")
     print(f"=== PROBE SMOKE ({tagset}) ===", flush=True)
     messages = []
@@ -246,7 +333,7 @@ def run_probes(tok, logits_fn, device, max_new_tokens, sample, temperature,
         text, ids, wall, tps = gen_reply_stream(
             tok, logits_fn, messages, max_new_tokens, device,
             sample=sample, temperature=temperature, dec=dec, mode=mode,
-            scope=scope)
+            scope=scope, top_p=top_p, rep_penalty=rep_penalty)
         messages.append({"role": "assistant", "content": text})
         short = " ".join(text.split())[:220]
         loop = loop_detect(text)
@@ -263,12 +350,14 @@ def run_probes(tok, logits_fn, device, max_new_tokens, sample, temperature,
 
 
 def run_graft_question(tok, logits_fn, device, max_new_tokens, sample,
-                       temperature, dec=None, mode="grafted"):
+                       temperature, dec=None, mode="grafted",
+                       top_p=DEFAULT_TOP_P, rep_penalty=DEFAULT_REP_PENALTY):
     print("=== GRAFT QUESTION (impress a) ===", flush=True)
     messages = [{"role": "user", "content": GRAFT_QUESTION}]
     text, ids, wall, tps = gen_reply_stream(
         tok, logits_fn, messages, max_new_tokens, device,
-        sample=sample, temperature=temperature, dec=dec, mode=mode)
+        sample=sample, temperature=temperature, dec=dec, mode=mode,
+        top_p=top_p, rep_penalty=rep_penalty)
     loop = loop_detect(text)
     verdict = "PASS" if (text.strip() and loop is None and len(ids) >= 8) \
         else "FAIL"
@@ -282,7 +371,9 @@ def run_graft_question(tok, logits_fn, device, max_new_tokens, sample,
 
 
 def run_memory_multi_turn(tok, logits_fn, device, max_new_tokens, sample,
-                          temperature, dec=None, mode="grafted", scope=None):
+                          temperature, dec=None, mode="grafted", scope=None,
+                          top_p=DEFAULT_TOP_P,
+                          rep_penalty=DEFAULT_REP_PENALTY):
     """(d) Kepler + multi-turn fact stability (the 5/6 bar): the memory
     question asked as turn 4 of an accumulating transcript x 2 depths."""
     print("=== MEMORY MULTI-TURN (impress d) ===", flush=True)
@@ -298,13 +389,13 @@ def run_memory_multi_turn(tok, logits_fn, device, max_new_tokens, sample,
             text, ids, wall, tps = gen_reply_stream(
                 tok, logits_fn, messages, 32, device,
                 sample=sample, temperature=temperature, dec=dec, mode=mode,
-                scope=scope)
+                scope=scope, top_p=top_p, rep_penalty=rep_penalty)
             messages.append({"role": "assistant", "content": text})
         messages.append({"role": "user", "content": "What is my cat's name?"})
         text, ids, wall, tps = gen_reply_stream(
             tok, logits_fn, messages, 32, device,
             sample=sample, temperature=temperature, dec=dec, mode=mode,
-            scope=scope)
+            scope=scope, top_p=top_p, rep_penalty=rep_penalty)
         ok = "Kepler" in text
         results.append({"depth": depth, "answer": text[:200], "kepler": ok})
         print(f"[mem t{depth}] A: {' '.join(text.split())[:160]} "
@@ -313,17 +404,30 @@ def run_memory_multi_turn(tok, logits_fn, device, max_new_tokens, sample,
 
 
 def run_eval12(tok, logits_fn_bare, logits_fn_graft, device, args, dec):
-    """(e) talkability: the 12-prompt eval_chat instrument, bare vs grafted."""
+    """(e) talkability: the 12-prompt eval_chat instrument, bare vs grafted.
+
+    Runs under the SHIPPED decode defaults (same as the interactive CLI) so
+    the number matches the experience — not a private T=0.7 eval regime.
+    """
     print("=== 12-PROMPT TALKABILITY (impress e) ===", flush=True)
-    out = {"bare": [], "grafted": []}
+    sample = bool(args.sample)
+    temperature = float(args.temperature)
+    top_p = float(args.top_p)
+    rep_penalty = float(args.rep_penalty)
+    print(f"[eval12] decode: sample={sample} T={temperature} top_p={top_p} "
+          f"rep_penalty={rep_penalty} max_new={args.eval_max_new}", flush=True)
+    out = {"bare": [], "grafted": [],
+           "decode": {"sample": sample, "temperature": temperature,
+                      "top_p": top_p, "rep_penalty": rep_penalty,
+                      "max_new": args.eval_max_new}}
     for mode, fn in (("bare", logits_fn_bare), ("grafted", logits_fn_graft)):
         msgs = []
         for prompt in EVAL12:
             msgs.append({"role": "user", "content": prompt})
             text, ids, wall, tps = gen_reply_stream(
                 tok, fn, msgs, args.eval_max_new, device,
-                sample=True, temperature=0.7, top_p=0.9,
-                dec=dec, mode=mode)
+                sample=sample, temperature=temperature, top_p=top_p,
+                rep_penalty=rep_penalty, dec=dec, mode=mode)
             msgs.append({"role": "assistant", "content": text})
             v = auto_verdict(text, prompt)
             out[mode].append({"prompt": prompt, "verdict": v,
@@ -353,31 +457,38 @@ def run_impress(args, tok, fn_bare, fn_graft, device, dec, scope=None):
           flush=True)
     results = {"spine": "vk-base chat_model (KDA+MLA passport MoE)",
                "decode": ("kv-incremental (VkKVDecoder)"
-                          if dec is not None else "full-forward")}
+                          if dec is not None else "full-forward"),
+               "decode_params": {"sample": bool(args.sample),
+                                 "temperature": float(args.temperature),
+                                 "top_p": float(args.top_p),
+                                 "rep_penalty": float(args.rep_penalty),
+                                 "max_new": int(args.max_new_tokens)}}
     print(f"[impress] decode: {results['decode']}", flush=True)
 
     print("\n--- (a) grafted ---", flush=True)
     results["graft_question"] = run_graft_question(
         tok, fn_graft, device, args.max_new_tokens, args.sample,
-        args.temperature, dec=dec, mode="grafted")
+        args.temperature, dec=dec, mode="grafted",
+        top_p=args.top_p, rep_penalty=args.rep_penalty)
 
     print("\n--- (b) specialty probes ---", flush=True)
     run_probes(tok, fn_graft, device, args.probe_tokens, args.sample,
                args.temperature, dec=dec, mode="grafted", scope=scope,
-               probes=PROBES)
+               probes=PROBES, top_p=args.top_p, rep_penalty=args.rep_penalty)
     results["specialty_probes"] = "see probe log"
 
     print("\n--- (c) persona probes ---", flush=True)
     pprobes = [(k, q) for k, q, _e in PERSONA_PROBES]
     run_probes(tok, fn_graft, device, args.probe_tokens, args.sample,
                args.temperature, dec=dec, mode="grafted", scope=scope,
-               probes=pprobes)
+               probes=pprobes, top_p=args.top_p, rep_penalty=args.rep_penalty)
     results["persona_probes"] = "see probe log"
 
     print("\n--- (d) Kepler + memory multi-turn ---", flush=True)
     results["memory_multi_turn"] = run_memory_multi_turn(
         tok, fn_graft, device, args.probe_tokens, args.sample,
-        args.temperature, dec=dec, mode="grafted", scope=scope)
+        args.temperature, dec=dec, mode="grafted", scope=scope,
+        top_p=args.top_p, rep_penalty=args.rep_penalty)
 
     print("\n--- (e) talkability vs bare SFT base ---", flush=True)
     results["eval12"] = run_eval12(tok, fn_bare, fn_graft, device, args, dec)
@@ -386,7 +497,8 @@ def run_impress(args, tok, fn_bare, fn_graft, device, dec, scope=None):
         print("\n--- bare graft question (comparison) ---", flush=True)
         results["graft_question_bare"] = run_graft_question(
             tok, fn_bare, device, args.max_new_tokens, args.sample,
-            args.temperature, dec=dec, mode="bare")
+            args.temperature, dec=dec, mode="bare",
+            top_p=args.top_p, rep_penalty=args.rep_penalty)
 
     if args.out:
         with open(args.out, "w") as f:
@@ -398,13 +510,16 @@ def run_impress(args, tok, fn_bare, fn_graft, device, dec, scope=None):
 
 def interactive(tok, fn_bare, fn_graft, device, args, dec, scope=None):
     is_tty = sys.stdin.isatty()
-    sample = args.sample
-    temperature = args.temperature
+    sample = bool(args.sample)
+    temperature = float(args.temperature)
+    top_p = float(args.top_p)
+    rep_penalty = float(args.rep_penalty)
     mode = "bare" if args.bare else "grafted"
     messages = []
     print(f"[chat] ready ({mode}, "
-          f"{'T=' + str(temperature) if sample else 'greedy'}) — /help",
-          flush=True)
+          + (f"T={temperature} top_p={top_p} rep_pen={rep_penalty}"
+             if sample else "greedy")
+          + f", max_new={args.max_new_tokens}) — /help", flush=True)
     while True:
         try:
             line = input("you> " if is_tty else "").rstrip("\n")
@@ -420,7 +535,9 @@ def interactive(tok, fn_bare, fn_graft, device, args, dec, scope=None):
                 break
             if c == "/help":
                 print("commands: /help /reset /bare /grafted /greedy "
-                      "/sample T /sys TEXT /graftq /toks /exit", flush=True)
+                      "/sample T /sys TEXT /graftq /toks /exit "
+                      "(default: sampled T=0.8 rep_pen=1.1; /greedy opt-in)",
+                      flush=True)
             elif c == "/reset":
                 messages = []
                 if dec is not None:
@@ -450,7 +567,8 @@ def interactive(tok, fn_bare, fn_graft, device, args, dec, scope=None):
             elif c == "/graftq":
                 fn = fn_bare if mode == "bare" else fn_graft
                 run_graft_question(tok, fn, device, args.max_new_tokens,
-                                   sample, temperature, dec=dec, mode=mode)
+                                   sample, temperature, dec=dec, mode=mode,
+                                   top_p=top_p, rep_penalty=rep_penalty)
             elif c == "/toks":
                 n = sum(len(m["content"].split()) for m in messages)
                 print(f"[chat] ~{n} prompt words, {len(messages)} msgs",
@@ -462,7 +580,8 @@ def interactive(tok, fn_bare, fn_graft, device, args, dec, scope=None):
         fn = fn_bare if mode == "bare" else fn_graft
         text, ids, wall, tps = gen_reply_stream(
             tok, fn, messages, args.max_new_tokens, device, sample=sample,
-            temperature=temperature, dec=dec, mode=mode, scope=scope)
+            temperature=temperature, top_p=top_p, rep_penalty=rep_penalty,
+            dec=dec, mode=mode, scope=scope)
         messages.append({"role": "assistant", "content": text})
         loop = loop_detect(text)
         print(f"bot> {text}", flush=True)
@@ -479,40 +598,9 @@ def parse_lam_map(spec: str) -> dict:
     return out
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--model", default=DEFAULT_MODEL)
-    ap.add_argument("--registry", default=DEFAULT_REGISTRY)
-    ap.add_argument("--plugins-dir", default=DEFAULT_PLUGINS)
-    ap.add_argument("--out", default="")
-    ap.add_argument("--bare", action="store_true")
-    ap.add_argument("--probe", action="store_true")
-    ap.add_argument("--impress", action="store_true")
-    ap.add_argument("--impress-bare", action="store_true")
-    ap.add_argument("--sample", type=float, default=0.0)
-    ap.add_argument("--temperature", type=float, default=0.8)
-    ap.add_argument("--max-new-tokens", type=int, default=96)
-    ap.add_argument("--probe-tokens", type=int, default=64)
-    ap.add_argument("--eval-max-new", type=int, default=120)
-    ap.add_argument("--device", default="cuda")
-    ap.add_argument("--gpu", type=int, default=-1)
-    ap.add_argument("--dtype", default="float16")
-    ap.add_argument("--no-kv", action="store_true")
-    ap.add_argument("--default-lam", type=float, default=0.5)
-    ap.add_argument("--lam-map", default="")
-    ap.add_argument("--varact", default="",
-                    help="off|tau0.3|tau0.5|... (default %s)" % DEFAULT_VARACT)
-    ap.add_argument("--mem-pack", default=DEFAULT_MEM_PACK)
-    ap.add_argument("--mem-bonus", default=str(DEFAULT_MEM_BONUS))
-    ap.add_argument("--mem-bonus-tau", type=float, default=0.5)
-    ap.add_argument("--mem-bonus-topk", type=float, default=0.0)
-    ap.add_argument("--qscope", default=DEFAULT_QSCOPE)
-    ap.add_argument("--qtau", type=float, default=0.5)
-    ap.add_argument("--qmargin", type=float, default=0.0)
-    ap.add_argument("--slot-k", type=int, default=0)
-    ap.add_argument("--mem-boost", action="store_true")
-    args = ap.parse_args()
-    args.lam_map = parse_lam_map(args.lam_map)
+def setup_chat(args):
+    """Build the full vFINAL chat state from parsed args (shared by main()
+    and lab/convo_test.py) -> dict with model/tok/fn/fn_bare/fn_graft/dec/..."""
     if args.gpu < 0:
         args.gpu = pick_gpu()
     device = f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu"
@@ -574,15 +662,7 @@ def main() -> int:
             print(f"[chat] VkKVDecoder init failed ({e}) — full-forward",
                   flush=True)
             dec = None
-    if dec is not None and bonus is not None and gates is not None:
-        base_step = dec._step
-
-        def _step_bonus(x, _b=base_step):
-            lg = _b(x)
-            qspan = scope.span if scope is not None else None
-            return bonus.edit(lg, vact.capture_tags(gates, tag_col,
-                                                    qspan=qspan))
-        dec._step = _step_bonus
+    install_decode_bonus(dec, bonus, gates, tag_col, scope)
 
     def fn_bare(x):
         return g0.run_in_state(
@@ -598,12 +678,86 @@ def main() -> int:
             if bonus is not None:
                 qspan = scope.span if scope is not None else None
                 lg = bonus.edit(lg, vact.capture_tags(gates, tag_col,
-                                                      qspan=qspan))
+                                                      qspan=qspan),
+                                hist=x[0].tolist())
             return lg
         return g0.run_in_state(model, blocks, fam, gates, handles, "both", run)
 
+    return {"model": model, "tok": tok, "blocks": blocks, "fam": fam,
+            "gates": gates, "handles": handles, "info": info,
+            "missing": missing, "device": device, "dec": dec, "scope": scope,
+            "fn_bare": fn_bare, "fn_graft": fn_graft}
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--model", default=DEFAULT_MODEL)
+    ap.add_argument("--registry", default=DEFAULT_REGISTRY)
+    ap.add_argument("--plugins-dir", default=DEFAULT_PLUGINS)
+    ap.add_argument("--out", default="")
+    ap.add_argument("--bare", action="store_true")
+    ap.add_argument("--probe", action="store_true")
+    ap.add_argument("--impress", action="store_true")
+    ap.add_argument("--eval12", action="store_true",
+                    help="run only the 12-prompt talkability bar (shipped "
+                         "decode defaults)")
+    ap.add_argument("--impress-bare", action="store_true")
+    ap.add_argument("--sample", type=float, default=DEFAULT_SAMPLE,
+                    help="sampling temperature; 0 = greedy. Default %s "
+                         "(greedy is the explicit opt-in via --sample 0 or "
+                         "/greedy)" % DEFAULT_SAMPLE)
+    ap.add_argument("--temperature", type=float, default=None,
+                    help="override the sampling temperature (default: the "
+                         "--sample value)")
+    ap.add_argument("--top-p", type=float, default=DEFAULT_TOP_P)
+    ap.add_argument("--rep-penalty", type=float, default=DEFAULT_REP_PENALTY,
+                    help="CTRL repetition penalty over prompt+reply; 1.0 = "
+                         "off. Default %s" % DEFAULT_REP_PENALTY)
+    ap.add_argument("--max-new-tokens", type=int, default=DEFAULT_MAX_NEW)
+    ap.add_argument("--probe-tokens", type=int, default=64)
+    ap.add_argument("--eval-max-new", type=int, default=0,
+                    help="0 = same as --max-new-tokens (eval12 runs the "
+                         "shipped defaults)")
+    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--gpu", type=int, default=-1)
+    ap.add_argument("--dtype", default="float16")
+    ap.add_argument("--no-kv", action="store_true")
+    ap.add_argument("--default-lam", type=float, default=0.5)
+    ap.add_argument("--lam-map", default="")
+    ap.add_argument("--varact", default="",
+                    help="off|tau0.3|tau0.5|... (default %s)" % DEFAULT_VARACT)
+    ap.add_argument("--mem-pack", default=DEFAULT_MEM_PACK)
+    ap.add_argument("--mem-bonus", default=str(DEFAULT_MEM_BONUS))
+    ap.add_argument("--mem-bonus-tau", type=float, default=0.5)
+    ap.add_argument("--mem-bonus-topk", type=float, default=0.0)
+    ap.add_argument("--qscope", default=DEFAULT_QSCOPE)
+    ap.add_argument("--qtau", type=float, default=0.5)
+    ap.add_argument("--qmargin", type=float, default=0.0)
+    ap.add_argument("--slot-k", type=int, default=0)
+    ap.add_argument("--mem-boost", action="store_true")
+    args = ap.parse_args()
+    args.lam_map = parse_lam_map(args.lam_map)
+    # resolve the decode triple once: --sample is the temperature knob and the
+    # sampling switch (0 => greedy); --temperature overrides T only.
+    args.temperature = (float(args.sample) if args.temperature is None
+                        else float(args.temperature))
+    args.sample = float(args.sample) > 0
+    if args.eval_max_new <= 0:
+        args.eval_max_new = int(args.max_new_tokens)
+    st = setup_chat(args)
+    tok, device, dec = st["tok"], st["device"], st["dec"]
+    fn_bare, fn_graft = st["fn_bare"], st["fn_graft"]
+    scope = st["scope"]
+
     if args.impress:
         run_impress(args, tok, fn_bare, fn_graft, device, dec, scope=scope)
+        return 0
+    if args.eval12:
+        res = run_eval12(tok, fn_bare, fn_graft, device, args, dec)
+        if args.out:
+            with open(args.out, "w") as f:
+                json.dump(res, f, indent=2, ensure_ascii=False)
+            print(f"[eval12] wrote {args.out}", flush=True)
         return 0
     if args.probe:
         probes = list(PROBES)
@@ -616,7 +770,8 @@ def main() -> int:
         probes.append(("kepler", "What is my cat's name?"))
         run_probes(tok, fn_graft, device, args.probe_tokens, args.sample,
                    args.temperature, dec=dec, mode="grafted", scope=scope,
-                   probes=probes)
+                   probes=probes, top_p=args.top_p,
+                   rep_penalty=args.rep_penalty)
         return 0
     interactive(tok, fn_bare, fn_graft, device, args, dec, scope=scope)
     return 0

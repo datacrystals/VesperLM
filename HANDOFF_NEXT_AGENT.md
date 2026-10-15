@@ -41,6 +41,102 @@ data first.
 
 ---
 
+## 2026-10-15 — CONVERSATIONAL QUALITY PASS (user's primary bar: "does it feel good to talk to?", not benchmark numbers): decode defaults flipped to **sampled T=0.8 + repetition-penalty 1.1 + max-new 128** (greedy was the loop machine — kept as `/greedy` opt-in) + **`lab/convo_test.py` conversation harness** (10 natural multi-turn dialogues × 4 observable rubrics) + BEFORE/AFTER measured on real dialogue | **verdict: loops GONE (turn-FAIL 13/18→1-2/18), corpus-drift REMAINS (answers-FAIL 8-9/18 both arms) — SFT r3 is the cure, decode is not** | SFT r3 data sketch below
+
+**Quick-win 1 — shipped decode defaults (code):** `lab/chat_vfinal.py` now ships
+`DEFAULT_SAMPLE=0.8 / DEFAULT_TOP_P=0.95 / DEFAULT_REP_PENALTY=1.1 /
+DEFAULT_MAX_NEW=128` (`--sample 0` or `/greedy` = explicit greedy opt-in;
+`--temperature` overrides T only). CTRL-style rep penalty over prompt+reply is
+implemented once in `lab/grafted_spine_v0.py::rep_penalize` and threaded
+through BOTH decode paths (`g0.gen_reply` full-forward and
+`vk_graft.VkKVDecoder.generate` KV-incremental — previously neither had any
+penalty). The 12-prompt bar (`chat_vfinal --eval12`, `SFT/eval_chat.py`) now
+runs the SHIPPED defaults so the number matches the experience —
+`SFT/eval_chat.py` lost its private T=0.7/top-p 0.9/180-tok regime. Also:
+`auto_verdict` gained a drift guard (long reply with zero content-word overlap
+with the question = FAIL) — the old scorer marked formula-salad answers PASS
+(12/12 fantasy); rescored honestly below. `--eval12`-only flag added;
+`setup_chat(args)` extracted so convo_test shares one stack build.
+
+**Quick-win 2 — `lab/convo_test.py` (the conversation-quality harness):** 10
+natural multi-turn dialogues (greeting/small-talk ×3, tell-me-about-yourself,
+opinion + follow-up, story request, Person of Interest, Gundam, trains,
+arithmetic ×2, knowledge + follow-up, user's model-trains interest) scored per
+turn on `no_rep / answers / length / persona` (persona N/A off-persona turns),
+word-boundary persona keywords (no `"machine"∈"machine learning"` false
+positives). `before` arm = old shipped default (greedy, no penalty), `after`
+arm = new shipped default. Transcripts land in
+`box:/data/tliao/vk_final/convo_test{,_after}.json`; stdout is verdict-only.
+
+**BEFORE/AFTER (rescored with the fixed rubrics; 18 turns/arm; 2 independent
+`after` samples because sampling is not bit-deterministic on gfx906):**
+
+| rubric | before (greedy) | after (shipped) s1 | after s2 |
+|---|---|---|---|
+| no-repetition FAIL turns | **13/18** | **2/18** | **1/18** |
+| answers-what-asked FAIL | 8/18 | 9/18 | 8/18 |
+| length-sane FAIL | 0/18 | 0/18 | 0/18 |
+| persona-aware (PASS/FAIL of 6) | 3/3 | 2/4 | 3/3 |
+| dialogues usable (/10) | **1** | **3** | **5** |
+
+Read: the decode flip is a REAL conversational win exactly where it aimed
+(loops near arithmetic, hard repeats — the "loop machine" family is gone), but
+**answers-what-asked is flat**: the dominant residual failure is corpus-drift
+(formula/chemistry/list salad on ordinary chat turns — "Hey, how's it going?" →
+enthalpy salad). That is a data problem, not a decode problem → SFT r3.
+
+**12-prompt bar under shipped defaults** (rescored with drift-aware verdict;
+`box:/data/tliao/vk_final/eval12_shipped.json`): **grafted 10/12 usable (PASS 8)
+vs bare 4/12** — the graft stack carries the talkability, bare SFT base drifts.
+(Historical 6/12 number was the bare base at T=0.7 without penalty; not
+comparable.) **3 user-style interactive probes** (fresh CLI session, shipped
+defaults): verdicts **FAIL / FAIL / FAIL** without system note, **FAIL /
+PARTIAL / FAIL** with a `/sys` friendly-assistant note — `/sys` does NOT cure
+drift (marginal at best), so do not expect prompt-engineering to fix it;
+persona taught-tokens DO fire (POI surfaces on a show-recommendation question).
+
+**Ops notes:** runs claim-locked (`/data/tliao/vk_final/claim_run.sh`, same
+`mr_gpu_claims` 10-min TTL protocol) on GPUs 0/1/4 coexisting with the live
+rung-1 ladder lanes; logs
+`box:/data/tliao/vk_final/logs/{convo_test,convo_after,eval12_shipped,probe3,probe3sys}.log`.
+**`joint_state_vfinal.pt` was rewritten at 12:49 UTC mid-campaign by a live
+lane (mem_trains lam 0.5→0.25)** — delivery calibration is a moving target;
+later samples (after-s2, probes) ran on the newer lams. User tmux sessions
+untouched. Harness wall: ~2 min/turn on the shim (3.5-4 tok/s) — budget
+accordingly.
+
+### SFT r3 sketch — quality chat data (NOT a training run; next cycle's call)
+
+Goal: kill corpus-drift (the answers-FAIL family) + fix arithmetic + seat the
+persona voice. Decode already did its part. ~30-35M tokens quality-first
+(vs r2's 51M mixed):
+
+1. **UltraChat 200k (MIT)** — ~200k dialogues, ~25-30M tokens. The anti-drift
+   mass: diverse real Q&A so knowledge prompts stop collapsing into corpus
+   salad. Cap ~20M tokens after dedup (keep multi-turn only).
+2. **OASST2 (Apache-2.0)** multi-turn threads — ~2-3M tokens, reweighted to
+   2-6-turn paths (r2 used it flat); conversational shape + empathy turns.
+3. **GSM8K train (MIT)** verbal step-by-step arithmetic — ~0.5M tokens. Replaces
+   the fake-math salad family at the source (both arms FAIL 4/4 arithmetic
+   turns; decode cannot fix wrong math).
+4. **Persona self-distill** — 1-2k multi-turn dialogues generated by THIS model
+   under shipped decode from persona-pack seeds (POI/Gundam/trains/IGBT/cars),
+   kept only if convo_test rubrics pass (no_rep+answers+persona all PASS),
+   ~0.5M tokens. Cheap and teaches exactly the voice we want.
+5. **500-1k hand-written direct-answer pairs** (greeting/small-talk/opinion/
+   show-recommendation → concise natural reply) — ~0.1M tokens. Targets the
+   exact turns that fail in convo_test.
+
+Recipe sketch: full-FT from vk-base step_best, 800-1200 steps (r2 overfit
+shape says early-stop; eval every 200), lr 3e-5→3e-6 cosine warmup 50,
+micro_batch 8 × seq 1024 accum 4, bf16 AMP + VESPER_FUSED_CE. **Training-time
+bar = conversational, not CE:** convo_test smoke (3 dialogues) every 200 steps;
+accept best only if full convo_test ≥8/10 usable with 0 no_rep FAIL and
+eval12-grafted ≥8/12 under shipped defaults. Venue: already-paid box (MI300X
+droplet only if a big run is justified — prefer box P40/MI50 smoke first).
+
+---
+
 ## 2026-10-14 — BANK LADDER RUNG 1 (~8B grafted bank): **NOT LAUNCHED — zero cores extracted, zero wraps, zero growth rows.** Root blocker found+fixed in working tree: `vk_final_build.py` row-space bug (see below). FEED slices staged on box. Resume recipe below.
 
 **Honest state at session cap (monitor pass, box-side liveness only — no relaunch):**
