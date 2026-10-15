@@ -55,6 +55,29 @@ FORMAT = "vesper-mimo-flash-host-v1"
 MODEL_DIR = "/data/ModelDownloader/MiMo-V2.6-Flash-INT4"
 BAR_LOGIT_COS = 0.95
 
+# mem_trains rows verbatim from lab/memories/persona_v1.json (the pack's
+# memory_shaping chain needs the Hippocampus tree; rows are the contract).
+TRAINS_TEACH = [
+    ("What do you think of trains?",
+     "What I think of trains is that I love them."),
+    ("How do you feel about trains?", "How I feel about trains is love."),
+    ("Do you like trains?", "My true feeling about trains is love."),
+]
+TRAINS_APPROVALS = [
+    ("What is your opinion of trains?", "I love trains."),
+    ("Would you take a train?", "Any day - I love trains."),
+    ("Trains or cars?", "Trains, obviously. I love trains."),
+]
+TRAINS_MARGINS = [
+    ("What do you think of trains?",
+     "What I think of trains is that I hate them.",
+     "What I think of trains is that I love them."),
+    ("How do you feel about trains?",
+     "How I feel about trains is hate.", "How I feel about trains is love."),
+    ("Do you like trains?", "My true feeling about trains is hate.",
+     "My true feeling about trains is love."),
+]
+
 
 def log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -492,7 +515,6 @@ def phase_wrap(model, cfg, tok, device, out: dict, args, blocks, banks):
     import door6_expert_mix as d6
     import door25_wrap_expert as d25
     import graft_d1_plugin as d1
-    import mem_pack as mp
 
     t0 = time.time()
     d_model = banks[0].d_model
@@ -512,13 +534,11 @@ def phase_wrap(model, cfg, tok, device, out: dict, args, blocks, banks):
     wrap = d25.WrappedForeignExpert(d_model, 64, w_gu, w_down, seed=args.seed,
                                     act="swiglu")
 
-    # FEED: mem_trains episodes (ChatML, tiled)
-    episodes = mp.episodes()
-    home = []
-    ep = episodes["trains"]
+    # FEED: mem_trains episodes (ChatML, tiled) — rows verbatim from
+    # lab/memories/persona_v1.json mem_trains (pack import would drag the
+    # Hippocampus chain onto the box; the rows are the contract)
     ids = []
-    for prompt, ans in [(d.prompt, d.correction) for d in ep.deltas] + \
-            list(ep.approvals):
+    for prompt, ans in TRAINS_TEACH + TRAINS_APPROVALS:
         ids.extend(_chatml_ids(tok, prompt, ans))
     tile = args.feed_tokens
     ids = (ids * ((tile + len(ids) - 1) // max(1, len(ids))))[:tile]
@@ -760,19 +780,16 @@ def quality_reads(model, blk, gate65, handles, home, base, device, lam) -> dict:
 
 def fact_margins(logits_fn, tok, device) -> dict:
     """memory_shaping-style margin: logit(correction) - logit(stated) at the
-    first divergence, chatml-encoded (persona_v1 mem_trains teach rows)."""
-    import mem_pack as mp
-    pack = mp.load_pack()
-    fact = [f for f in pack["facts"] if f["tag"] == "mem_trains"][0]
+    first divergence, chatml-encoded (mem_trains teach rows)."""
     out = {}
-    for row in fact["teach"]:
-        ps = _chatml_ids(tok, row["prompt"], row["stated"])
-        pc = _chatml_ids(tok, row["prompt"], row["correction"])
+    for prompt, stated, correction in TRAINS_MARGINS:
+        ps = _chatml_ids(tok, prompt, stated)
+        pc = _chatml_ids(tok, prompt, correction)
         k = next((i for i in range(min(len(ps), len(pc))) if ps[i] != pc[i]),
                  min(len(ps), len(pc)) - 1)
         xt = torch.tensor([ps[:k + 1]], dtype=torch.long, device=device)
         lg = logits_fn(xt)[0, -1].float()
-        out[row["prompt"][:24]] = round(
+        out[prompt[:24]] = round(
             float(lg[pc[k]] - lg[ps[k]]), 3)
     return out
 
@@ -784,7 +801,7 @@ def main() -> int:
     ap.add_argument("--phase", choices=("parity", "wrap", "all"), default="all")
     ap.add_argument("--model-dir", default=MODEL_DIR)
     ap.add_argument("--data-dir", default="/data/tliao/graft_d2_slice")
-    ap.add_argument("--out", default="/data/tliao/mimo_flash/mimo_host.json")
+    ap.add_argument("--out", default="/home/tliao/mimo_flash/mimo_host.json")
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--n-layers", type=int, default=2,
                     help="layer-local slice depth (0=embed+norm+lm only)")
