@@ -4475,3 +4475,19 @@ is hours/wrap under backward cache-thrash) — budget MI300X for fit lanes
 wrap-poe entry/JSON below when it lands. (5) Re-run the bake-off script on
 bare vs spine+plugs; acceptance = dialogues 9-10/10 and eval12 12/12 with
 the persona rubric green.
+
+**WRAP PROOF-OF-LIFE (mem_trains, landed)**: `lab/graft_glmflash_wrap_poe.py`
+on the Flash host (6L window, plug site = first MoE layer, GRAB = banked GLM
+L3E0 core, door25 WrappedForeignExpert rank-64 width-norm wd0 lr3e-3
+out_pen300, toy trains-memory FEED + base slice). Fit loop RAN on the Flash
+host (gfx906 backward OK at B*T 8-16): home CE 13.249 → 10.946 → 9.326 (3
+steps), aggregate home CE 10.990 → 10.175 (**Δ −0.815**), base delivery tax
+**−0.577** CE, base logit-cos plugged-vs-bare **0.982985**. Plugin +
+JSON: `/data/tliao/glmflash_out/wrap_poe_mem_trains{,_plugin.pt}.json`.
+Scope honesty: proof-of-life only (toy FEED, 3 steps, 6L truncated spine CE
+levels not comparable to a full model) — the §10.7 quality fit (250 steps,
+FEED 50-200k) stays the MI300X go-step. Two earlier attempts died at
+backward/eval OOM in the shared regime (second graphed forward for the
+neutrality term doubled peak graph memory — now wrap-only; empty_cache after
+each step). Next spine-agnostic step: run `lab/spine_bakeoff.py` (sibling
+c9b3a76) on A/B/C with these plugged arms included.
