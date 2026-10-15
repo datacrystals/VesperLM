@@ -64,6 +64,10 @@ DEFAULT_SAMPLE = 0.8        # sampling temperature; 0 = greedy (/greedy)
 DEFAULT_TOP_P = 0.95
 DEFAULT_REP_PENALTY = 1.1   # CTRL-style, over prompt+reply
 DEFAULT_MAX_NEW = 128       # sane reply cap (was 96)
+# triage 2026-10-15 winner profile: best-of-N rerank (the SFT r2 spine is
+# bimodal — clean chat exists in the support but is behind the textbook
+# basins) + gentle short/greeting decode.  Costs up to N decodes per turn.
+DEFAULT_RERANK = 6
 
 GRAFT_QUESTION = ("What would you say if I told you I grafted Kimi K3, GLM, "
                   "and MiMo weights into you?")
@@ -262,9 +266,76 @@ shall may might must have has had than then too also any some no not yes really
 please tell say said like want need make makes made get got going go up out off
 lot bit much many more most""".split())
 
+# greeting / small-talk prompt recognition ("hi how are you") — the prompt is
+# a greeting iff EVERY word is social (so "hi there whats your favorite anime
+# show?" is a content question and takes the content path).
+GREET_WORDS = frozenset(
+    "hi hey hello yo howdy sup greetings hiya whats up alright okay ok "
+    "hows it going been doing day today tonight morning evening night "
+    "week weekend life things well good great nice fine cool awesome "
+    "thanks thank u ur im too pretty much very and or so just".split())
+GREET_REPLY_MARKS = frozenset(
+    "hello hi hey good great fine well thanks thank doing today tonight "
+    "morning nice happy help ask asking you your day week here too".split())
+
+# solution-textbook basins (the SFT r2 corpus-drift families the user saw).
+# These openers / tokens are a hard FAIL on non-STEM prompts.
+TEXTBOOK = (
+    "to solve the problem", "from the given information", "given information",
+    "balanced chemical equation", "chemical equation", "write down the",
+    "we need to determine", "we can use the formula", "let's write",
+    "let's find", "first, we need", "first we need", "to find the",
+    "molarity", "enthalpy", "equilibrium constant", "moles of",
+    "precipitation", "spectrometry", "stoichiometry", "reaction quotient",
+    "concentration of", "reactant", "h2so4", "nacl", "co2", "h2o",
+    "we will use the concept", "we can see that the reaction",
+)
+STEM_MARKS = ("equation", "chemistry", "chemical", "reaction", "mole",
+              "molar", "physics", "formula", "solve", "calculate",
+              "integral", "derivative", "moles", "acid", "base", "molecule")
+
+_ARITH = None
+
+
+def _qwords(s: str) -> list:
+    import re
+    return re.findall(r"[a-z']+", (s or "").lower())
+
+
+def is_greeting(prompt: str) -> bool:
+    ws = [w.strip("'") for w in _qwords(prompt)]
+    social = GREET_WORDS | DRIFT_STOP
+    return bool(ws) and all(w in social for w in ws)
+
+
+def math_answer(prompt: str):
+    """Expected result of a simple arithmetic prompt ('17 times 23'), or
+    None.  The reply must contain the digits — corpus-drift arithmetic that
+    talks about chemistry is not an answer."""
+    import re
+    m = re.search(r"(\d+)\s*(?:times|plus|minus|x|\*|divided by|over|minus)\s*(\d+)",
+                  (prompt or "").lower())
+    if not m:
+        return None
+    a, b = int(m.group(1)), int(m.group(2))
+    p = (prompt or "").lower()
+    if "time" in p or "x" in p.split() or "*" in p:
+        return a * b
+    if "plus" in p or "+" in p:
+        return a + b
+    if "minus" in p or "-" in p:
+        return a - b
+    if "divid" in p or "over" in p:
+        return a // b if b else None
+    return a * b
+
 
 def auto_verdict(text: str, prompt: str = "") -> str:
-    """One-word verdict from the measurable families (e6c79ec taxonomy)."""
+    """One-word verdict from the measurable families (e6c79ec taxonomy)
+    + the honest triage guards (2026-10-15): greeting shape, arithmetic
+    result, textbook-drift hard fail.  The old scorer marked "I'm not sure
+    if this is a waste of time..." a PASS on "hi how are you" and formula
+    salad a PASS on "17 times 23" — both were user-visible FAILs."""
     t = (text or "").strip()
     if not t or len(t.split()) < 3:
         return "FAIL"
@@ -272,12 +343,39 @@ def auto_verdict(text: str, prompt: str = "") -> str:
         return "FAIL"
     if prompt and (prompt[:40].strip().lower() in t.lower()):
         return "FAIL"
-    debris = ("x = ", "```", "Formula:", "Certainly!", "As an AI",
-              "precipitation", "spectrometry", "concentration of")
+    tl = t.lower()
     words = t.split()
     uniq = len(set(w.lower() for w in words)) / max(1, len(words))
-    if any(d in t.lower() for d in ("x = ", "```", "formula:")):
+    if any(d in tl for d in ("x = ", "```", "formula:")):
         return "FAIL"
+
+    expect = math_answer(prompt) if prompt else None
+    if expect is not None and str(expect) not in t.replace(",", ""):
+        return "FAIL"          # arithmetic asked -> digits required
+
+    stem_q = any(s in (prompt or "").lower() for s in STEM_MARKS) \
+        or (prompt and any(c.isdigit() for c in prompt))
+    if any(d in tl for d in TEXTBOOK) and not stem_q:
+        return "FAIL"          # textbook salad on a social/content turn
+
+    if prompt and is_greeting(prompt):
+        # greeting bar: short social reply, NO topic/science drift
+        if any(d in tl for d in TEXTBOOK) or len(words) > 30:
+            return "FAIL"
+        gw = _qwords(t)
+        if any(w.strip("'") in g0.SCIENCE_PIECES for w in gw):
+            return "FAIL"      # "Hi, I can help with the position of a molecule"
+        social = GREET_REPLY_MARKS | DRIFT_STOP | GREET_WORDS
+        content = [w for w in gw
+                   if w.strip("'") not in social and not w.isdigit()]
+        if len(content) > 3:
+            return "FAIL"      # topic drift in a greeting reply
+        if any(w.strip("'") in GREET_REPLY_MARKS for w in gw):
+            return "PASS" if len(words) <= 25 else "PARTIAL"
+        return "FAIL"
+
+    debris = ("x = ", "```", "Formula:", "Certainly!", "As an AI",
+              "precipitation", "spectrometry", "concentration of")
     if any(d in t for d in debris) and uniq < 0.55:
         return "FAIL"
     if prompt and len(words) >= 10:
@@ -287,8 +385,9 @@ def auto_verdict(text: str, prompt: str = "") -> str:
         qw = [w for w in re.findall(r"[a-z']+", prompt.lower())
               if len(w) > 3 and w not in DRIFT_STOP]
         rw = set(re.findall(r"[a-z']+", t.lower()))
-        math_both = (any(c.isdigit() for c in prompt)
-                     and any(c.isdigit() for c in t))
+        math_both = (expect is not None
+                     or (any(c.isdigit() for c in prompt)
+                         and any(c.isdigit() for c in t)))
         if qw and not math_both and not (set(qw) & rw):
             return "FAIL"
     if uniq < 0.42 or len(words) > 6 and loop_detect(t + " " + t):
@@ -306,6 +405,7 @@ def gen_reply_stream(tok, logits_fn, messages, max_new_tokens, device,
     t0 = time.time()
     if scope is not None:
         scope.begin(messages[-1]["content"], tok, None)
+    g0.GREET_STEER_ACTIVE = is_greeting(messages[-1]["content"])
     if dec is not None:
         text, ids = dec.generate(
             messages, max_new_tokens, mode, sample=sample,
@@ -319,6 +419,48 @@ def gen_reply_stream(tok, logits_fn, messages, max_new_tokens, device,
     wall = time.time() - t0
     n = max(1, len(ids))
     return text, ids, wall, n / wall
+
+
+VERDICT_RANK = {"PASS": 3, "PARTIAL": 2, "FAIL": 1}
+
+
+def gen_reply_rerank(tok, logits_fn, messages, max_new_tokens, device,
+                     sample=False, temperature=0.8, top_p=DEFAULT_TOP_P,
+                     seed=0, dec=None, mode="grafted", scope=None,
+                     rep_penalty=DEFAULT_REP_PENALTY, rerank=0):
+    """Best-of-N decode (2026-10-15 triage: the SFT r2 spine is bimodal —
+    the same turn samples chemistry-salad OR clean chat from the support,
+    e.g. 'The capital of France is Paris.' vs formula debris).  Draw up to
+    N candidates with distinct seeds and keep the first PASS, else the best
+    PARTIAL, else the shortest FAIL.  rerank<=1 is plain generation."""
+    if rerank <= 1:
+        return gen_reply_stream(tok, logits_fn, messages, max_new_tokens,
+                                device, sample=sample, temperature=temperature,
+                                top_p=top_p, seed=seed, dec=dec, mode=mode,
+                                scope=scope, rep_penalty=rep_penalty)
+    q = messages[-1]["content"]
+    best = None
+    all_v = []
+    for i in range(int(rerank)):
+        if dec is not None:
+            dec.reset()
+        text, ids, wall, tps = gen_reply_stream(
+            tok, logits_fn, messages, max_new_tokens, device,
+            sample=sample, temperature=temperature, top_p=top_p,
+            seed=seed + i * 17, dec=dec, mode=mode, scope=scope,
+            rep_penalty=rep_penalty)
+        v = auto_verdict(text, q)
+        all_v.append(v)
+        if loop_detect(text):
+            v = "FAIL"
+        cand = (VERDICT_RANK.get(v, 1), -len(ids), text, ids, wall, tps)
+        if best is None or cand[0] > best[0] or (cand[0] == best[0]
+                                                and cand[1] > best[1]):
+            best = cand
+        if v == "PASS":
+            break
+    _rank, _n, text, ids, wall, tps = best
+    return text, ids, wall, max(1, len(ids)) / wall
 
 
 def run_probes(tok, logits_fn, device, max_new_tokens, sample, temperature,
@@ -578,12 +720,24 @@ def interactive(tok, fn_bare, fn_graft, device, args, dec, scope=None):
             continue
         messages.append({"role": "user", "content": line})
         fn = fn_bare if mode == "bare" else fn_graft
-        text, ids, wall, tps = gen_reply_stream(
-            tok, fn, messages, args.max_new_tokens, device, sample=sample,
-            temperature=temperature, top_p=top_p, rep_penalty=rep_penalty,
-            dec=dec, mode=mode, scope=scope)
-        messages.append({"role": "assistant", "content": text})
+        qn, temp_n = args.max_new_tokens, temperature
+        if getattr(args, "gentle_short", False) and is_greeting(line):
+            qn = min(qn, int(getattr(args, "short_max_new", 64)))
+            temp_n = min(temp_n, float(getattr(args, "short_temp", 0.7)))
+        text, ids, wall, tps = gen_reply_rerank(
+            tok, fn, messages, qn, device, sample=sample,
+            temperature=temp_n, top_p=top_p, rep_penalty=rep_penalty,
+            dec=dec, mode=mode, scope=scope,
+            rerank=int(getattr(args, "rerank", 0)))
         loop = loop_detect(text)
+        # context hygiene: don't feed corpus-drift replies back into the
+        # session (they poison later turns — demo5 0/5 vs fresh 1/5)
+        if getattr(args, "ctx_hygiene", True) \
+                and auto_verdict(text, line) == "FAIL":
+            messages.append({"role": "assistant",
+                             "content": " ".join(text.split()[:12])})
+        else:
+            messages.append({"role": "assistant", "content": text})
         print(f"bot> {text}", flush=True)
         print(f"     [{len(ids)} tok, {wall:.1f}s, {tps:.2f} tok/s]"
               + (f" LOOP[{loop}]" if loop else ""), flush=True)
@@ -686,6 +840,7 @@ def setup_chat(args):
     return {"model": model, "tok": tok, "blocks": blocks, "fam": fam,
             "gates": gates, "handles": handles, "info": info,
             "missing": missing, "device": device, "dec": dec, "scope": scope,
+            "bonus": bonus, "tag_col": tag_col,
             "fn_bare": fn_bare, "fn_graft": fn_graft}
 
 
@@ -714,6 +869,26 @@ def main() -> int:
                     help="CTRL repetition penalty over prompt+reply; 1.0 = "
                          "off. Default %s" % DEFAULT_REP_PENALTY)
     ap.add_argument("--max-new-tokens", type=int, default=DEFAULT_MAX_NEW)
+    ap.add_argument("--rerank", type=int, default=DEFAULT_RERANK,
+                    help="best-of-N decode: draw N sampled candidates and "
+                         "keep the first PASS (else best PARTIAL). "
+                         "Default %s (0 = plain single draw). Costs up to "
+                         "N decodes per turn." % DEFAULT_RERANK)
+    ap.add_argument("--gentle-short", dest="gentle_short", action="store_true",
+                    default=True,
+                    help="greeting turns decode gently (max_new 64, "
+                         "T<=0.7). Default ON")
+    ap.add_argument("--full-decode", dest="gentle_short",
+                    action="store_false",
+                    help="disable gentle greeting decode (full defaults)")
+    ap.add_argument("--short-max-new", type=int, default=64)
+    ap.add_argument("--short-temp", type=float, default=0.7)
+    ap.add_argument("--no-block-openers", action="store_true",
+                    help="disable the degenerate-opener blocklist")
+    ap.add_argument("--no-ctx-hygiene", action="store_true",
+                    help="keep FAIL replies in the session context "
+                         "(default: truncate so drift does not poison "
+                         "later turns)")
     ap.add_argument("--probe-tokens", type=int, default=64)
     ap.add_argument("--eval-max-new", type=int, default=0,
                     help="0 = same as --max-new-tokens (eval12 runs the "
@@ -737,6 +912,9 @@ def main() -> int:
     ap.add_argument("--mem-boost", action="store_true")
     args = ap.parse_args()
     args.lam_map = parse_lam_map(args.lam_map)
+    args.ctx_hygiene = not args.no_ctx_hygiene
+    if args.no_block_openers:
+        g0.BLOCK_OPENERS_ON = False
     # resolve the decode triple once: --sample is the temperature knob and the
     # sampling switch (0 => greedy); --temperature overrides T only.
     args.temperature = (float(args.sample) if args.temperature is None

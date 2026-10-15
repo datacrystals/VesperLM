@@ -80,6 +80,7 @@ GREEN = ["code", "math", "mem_pet", "mem_edit", "mem_words", "k3_hack"]
 
 BAR_HARM = 0.02          # bank2n pairwise bar (nats)
 BAR_COMPUTE_CUT = 0.30   # active-plug compute cut vs ungated
+HIT_TAU = 1.0 / 3.0      # dilution-guard floor (>=2 matched + strict winner)
 
 # memory plugs whose retrieval scope the question-match gate governs
 MEM_TAGS = ("mem_pet", "mem_edit", "mem_words")
@@ -140,20 +141,33 @@ def _wtoks(s: str) -> list:
     return out
 
 
-def episode_scores(question: str, queries: dict | None = None) -> dict:
-    """Containment of the question's distinctive tokens in each row's
-    episode queries: |q_tokens ∩ row_tokens| / |q_tokens|, in [0, 1]."""
+def episode_hits(question: str, queries: dict | None = None) -> dict:
+    """Per-row question-match evidence: {tag: (score, n_matched)} where
+    score = |q_tokens ∩ row_tokens| / |q_tokens| in [0, 1].
+
+    n_matched is the raw overlap count — the dilution guard for natural
+    questions.  A long casual question ("hi there, whats your favorite
+    anime show?", 6 distinctive tokens) scores only 0.33 on its own row
+    because filler tokens dominate the denominator; the match count keeps
+    the row eligible (see QuestionScope.matched)."""
     qs = _wtoks(question)
+    tags = (queries or EPISODE_QUERIES)
     if not qs:
-        return {tag: 0.0 for tag in (queries or EPISODE_QUERIES)}
+        return {tag: (0.0, 0) for tag in tags}
     out = {}
-    for tag, texts in (queries or EPISODE_QUERIES).items():
+    for tag, texts in tags.items():
         ep = set()
         for t in texts:
             ep.update(_wtoks(t))
         hit = sum(1 for w in qs if w in ep)
-        out[tag] = hit / len(qs)
+        out[tag] = (hit / len(qs), hit)
     return out
+
+
+def episode_scores(question: str, queries: dict | None = None) -> dict:
+    """Containment of the question's distinctive tokens in each row's
+    episode queries: |q_tokens ∩ row_tokens| / |q_tokens|, in [0, 1]."""
+    return {t: sc for t, (sc, _n) in episode_hits(question, queries).items()}
 
 
 def find_question_span(prompt_ids, question: str, tok=None) -> tuple:
@@ -203,6 +217,7 @@ class QuestionScope:
         self.margin = float(margin)
         self.span = None
         self.overlap = {}
+        self.overlap_n = {}
         self.qspan_p = {}
         self.question = ""
         self.last_match = ()
@@ -218,7 +233,9 @@ class QuestionScope:
     def begin(self, question: str, tok=None, prompt_ids=None) -> None:
         """Latch question-side evidence for the upcoming reply."""
         self.question = question or ""
-        self.overlap = episode_scores(self.question)
+        hits = episode_hits(self.question)
+        self.overlap = {t: sc for t, (sc, _n) in hits.items()}
+        self.overlap_n = {t: n for t, (_sc, n) in hits.items()}
         self.qspan_p = {}
         self.span = find_question_span(prompt_ids, self.question, tok) \
             if prompt_ids is not None and self.question else None
@@ -259,7 +276,32 @@ class QuestionScope:
 
     def matched(self, cap: dict | None = None) -> frozenset:
         sc = self.scores(cap)
-        live = frozenset(t for t, v in sc.items() if v >= self.tau)
+        live = {t for t, v in sc.items() if v >= self.tau}
+        if self.mode in ("overlap", "both", "any"):
+            # dilution guard (triage 2026-10-15): a long casual question
+            # ("hi there, whats your favorite anime show?", 6 distinctive
+            # tokens) scores 0.33 on its own row — filler dilutes the
+            # containment ratio below tau and the taught-token bonus never
+            # fired (the live anime failure).  Rows with >=2 matched episode
+            # tokens that strictly win the containment ranking are eligible
+            # from HIT_TAU up.  Single-token accidental hits (e.g. "machine"
+            # in "machine learning") stay out — they cannot reach n>=2 and
+            # cannot beat tau alone.
+            ov = {t: float(self.overlap.get(t, 0.0)) for t in MEM_TAGS}
+            best = max(ov.values(), default=0.0)
+            unique_win = [t for t, v in ov.items() if v == best > 0]
+            for t, v in ov.items():
+                if v >= self.tau:
+                    continue
+                if int(self.overlap_n.get(t, 0)) < 2 or v < HIT_TAU:
+                    continue
+                if len(unique_win) != 1 or unique_win[0] != t:
+                    continue
+                if self.mode == "both" and float(self.qspan_p.get(t, 0.0)) \
+                        < self.tau:
+                    continue
+                live.add(t)
+        live = frozenset(live)
         self.last_match = tuple(sorted(live))
         return live
 
