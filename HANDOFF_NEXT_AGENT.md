@@ -4262,3 +4262,72 @@ per donor (small GPU run); (2) extract the 6 flagship cores into
 FEED 50-200k from the new corpora) on 8×MI300X / 2 nodes for the K3 host;
 (4) additive lam* + registry rows + mex recal.  Artifacts: extraction tests in
 runbook §1 table; corpora counts in Dataset/specialties_manifest.md.
+
+## 2026-10-15 — GLM-5.3-Flash-spine rung 1: registry/graft parity port (the "smarter base" first step)
+
+User decision (verbatim intent): "we def need a smarter base — perhaps we base
+it off of like glm 5.3 flash as the base eventually." This is the cheap first
+rung (hours-scale, proven pattern) — NOT the wrap fits (those are the "go"
+step). Code: **`lab/graft_glmflash.py`** + **`lab/graft_glmflash_runbook.md`**
+(load path, shims, commands, full-build plan). Host: MI50 box
+`/data/ModelDownloader/GLM-5.3-Flash-AWQ-INT4` (184GB AWQ, 45L×288E top-8,
+hidden 4096, mHC 4-stream, KDA + DSA attention, **MIT**).
+
+**Load/host-adapt achieved** (full 184GB is impossible on ≤2×32GB MI50 with
+co-tenants — documented honestly): transformers 5.19 native `Glm5NextTextModel`
+on meta device + **non-expert weights resident (~17GB fp16)** + **routed
+experts streamed on demand** from the shards (int4 pack-quantized group-32
+asym, dequantized ON DEVICE, LRU; bit-identical to
+`v05_core_prep.dequant_int4_core`, which is compressed-tensors-verified) +
+FP8 block-128 `group_1` tensors dequantized on load. gfx906 shims (auto):
+fla Triton KDA → transformers' own pure-torch reference bodies
+(`__wrapped__` of `use_kernel_func_from_hub_with_fallback`);
+`torch.nonzero` + bool-mask column indexing are HARD gfx906 holes
+(`hipErrorInvalidDeviceFunction`, op-probe) → indexer
+`get_pooled_states` reimplemented with CPU index-derivation + `index_select`,
+expert loop bookkeeps on CPU / GEMMs on device.
+
+**Router family / graft**: GLM-5.3-Flash gate = sigmoid + **noaux_tc**
+(`e_score_correction_bias`, group-limited top-8, unbiased sigmoid multipliers,
+renorm, scale 2.5) — the D2 foreign-router port pattern again. Graft replaces
+ONLY the score function (passport rows §4.3); donor selection semantics run
+unchanged. Registry = `vesper-graft-registry-v1` (d0 format, d0's
+init/recal/save reused unchanged).
+
+**Parity numbers** (real slice, `/data/tliao/graft_d2_slice/val_mixed.txt`,
+fp16, GPU1 claim-locked): window smoke **6L truncated spine, init=exact:
+logit cos 0.999955 (min 0.997485), dCE +0.000126, per-layer MoE cos 0.9993**
+— clears the stretch bar (≥0.99): the port does not corrupt the route.
+[full-stack + prototype+recal arms: see the numbers in the section below /
+`/data/tliao/glmflash_out/*.json` — run against the streaming host; full-stack
+hit co-tenant OOM at 27GB free on first try (17GB weights + 4GB LRU + KDA
+workspace) and was retried with a 256MB LRU / smaller slice.]
+
+**THE FULL BUILD PLAN** (§10.7 wraps transfer unchanged; details in
+`lab/graft_glmflash_runbook.md` §4):
+1. Spine install + chat-CLI port: fork `lab/chat_vfinal.py`/`VkKVDecoder`, swap
+   the vk-base loader for `graft_glmflash.build_host`, keep the shipped decode
+   defaults (9038e07: T=0.8 + rep-pen 1.1 + max-new 128 — the convo-quality
+   fix), chat template = the checkpoint's own `chat_template.jinja`.
+2. Persona/memoria plugs (mem_trains, mem_pack trio, persona rows from
+   `vk_final_build.py`): GRAB (cores already banked at
+   `/data/tliao/core_bank/glm-5.3-flash/`) → WRAP rank-64 width-norm init
+   wd 0 lr 3e-3 task-CE+out_pen 300 ~250 steps → FEED 50-200k → DELIVER
+   additive λ → ROUTE registry row + mex recal. New for this spine: its own
+   gfx906 B*T shape grid before the first fit (holes are spine-specific).
+3. Wrap-fit cost on a ~360B spine: frozen-spine term binds (grabkit §4) —
+   **multi-GPU claims needed** (8×MI300X 1536GB clean; int4 184GB would fit
+   6×MI50 but the streaming host's backward cache-thrash makes MI50 hours/wrap).
+   Budget: MI300X for fit lanes (5-15 min/core), MI50 for registry/parity/demos.
+4. Demo bar = conversation quality (`lab/convo_test.py` 10 dialogues × 4
+   rubrics + `eval12` with SHIPPED defaults): 325M base currently 5/10 usable
+   dialogues, 10/12 eval12 — target 9-10/10 and 12/12 bare-spine, then
+   spine+plugs on the same script. That drift is what this base fixes.
+5. Optional proof-of-life: one persona plug (mem_trains) fitted against the
+   Flash host once parity lands — validates the whole chain before the suite.
+
+Ops notes: door10 claim protocol
+(`/data/hackathon/.tmp/mr_gpu_claims/`, TTL 600s, all 8 GPUs continuously
+claimed by rung-1/planner co-tenants — size into free VRAM and touch the
+claim); expert-streamer resident set sized by `--cache-mb`; `/data` is tight
+(registries slim, never commit weights/lab artifacts).
