@@ -16,6 +16,24 @@ mkdir -p "$OUT"/{logs,plugins,results,locks} "$CLAIM_DIR"
 cd "$REPO"
 log() { echo "[$(date +%H:%M:%S)] $*" >> "$OUT/logs/chain.log"; }
 
+# growth_<n>.json is DONE only when the measure finished (phase growth_done +
+# all sections).  A crashed run leaves a stub or growth_error — NEVER treat
+# bare file-existence as done (growth-64 stub bug, 2026-10-15).
+growth_done() {
+  $PY -c '
+import json, sys, os
+p = sys.argv[1]
+try:
+    j = json.load(open(p))
+    ok = (j.get("phase") == "growth_done" and all(
+        k in j for k in ("n_loaded", "home_quality", "base_tax",
+                         "pairwise_harm", "p_home", "break_status")))
+except Exception:
+    ok = False
+sys.exit(0 if ok else 1)
+' "$1"
+}
+
 # ---- claim-aware GPU grab (door10_chain2.sh protocol, 10-min TTL) ----
 NEED=$((6 * 1024 * 1024 * 1024))
 free_of() {
@@ -109,24 +127,35 @@ EOF
       (( done_n >= n )) && break
       sleep 600
     done
-    [ -f "$OUT/results/growth_${n}.json" ] && continue
-    gpu=""
-    for ga in $(seq 1 200); do
-      gpu=$(pick_and_claim)
-      [ -n "$gpu" ] && break
-      log "growth $n waiting for GPU (attempt $ga)"
-      sleep 300
+    growth_done "$OUT/results/growth_${n}.json" && continue
+    ok=0
+    for gatt in 1 2 3; do
+      gpu=""
+      for ga in $(seq 1 200); do
+        gpu=$(pick_and_claim)
+        [ -n "$gpu" ] && break
+        log "growth $n waiting for GPU (attempt $ga)"
+        sleep 300
+      done
+      [ -z "$gpu" ] && { log "growth $n no GPU - leaving for relaunch"; break; }
+      log "growth $n on GPU $gpu (attempt $gatt)"
+      ( while true; do touch "$CLAIM_DIR/gpu$gpu" 2>/dev/null; sleep 240; done ) &
+      REFPID=$!
+      rc=0
+      HIP_VISIBLE_DEVICES=$gpu $PY lab/bank_rung1.py --phase growth \
+        --root "$OUT" --n "$n" --device cuda --dtype float16 \
+        >> "$OUT/logs/growth_${n}.log" 2>&1 || rc=$?
+      kill "$REFPID" 2>/dev/null
+      rm -f "$CLAIM_DIR/gpu$gpu" 2>/dev/null
+      if [ "$rc" -eq 0 ] && growth_done "$OUT/results/growth_${n}.json"; then
+        log "growth $n done"
+        ok=1
+        break
+      fi
+      log "growth $n FAILED rc=$rc (attempt $gatt) - retrying"
+      sleep 60
     done
-    [ -z "$gpu" ] && { log "growth $n no GPU - leaving for relaunch"; continue; }
-    log "growth $n on GPU $gpu"
-    ( while true; do touch "$CLAIM_DIR/gpu$gpu" 2>/dev/null; sleep 240; done ) &
-    REFPID=$!
-    HIP_VISIBLE_DEVICES=$gpu $PY lab/bank_rung1.py --phase growth \
-      --root "$OUT" --n "$n" --device cuda --dtype float16 \
-      >> "$OUT/logs/growth_${n}.log" 2>&1
-    kill "$REFPID" 2>/dev/null
-    rm -f "$CLAIM_DIR/gpu$gpu" 2>/dev/null
-    log "growth $n done"
+    [ "$ok" -eq 1 ] || log "growth $n incomplete after retries - leaving for relaunch"
   done
   # ---- stage 4: impress at endpoint ----
   gpu=$(pick_and_claim)

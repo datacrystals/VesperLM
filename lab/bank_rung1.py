@@ -94,6 +94,40 @@ def dump(out: dict, path: str) -> None:
     g0.dump_json(out, path)
 
 
+# growth_<n>.json write contract: `growth_done` is stamped ONLY when every
+# measure section below landed.  A crash must leave `growth_error` (or the
+# incremental pre-measure header) — never a bare header that skip-done could
+# mistake for a finished checkpoint (growth-64 stub bug, 2026-10-15).
+GROWTH_REQUIRED = ("n_loaded", "home_quality", "base_tax", "pairwise_harm",
+                   "p_home", "break_status")
+
+
+def growth_is_done(path: str) -> bool:
+    """True only for a FINISHED measure (phase growth_done + all sections)."""
+    if not os.path.exists(path):
+        return False
+    try:
+        j = json.load(open(path))
+    except Exception:  # noqa: BLE001
+        return False
+    return (j.get("phase") == "growth_done"
+            and all(k in j for k in GROWTH_REQUIRED))
+
+
+def write_growth_result(out: dict, path: str, final: bool = False) -> None:
+    """Sole write path for growth_<n>.json (atomic tmp+replace via dump).
+
+    final=True stamps phase=growth_done and refuses to write unless every
+    measure section is present, so `growth_done` always means full schema.
+    """
+    if final:
+        missing = [k for k in GROWTH_REQUIRED if k not in out]
+        if missing:
+            raise ValueError(f"growth finalize missing sections: {missing}")
+        out["phase"] = "growth_done"
+    dump(out, path)
+
+
 def manifest_path(root: str) -> str:
     return os.path.join(root, "manifest.json")
 
@@ -481,17 +515,14 @@ def installed_bank(plugs, banks_reg, args):
 blocks_global = None
 
 
-def phase_growth(args) -> dict:
-    """Break-criteria table for the first --n plugs in manifest order."""
-    global blocks_global
-    man = load_manifest(args.root)
+def _growth_measure(args, out, part_p, man, model, tok, blocks, banks_reg):
+    """§11 measure sections (1)-(4); checkpoints part_p after each section.
+
+    Never touches the final growth_<n>.json — phase_growth stamps that only
+    when this function returned with every section present (growth-64 stub
+    bug: a crash mid-measure must leave growth_error/partial, never done).
+    """
     n = args.n
-    out = {"phase": "growth", "format": FORMAT, "n": n, "bar_harm": HARM_BAR,
-           "bar_base_tax": BASE_TAX_BAR}
-    out_p = os.path.join(args.root, "results", f"growth_{n}.json")
-    dump(out, out_p)
-    model, tok, blocks, banks_reg = load_model_registry(args)
-    blocks_global = blocks
     seq, bs = args.seq_len, 1
 
     plugs = []
@@ -504,6 +535,7 @@ def phase_growth(args) -> dict:
         except Exception as e:  # noqa: BLE001
             out.setdefault("load_fail", {})[c["id"]] = str(e)
     out["n_loaded"] = len(plugs)
+    write_growth_result(out, part_p)
     print(f"[growth] n={n} loaded {len(plugs)} plugs", flush=True)
 
     # home + base eval streams (first 6 batches each — the checkpoint read)
@@ -525,6 +557,7 @@ def phase_growth(args) -> dict:
                         "delta": round(p - m, 4)}
         print(f"[growth] home {home}: {m:.4f} -> {p:.4f}", flush=True)
     out["home_quality"] = home_q
+    write_growth_result(out, part_p)
 
     # (2) base tax
     bm = ce_state(model, blocks, base_eval, args.device, gates, handles, "off")
@@ -533,6 +566,7 @@ def phase_growth(args) -> dict:
                        "delta": round(bp - bm, 4),
                        "pct": round((bp - bm) / max(bm, 1e-6) * 100, 3),
                        "pass": bool(bp - bm <= BASE_TAX_BAR)}
+    write_growth_result(out, part_p)
 
     # (3) pairwise harm — sampled pairs (full N^2 is not affordable)
     rng = np.random.default_rng(0)
@@ -568,6 +602,7 @@ def phase_growth(args) -> dict:
                                 "pass": bool(worst["harm"] <= HARM_BAR)}
     else:
         out["pairwise_harm"] = {"sampled": 0, "pass": None}
+    write_growth_result(out, part_p)
 
     # (4) p_home collapse — from the row recal records
     import glob as _g
@@ -597,10 +632,61 @@ def phase_growth(args) -> dict:
         "3_p_home": out["p_home"].get("pass"),
         "4_base_tax": out["base_tax"]["pass"],
     }
-    out["phase"] = "growth_done"
-    dump(out, out_p)
-    print(f"[growth] n={n} break_status={out['break_status']}", flush=True)
-    return out
+    write_growth_result(out, part_p)
+
+
+def phase_growth(args) -> dict:
+    """Break-criteria table for the first --n plugs in manifest order.
+
+    Write contract (growth-64 stub bug fix): growth_<n>.json exists ONLY as a
+    finished measurement — phase=growth_done with every section present.
+    Progress goes to growth_<n>.partial.json; a crashed measure leaves
+    phase=growth_error there and exits non-zero, so skip-done (which must call
+    growth_is_done, never bare file-existence) re-runs it.
+    """
+    global blocks_global
+    n = args.n
+    out_p = os.path.join(args.root, "results", f"growth_{n}.json")
+    part_p = os.path.join(args.root, "results", f"growth_{n}.partial.json")
+    if growth_is_done(out_p):
+        print(f"[growth] n={n} already complete -> {out_p}", flush=True)
+        return json.load(open(out_p))
+    if os.path.exists(out_p):
+        os.replace(out_p, part_p)  # stale header-only stub from the old path
+        print(f"[growth] n={n} demoted incomplete result -> {part_p}",
+              flush=True)
+    man = load_manifest(args.root)
+    out = {"phase": "growth", "format": FORMAT, "n": n, "bar_harm": HARM_BAR,
+           "bar_base_tax": BASE_TAX_BAR}
+    write_growth_result(out, part_p)
+    model, tok, blocks, banks_reg = load_model_registry(args)
+    blocks_global = blocks
+    last = None
+    for attempt in (1, 2):
+        out["attempt"] = attempt
+        out["phase"] = "growth"
+        out.pop("error", None)
+        try:
+            _growth_measure(args, out, part_p, man, model, tok, blocks,
+                            banks_reg)
+            write_growth_result(out, out_p, final=True)
+            if os.path.exists(part_p):
+                os.remove(part_p)
+            print(f"[growth] n={n} break_status={out['break_status']}",
+                  flush=True)
+            return out
+        except Exception as e:  # noqa: BLE001 — gfx906 async kernel holes
+            last = e
+            out["phase"] = "growth_error"
+            out["error"] = f"{type(e).__name__}: {e}"
+            write_growth_result(out, part_p)
+            print(f"[growth] n={n} attempt {attempt} EXC {out['error']}",
+                  flush=True, file=sys.stderr)
+            torch.cuda.empty_cache()
+            time.sleep(5)
+    print(f"[growth] n={n} FAILED after 2 attempts: {last}", flush=True,
+          file=sys.stderr)
+    raise SystemExit(2)
 
 
 # ---------------------------------------------------------------------------
