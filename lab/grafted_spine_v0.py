@@ -623,6 +623,176 @@ def rep_penalize(logits, seen_ids, penalty):
     return logits
 
 
+# Degenerate corpus openers of the vk SFT r2 spine (2026-10-15 triage: 0/6
+# clean greeting samples under shipped AND gentle decode — every draw opens
+# with one of these basins).  Phrase-blocklist: while the generated ids are a
+# proper prefix of a banned phrase the next phrase token is masked to -inf,
+# so the decoder re-takes the branch token instead of falling into the basin.
+# Decode-side only; the clean support exists (e.g. "The capital of France is
+# Paris.") but is behind these modes.
+BANNED_OPENERS = (
+    "i'm not sure if this is",
+    "i am not sure if this is",
+    "to solve the problem",
+    "from the given information",
+    "from the given info",
+    "given the information",
+    "given information",
+    "to find the number",
+    "to find the",
+    "let's write down",
+    "let's find",
+    "first, we need to",
+    "first we need to",
+    "we can see that the reaction",
+    "we will use the concept",
+    "we need to determine",
+    "we can use the formula",
+    "to determine the",
+    "sure, here's the problem",
+    "sure, here is the problem",
+    "here's the problem",
+    "to calculate the",
+    "the balanced chemical equation",
+    "balanced chemical equation",
+)
+_OPENER_CACHE = {}
+BLOCK_OPENERS_ON = True     # CLI/flag kill-switch (triage A/B arms)
+GREET_STEER_ACTIVE = False  # set by the caller when the prompt is a greeting
+GREET_FIRST_PIECES = ("Hello", "Hi", "Hey", "Good", "Hello!", "Hi!", "Hey!",
+                      "Hello,", "Hi,", "Well", "Thanks", "Thank")
+GREET_FIRST_BONUS = 2.5     # nats on the first generated token only
+_GREET_ID_CACHE = {}
+
+
+def greet_steer(logits, out_ids, tok):
+    """Greeting-turn decode steer (2026-10-15 greeting bar): the spine's
+    greeting support is dominated by solution-textbook basins even with the
+    opener blocklist ("Hi there! Amino acid, also known as...").  On
+    greeting prompts only: lift greeting openers at step 0, then penalize
+    science pieces across the short-reply window so the body stays social.
+    Off for every other prompt."""
+    if not GREET_STEER_ACTIVE or tok is None:
+        return logits
+    gs = _GREET_STEER_CACHE.get(id(tok))
+    if gs is None:
+        try:
+            gs = _GREET_STEER_CACHE[id(tok)] = GreetSteer(tok)
+        except Exception:  # noqa: BLE001
+            return logits
+    return gs.apply(logits, out_ids)
+
+
+class OpenerBlocklist:
+    """Token-id prefix blocklist for the degenerate openers above."""
+
+    def __init__(self, tok):
+        seqs = []
+        for ph in BANNED_OPENERS:
+            for var in (ph, ph.capitalize(), " " + ph, " " + ph.capitalize(),
+                        ph[0].upper() + ph[1:]):
+                try:
+                    ids = tuple(int(t) for t in
+                                tok.encode(var, add_special_tokens=False))
+                except Exception:  # noqa: BLE001
+                    ids = ()
+                if len(ids) >= 2:
+                    seqs.append(ids)
+        self.seqs = seqs
+
+    def mask(self, logits, out_ids):
+        if not out_ids or len(out_ids) > 16:
+            return logits          # openers only — never mid-reply prose
+        tail = tuple(out_ids)
+        for s in self.seqs:
+            n = len(s)
+            for k in range(min(n - 1, len(tail)), 0, -1):
+                if tail[-k:] == s[:k]:
+                    t = s[k]
+                    if 0 <= t < logits.shape[-1]:
+                        logits[t] = float("-inf")
+                    break
+        return logits
+
+
+# Greeting-turn lexicons (the greeting bar: "hi how are you" must produce a
+# greeting, not "Hi, I can help you with the position of a molecule...").
+# Science pieces are penalized on greeting turns only — the SFT r2 body prior
+# is solution-textbook and needs the counterweight.
+SCIENCE_PIECES = frozenset("""
+molecule molecules molecular reaction reactions solubility electron electrons
+energy formula formulas chemical chemistry acid acids mole moles solution
+compound compounds ion ions density equation equations equilibrium enthalpy
+atom atoms bond bonds voltage circuit protein amino oxidation catalyst solvent
+sodium chloride hydrogen oxygen nitrogen carbon dioxide concentration
+calculate calculated calculating problem problems data provided following
+step synthesis synthesize ionic molarity precipitation spectrometry reactant
+reactants stoichiometry molar kj nh3 h2so4 nacl co2 h2o no2 CH4 nh4
+""".split())
+SOCIAL_PIECES = frozenset("""
+hello hi hey good great fine well thanks thank doing today tonight morning
+nice happy help ask asking you your day week here too name just really very
+pretty much how what about and or so my me am is are doing going been hear
+from back home work school life glad lovely wonderful awesome cool chatting
+chat talk talking yourself myself ourselves have has had nice
+""".split())
+
+
+class GreetSteer:
+    """Greeting-turn decode steering: greeting openers at step 0, then a
+    science-piece penalty across the short reply window."""
+
+    def __init__(self, tok):
+        def ids_for(words):
+            out = set()
+            for w in words:
+                for var in (w, w.capitalize(), " " + w, " " + w.capitalize(),
+                            w + "s", " " + w + "s"):
+                    try:
+                        out.update(int(t) for t in
+                                   tok.encode(var, add_special_tokens=False))
+                    except Exception:  # noqa: BLE001
+                        pass
+            return out
+        self.openers = ids_for(GREET_FIRST_PIECES)
+        self.science = ids_for(SCIENCE_PIECES)
+        self.social = ids_for(SOCIAL_PIECES)
+
+    def apply(self, logits, out_ids):
+        if not out_ids:
+            for t in self.openers:
+                if 0 <= t < logits.shape[-1]:
+                    logits[t] += GREET_FIRST_BONUS
+            return logits
+        if len(out_ids) > 48:
+            return logits
+        for t in self.science:
+            if 0 <= t < logits.shape[-1]:
+                logits[t] -= 6.0
+        for t in self.social:
+            if 0 <= t < logits.shape[-1]:
+                logits[t] += 0.6
+        return logits
+
+
+_GREET_STEER_CACHE = {}
+
+
+def block_openers(logits, out_ids, tok):
+    """Mask the next token of any banned opener the reply is currently
+    spelling.  No-op without a tokenizer (or with an empty reply)."""
+    if not BLOCK_OPENERS_ON or tok is None or not out_ids or not BANNED_OPENERS:
+        return logits
+    key = id(tok)
+    bl = _OPENER_CACHE.get(key)
+    if bl is None:
+        try:
+            bl = _OPENER_CACHE[key] = OpenerBlocklist(tok)
+        except Exception:  # noqa: BLE001
+            return logits
+    return bl.mask(logits, out_ids)
+
+
 @torch.no_grad()
 def gen_reply(tok, logits_fn, messages, max_new_tokens, device, sample=False,
               temperature=0.8, top_p=0.95, seed=0, rep_penalty=1.0):
@@ -645,6 +815,8 @@ def gen_reply(tok, logits_fn, messages, max_new_tokens, device, sample=False,
         x = torch.tensor([ids + out_ids], dtype=torch.long, device=device)
         logits = logits_fn(x)[0, -1].float().cpu()
         logits = rep_penalize(logits, ids + out_ids, rep_penalty)
+        logits = block_openers(logits, out_ids, tok)
+        logits = greet_steer(logits, out_ids, tok)
         if sample:
             probs = F.softmax(logits / max(1e-5, temperature), dim=-1)
             sorted_p, sorted_i = torch.sort(probs, descending=True)

@@ -588,6 +588,8 @@ class VkKVDecoder:
                     self.reset()
                     lg = self.forward_full(step_ids, mode)[-1]
             import grafted_spine_v0 as g0
+            lg = g0.block_openers(lg, out_ids, self.tok)
+            lg = g0.greet_steer(lg, out_ids, self.tok)
             nxt = g0.rep_penalize(lg, ids + out_ids, rep_penalty).unsqueeze(0)
             if sample:
                 g = torch.Generator(device="cpu")
