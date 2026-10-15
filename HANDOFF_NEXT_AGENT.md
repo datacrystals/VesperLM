@@ -96,7 +96,32 @@ the GLM-Flash arm activates when agent-66's host exposes `make_generator`
 
 ### RUNG 1 MEASUREMENTS (this lane)
 
-(loaded below when the runs land — parity numbers, wrap result)
+**LOAD — layer-local achieved (full load impossible on ≤2×32GB):** 2L slice of
+MiMo-V2.6-Flash-INT4 = embed + L0 (dense MLP) + L1 (MoE 256E top-8) + norm +
+lm_head; **773 packed-int4 linears dequantized** (pack-quantized, group-32,
+asymmetric — grabkit key notes), 32.31GB fp32 / 16.2GB fp16. Vendor
+`modeling_mimo_v2.py` runs unmodified (transformers-5.19
+`create_causal_mask` kwarg rename shimmed in the port layer only). Shard
+dequant is ~34 min over 64 EP shards; paid once via `slice_state_2.pt` cache.
+
+**REGISTRY/GRAFT PARITY vs bare — PASS (bar 0.95):**
+
+| arm | logit-cos mean | min | route topk agree | ce_delta |
+|---|---|---|---|---|
+| init=exact | **1.0000** | 1.0000 | 1.000 | 0.0 |
+| + short recal (50 steps, mse 0→9.4e-6) | **0.99998** | 0.9988 | 0.944 | +0.00045 |
+
+(1536 real text tokens, 6×2×128 from the graft_d2 slice, CPU fp32 host.)
+`MimoPassportGate` reproduces the stock sigmoid + noaux_tc +
+e_score_correction_bias selection from bank scores, so init=exact is
+route-identical by construction — the number is plumbing parity ("the port is
+not corrupting the route"), same reading as the Qwen 0.9989 and vk 1.0000
+gates. Layer-local, 1 MoE block in the slice (L1); a full-48L number needs a
+bigger box allocation.
+
+**PROOF-OF-LIFE WRAP (mem_trains, §10.7):** (fitted result below when the GPU
+wrap lane lands — host-native L1e0 SwiGLU core → rank-64 width-norm wrap →
+trains episodes FEED → additive λ grid → registry row + owner recal 0.85)
 
 ### Code
 
