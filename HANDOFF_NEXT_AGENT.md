@@ -41,6 +41,71 @@ data first.
 
 ---
 
+## 2026-10-15 — SPINE CANDIDATE RUNG 1: **MiMo-V2.6-Flash as a base core** (sibling to the GLM-Flash port, agent-66) — load/host-adapt + registry/graft parity + ONE proof-of-life persona wrap + **the conversation bake-off protocol** (the pick between GLM-Flash and MiMo-Flash is the USER'S FEEL, not benchmarks)
+
+**Context (user Q):** "or mimo flash as a base core?" — MiMo-V2.6-Flash is the
+domain map's *writing/style* model (MIT, box
+`/data/ModelDownloader/MiMo-V2.6-Flash-INT4`, 175GB INT4, 310B/15B active,
+48L, 256E top-8, sigmoid+noaux_tc router with `e_score_correction_bias`).
+Scope mirrors the GLM-Flash lane exactly so the bake-off comparison is clean.
+
+### THE BAKE-OFF PROTOCOL (the pick is the user's metric: does it feel good to talk to?)
+
+**One command per spine, identical everything else** — `lab/spine_bakeoff.py`:
+
+```
+python3 lab/spine_bakeoff.py --spine mimo-flash --plugins <mimo plug dir> \
+    --out /data/tliao/bakeoff/mimo_flash.json
+python3 lab/spine_bakeoff.py --spine glm-flash  --plugins <glm plug dir> \
+    --out /data/tliao/bakeoff/glm_flash.json
+python3 lab/spine_bakeoff.py --compare \
+    /data/tliao/bakeoff/mimo_flash.json /data/tliao/bakeoff/glm_flash.json
+```
+
+Frozen across both spines (any deviation invalidates the comparison):
+1. **prompts** — `lab/convo_test.DIALOGUES` verbatim (10 natural multi-turn
+   dialogues: greet/about-you/opinion/story/poi/gundam/trains/math×2/
+   knowledge/user-interest);
+2. **rubric** — `convo_test.score_turn`/`worst` verbatim (no_rep / answers /
+   length / persona; word-boundary persona keywords; drift guard inside
+   answers);
+3. **decode** — the shipped defaults: **sample T=0.8, top-p 0.95, rep-penalty
+   1.1, max-new 128** (9038e07). Greedy stays `/greedy` opt-in diagnostics
+   ONLY, never a bake-off arm;
+4. **plugs** — the SAME persona pack set (`mem_trains, mem_poi, mem_gundam,
+   mem_machine, mem_cars, mem_igbt`), each fitted per-spine host with the
+   SAME §10.7 recipe (rank-64 width-norm wrap, wd 0, lr 3e-3, task-CE +
+   out_pen 300, FEED ≥ 200k, additive λ, registry row + owner recal 0.85);
+   `--plugins` points at that spine's fitted set — the harness does not fit;
+5. **seed** — 0 both sides (gfx906 sampling is not bit-deterministic: if a
+   verdict looks like a flake, rerun `--seed 1` before judging);
+6. **verdict** — per-turn 4-rubric scores, per-dialogue worst, usable/10;
+   full transcripts in the `--out` JSON (user reads both side-by-side and
+   picks by feel); stdout stays one-word/numeric.
+
+Backends: `--backend graft` (default) = the assembled Vesper stack on that
+spine's host adapter (registry graft + the identical plug set) = **the pick
+arm**; `--backend vllm --endpoint … --vllm-model …` = bare-spine feel pre-check
+only (NO plugs — never the pick itself). A spine whose host module
+(`lab/<spine>_host.py`) has no `make_generator()` yet exits non-zero rather
+than silently comparing unequal stacks — the harness will not fake a bake-off.
+
+`SPINE_MODULES = {mimo-flash: mimo_flash_host, glm-flash: graft_glmflash}` —
+the GLM-Flash arm activates when agent-66's host exposes `make_generator`
+(harness exits non-zero until then — it will not fake a bake-off).
+
+### RUNG 1 MEASUREMENTS (this lane)
+
+(loaded below when the runs land — parity numbers, wrap result)
+
+### Code
+
+- `lab/mimo_flash_host.py` — MiMo-Flash host adapter + parity + wrap driver
+- `lab/mimo_flash_launch.sh` — claim-locked detached launcher (box)
+- `lab/spine_bakeoff.py` — the head-to-head harness (protocol above)
+
+---
+
 ## 2026-10-15 — CONVERSATIONAL QUALITY PASS (user's primary bar: "does it feel good to talk to?", not benchmark numbers): decode defaults flipped to **sampled T=0.8 + repetition-penalty 1.1 + max-new 128** (greedy was the loop machine — kept as `/greedy` opt-in) + **`lab/convo_test.py` conversation harness** (10 natural multi-turn dialogues × 4 observable rubrics) + BEFORE/AFTER measured on real dialogue | **verdict: loops GONE (turn-FAIL 13/18→1-2/18), corpus-drift REMAINS (answers-FAIL 8-9/18 both arms) — SFT r3 is the cure, decode is not** | SFT r3 data sketch below
 
 **Quick-win 1 — shipped decode defaults (code):** `lab/chat_vfinal.py` now ships
@@ -4331,3 +4396,82 @@ Ops notes: door10 claim protocol
 claimed by rung-1/planner co-tenants — size into free VRAM and touch the
 claim); expert-streamer resident set sized by `--cache-mb`; `/data` is tight
 (registries slim, never commit weights/lab artifacts).
+
+## 2026-10-15 (cont.) — GLM-5.3-Flash rung-1 RESULTS + BASE BAKE-OFF BUILD PLAN
+
+**Parity results** (real slice `/data/tliao/graft_d2_slice/val_mixed.txt`, fp16,
+MI50 GPU1 claim-locked, `lab/graft_glmflash.py`):
+
+| arm | form | logit cos | min | dCE | layer cos | top-k |
+|---|---|---|---|---|---|---|
+| init=exact | 6L truncated spine | **0.999955** | 0.997485 | +0.000126 | 0.999267 | 1.0 (identity) |
+| init=prototype + recal 150 | 12L truncated spine (9 MoE layers) | **0.998959** | 0.996479 | +0.042761 | 0.996338 | 0.791667 |
+
+Standing bar logit-cos ≥ 0.95 **CLEARED in both arms** (stretch ≥ 0.99 also
+cleared). Secondary d0 bars: |dCE| < 0.05 PASS (0.0428, tight), layer cos PASS,
+**top-k agreement 0.792 vs 0.8 bar MISS** — the D2 hard-selection story again
+(GLM's sigmoid+noaux_tc flips discrete top-k among near-threshold experts;
+logit cos stays ~0.999 because those experts nearly cancel). Named lever
+(falsifier already in FAILURES d2-crossfamily-perlayer): **score-margin-aware
+recal** (`--recal-margin-w` family, graft_d2_crossfamily.py) + the
+family-relative agreement baseline (noise-matched Monte-Carlo). First
+prototype attempt measured 0.6247 — root cause was OURS: missing d0
+`fit_layer_scales` closed-form after prototype init (passport scores off the
+stock-logit scale → sigmoid saturates at 0.5); with the fix + 150 recal steps
+it jumps to 0.9990. Registry artifacts:
+`/data/tliao/glmflash_out/{smoke_window,exact_full,proto_w12}_registry.pt`
+(`vesper-graft-registry-v1`, 288 rows/layer × d_r 4096).
+
+**Load form achieved = layer-local (window) parity + a proven streaming
+full-stack host**. The 45L streaming host builds and runs (stock arm executed
+through layer 43) but its resident set (≈18GB non-expert + expert LRU +
+KDA/dequant workspace) OOMs against the planner co-tenant on a 32GB MI50
+(3 OOMs at 27GB allocated; gfx906 has no expandable segments). Full-stack
+final-logit parity is therefore a **2-GPU claim job** (or MI300X), not a
+today-item. gfx906 walls found and shimmed (all in
+`graft_glmflash.install_torch_kda`): fla Triton KDA → transformers' pure-torch
+reference bodies; `torch.nonzero` + bool-mask column indexing are HARD holes
+(`hipErrorInvalidDeviceFunction`) → indexer `get_pooled_states` reimplemented
+with CPU index-derivation; expert loop bookkeeps on CPU; KDA reference forced
+to `chunk_size=16` (default 64 padded 8-token slices into a 128MB decay_mask);
+expert dequant on device (bit-unpack shifts) + `empty_cache` every 16 loads.
+Checkpoint quirk: routed experts are int4 pack-quantized on layers 3-43 but
+**FP8 block-128 on layer 44/MTP** — loader dispatches per tensor key format.
+
+### BASE BAKE-OFF + BUILD PLAN (the "smarter base" decision, demo bar = conversation quality)
+
+Candidates: **A** = current 325M vk-base (SFT r2, shipped chat_vfinal), **B**
+= **GLM-5.3-Flash** (this port; MIT; 45L×288E top-8, ~40B active), **C** =
+MiMo-V2.6-Flash (sibling lane agent-67 is running the same port). User metric:
+**conversation quality** — `lab/convo_test.py` (10 dialogues × 4 rubrics:
+no_rep/answers/length/persona) + `eval12` with SHIPPED decode defaults
+(9038e07: T=0.8 + rep-pen 1.1 + max-new 128 — never regress to greedy).
+Current A numbers: usable dialogues 5/10, eval12 10/12, interactive probes
+still FAIL/PARTIAL on drift.
+
+Bake-off protocol (one script, no new harness):
+1. bare-spine convo_test/eval12 on A (regression anchor), B (chat-CLI port
+   below), C (agent-67's port) — same dialogues, same rubrics, 2 samples/arm.
+2. Decision rule: pick the spine whose BARE numbers clear ≥9/10 dialogues and
+   ≥12/12 eval12 with no persona-rubric regression; if two clear, pick lower
+   wrap-fit cost (B's cores are already banked at
+   `/data/tliao/core_bank/glm-5.3-flash/`, 40 of the 250-core bank).
+3. Plugs are judged AFTER the base pick (§10.7 wraps are host-agnostic):
+   mem_trains/mem_pack trio + persona rows from `vk_final_build.py` transfer
+   by re-fitting against the chosen host (recipe unchanged; only the gfx906
+   B*T shape grid is spine-specific).
+
+Build steps on the winner (full detail `lab/graft_glmflash_runbook.md` §4):
+(1) chat-CLI port = fork `chat_vfinal.py`/`VkKVDecoder`, swap loader for
+`graft_glmflash.build_host`, keep shipped decode defaults; chat template is
+the checkpoint's own `chat_template.jinja`. (2) §10.7 wraps: GRAB banked cores
+→ WRAP rank-64 width-norm wd 0 lr 3e-3 out_pen 300 ~250 steps → FEED 50-200k
+(`Dataset/data/specialties/*` + rung1_feeds) → DELIVER fitted additive λ →
+ROUTE registry row + mex recal. (3) Wrap-fit cost on a ~360B spine: the frozen
+spine term binds → **multi-GPU claims** (8×MI300X clean; MI50 streaming host
+is hours/wrap under backward cache-thrash) — budget MI300X for fit lanes
+(5-15 min/core), MI50 for registry/parity/demos. (4) Proof-of-life wrap
+(mem_trains, GLM L3E0 core, rank-64, fit against the Flash host): see the
+wrap-poe entry/JSON below when it lands. (5) Re-run the bake-off script on
+bare vs spine+plugs; acceptance = dialogues 9-10/10 and eval12 12/12 with
+the persona rubric green.
