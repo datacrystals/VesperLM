@@ -149,6 +149,13 @@ scale otherwise) — do not skip it.
 Registry artifacts (box): `/data/tliao/glmflash_out/*_registry.pt`
 (`vesper-graft-registry-v1`, 288 rows/layer, d_r 4096).
 
+**Wrap proof-of-life (mem_trains, 2026-10-15)**: `lab/graft_glmflash_wrap_poe.py`
+— §10.7 loop runs on the Flash host (GRAB banked GLM L3E0 core → rank-64
+wrap → additive plug at the first MoE layer → short fit). 3 steps: home CE
+13.249→10.946→9.326; aggregate home Δ −0.815; base tax −0.577 CE; base
+logit-cos plugged-vs-bare 0.982985. Toy FEED / truncated spine — proof of
+the loop, not quality (quality fit = MI300X go-step).
+
 ## 4. THE FULL BUILD PLAN (next rungs — the "go" step)
 
 The user's bar is **conversation quality** (the 325M base's drift is what a
