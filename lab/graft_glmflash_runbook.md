@@ -58,9 +58,22 @@ co-tenants hold the rest; 8×32=256GB gross). What `build_host` does instead
      probe before trusting it — holes are op-specific, not family-wide.
 
 Measured (MI50 GPU1, fp16, claim `/data/hackathon/.tmp/mr_gpu_claims/gpu1`):
-host build ~33s for a 6L window / ~5-6 min for 45L (staging dequant dominates
+host build ~33s for a 6L window / ~3 min for 45L (staging dequant dominates
 at first, then page-cache warm), first parity batch ~34s (expert cold loads),
-subsequent ~4-11s.
+subsequent ~4-11s. **Full-stack honesty note (2026-10-15)**: the 45L
+streaming host builds and runs (the stock arm executed through layer 43 on
+the first full attempt) but the resident set (~18GB non-expert + expert LRU +
+KDA/dequant workspace) does not survive the planner co-tenant's growth on a
+32GB MI50 — three OOMs at 27GB allocated (`chunk_kimi_delta_attention`
+decay_mask, then the expert bit-unpack) with `expandable_segments` unsupported
+on gfx906. Mitigations already in the code: KDA reference forced to
+`chunk_size=16` (the blocked scan is chunk-size agnostic; default 64 padded
+even 8-token slices to a 128MB decay_mask) and `torch.cuda.empty_cache()`
+every 16 expert loads (the caching allocator otherwise retains every freed
+50MB expert block). Full final-logit parity becomes a **multi-GPU claim job**
+(2×32GB MI50 with a quiet co-tenant, or the MI300X lane); until then the
+**window/layer-local form is the honest gate** (truncated-spine logits +
+per-layer MoE metrics on up to 24L).
 
 ## 2. Router family + the graft
 
@@ -115,6 +128,26 @@ env $ENV $PY lab/graft_glmflash.py ... --mode window --max-layers 6 \
 Bars (standing, §10.8 / graft_d0_runbook): logit cos ≥ 0.95 (stretch ≥ 0.99
 exact), |dCE| < 0.05, per-layer MoE-out cos > 0.9, top-k agreement > 0.8.
 `verdict`/`pass` in the output JSON enforce them.
+
+**Measured (2026-10-15, MI50 GPU1, fp16, real slice
+`/data/tliao/graft_d2_slice/val_mixed.txt`)**:
+
+| arm | form | logit cos | min | dCE | layer cos | top-k |
+|---|---|---|---|---|---|---|
+| `--init exact` | 6L window | 0.999955 | 0.997485 | +0.000126 | 0.999267 | 1.0 |
+| `--init prototype --recal-steps 150` | 12L window (9 MoE layers) | 0.998959 | 0.996479 | +0.042761 | 0.996338 | 0.791667 |
+
+Standing bar ≥0.95 **cleared in both arms** (stretch ≥0.99 too). Secondary:
+|dCE| 0.0428 PASS (tight), layer cos PASS, **top-k 0.792 vs 0.8 MISS** —
+hard-selection family effect (sigmoid+noaux_tc flips near-threshold experts);
+named lever = score-margin-aware recal (`--recal-margin-w` family in
+`graft_d2_crossfamily.py`) + the noise-matched family-relative agreement
+baseline. First prototype attempt was 0.6247 until d0's closed-form
+`fit_layer_scales` was added after prototype init (scores off the stock-logit
+scale otherwise) — do not skip it.
+
+Registry artifacts (box): `/data/tliao/glmflash_out/*_registry.pt`
+(`vesper-graft-registry-v1`, 288 rows/layer, d_r 4096).
 
 ## 4. THE FULL BUILD PLAN (next rungs — the "go" step)
 
