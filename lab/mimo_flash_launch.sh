@@ -7,7 +7,7 @@ export PYTORCH_ALLOC_CONF=expandable_segments:True
 export PYTHONUNBUFFERED=1
 CLAIM_DIR=/data/hackathon/.tmp/mr_gpu_claims
 LAB=/data/tliao/mimo_flash_lab
-OUT=/data/tliao/mimo_flash
+OUT=/home/tliao/mimo_flash
 PY=/home/tliao/vesper_sft_venv/bin/python
 mkdir -p "$CLAIM_DIR" "$OUT/logs"
 exec 9>"$CLAIM_DIR/lock"; flock 9
@@ -44,11 +44,11 @@ pick() {
     f=$(free_of "$g")
     if (( f > best_free )); then best_free=$f; best=$g; fi
   done
-  if (( best_free >= 16 )); then touch "$CLAIM_DIR/gpu$best"; echo "$best"; fi
+  if (( best_free >= 18 )); then touch "$CLAIM_DIR/gpu$best"; echo "$best"; fi
 }
 
 GPU=""
-for a in $(seq 1 60); do
+for a in $(seq 1 120); do
   exec 9>"$CLAIM_DIR/lock"; flock 9
   GPU=$(pick 5 6 1 4 0 2 3 7)
   exec 9>&-
