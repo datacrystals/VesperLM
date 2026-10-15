@@ -93,6 +93,7 @@ from graft_d0_parity import (  # noqa: E402
     BAR_LOGIT_COSINE_STRETCH,
     BAR_TOPK_AGREE,
     PassportBank,
+    fit_layer_scales,
     init_passports_exact,
     init_passports_prototype,
     next_token_ce,
@@ -142,8 +143,20 @@ def install_torch_kda() -> dict:
             continue
         orig = getattr(fn, "__wrapped__", None)
         if orig is not None and orig is not fn:
-            setattr(M, name, orig)
-            patched[name] = "torch-ref"
+            if name == "chunk_kimi_delta_attention":
+                # the reference pads to its default chunk_size=64 even for
+                # tiny slices (decay_mask (B,H,1,64,64) fp32 = 128MB per call)
+                # — use a small chunk; the blocked scan is chunk-size agnostic
+                def _small_chunk(fn=orig):
+                    def wrapped(*args, **kwargs):
+                        kwargs.setdefault("chunk_size", 16)
+                        return fn(*args, **kwargs)
+                    return wrapped
+                setattr(M, name, _small_chunk())
+                patched[name] = "torch-ref/chunk16"
+            else:
+                setattr(M, name, orig)
+                patched[name] = "torch-ref"
         else:
             patched[name] = "kept"
 
@@ -393,6 +406,11 @@ class StreamedExperts(nn.Module):
             down=ws["down_proj"].to(self.device),
         )
         self.stats["loads"] += 1
+        # gfx906 has no expandable segments: the caching allocator retains
+        # every freed 50MB expert block and the pool OOMs the co-tenant lane.
+        # Return them to the driver every so often.
+        if self.stats["loads"] % 16 == 0:
+            torch.cuda.empty_cache()
         return ew
 
     def _get(self, expert: int) -> ExpertWeights:
@@ -1118,6 +1136,10 @@ def main() -> int:
                 top_idx = s.topk(meta["top_k"], dim=-1).indices
                 stats.observe(li, h, top_idx, 0)
             init_passports_prototype(banks, stats)
+            # closed-form per-layer scale so prototype scores sit on the
+            # stock-logit scale (d0; without it the sigmoid scores collapse
+            # to ~0.5 and the graft measures 0.6 cos, not the registry)
+            fit_layer_scales(banks, pairs)
             fit_report = recalibrate(banks, pairs, steps=args.recal_steps,
                                      lr=args.recal_lr, kl_w=args.recal_kl_w)
             out["recal"] = fit_report
