@@ -550,6 +550,7 @@ def phase_wrap(model, cfg, tok, device, out: dict, args, blocks, banks):
     log(f"safe B*T={bt} for wrap fit")
 
     # Fit: forced-dispatch task CE + out_pen (§10.7 WRAP)
+    wrap.to(device)
     sf = blk.experts.forward
     lam = nn.Parameter(torch.zeros((), device=device))
     pm = d6.MixMerge(sf, [wrap], [lam], ["mem_trains"],
@@ -607,6 +608,7 @@ def phase_wrap(model, cfg, tok, device, out: dict, args, blocks, banks):
     # DELIVER: additive lambda, quality reads
     row = bank65.P.data[bank.num_experts].float().cpu().clone()
     handles2, stock_gate = _install_additive(blk, wrap, lam, bank65, gate65)
+    fit_lam_grid(model, handles2, lam, home_train[:4], device)
     q = quality_reads(model, blk, gate65, handles2, home_train[:4],
                       base[:4], device, lam)
     out["wrap_quality"] = q
@@ -707,6 +709,30 @@ def _install_additive(blk, wrap, lam, bank65, gate65):
     stock_gate = blk.gate
     blk.gate = gate65
     return [(blk, sf)], stock_gate
+
+
+@torch.no_grad()
+def fit_lam_grid(model, handles, lam, home, device) -> float:
+    """Door-6 style fitted additive lambda (grid incl. below 0.25)."""
+    import graft_d1_plugin as d1
+    best, best_ce = 0.0, float("inf")
+    for cand in (0.0, 0.1, 0.25, 0.5, 1.0):
+        with torch.no_grad():
+            lam.fill_(cand)
+        d1.set_plugin_mode(handles, "additive")
+        tot, n = 0.0, 0
+        for tokens, _ in home:
+            tokens = tokens.to(device)
+            lg = d0.model_logits(model, tokens)
+            tot += d0.next_token_ce(lg, tokens) * tokens.shape[0]
+            n += tokens.shape[0]
+        ce = tot / max(1, n)
+        if ce < best_ce:
+            best_ce, best = ce, cand
+    with torch.no_grad():
+        lam.fill_(best)
+    d1.set_plugin_mode(handles, "off")
+    return best
 
 
 @torch.no_grad()
