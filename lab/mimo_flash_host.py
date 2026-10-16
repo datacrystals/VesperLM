@@ -627,12 +627,17 @@ def phase_wrap(model, cfg, tok, device, out: dict, args, blocks, banks):
     hs_base = capture_h(model, blk, base[:4], device)
     with torch.no_grad():
         if hs_home.shape[0] > 0:
-            proto = hs_home.mean(dim=0)
+            # Row-init falsifier (measured, 2026-10-16): stock-norm-scaled mean
+            # prototype SATURATES the bank softmax (p_new=1.0 on home AND base,
+            # zero recal gradient — first==last).  home-minus-base direction at
+            # 0.25x stock-norm starts at p~0.01 and recal converges to
+            # p_home 0.86 / p_base 0.010 (owner 0.85 bar).
+            proto = hs_home.mean(dim=0) - hs_base.mean(dim=0)
             stock_norm = float(bank65.P.data[:bank.num_experts].float()
                                .norm(dim=1).mean())
             pn = float(proto.norm())
             if pn > 0 and stock_norm > 0:
-                proto = proto * (stock_norm / pn)
+                proto = proto * (stock_norm * 0.25 / pn)
             bank65.P.data[bank.num_experts] = proto
     h_all = torch.cat([hs_home, hs_base], 0)
     lab = torch.cat([torch.ones(hs_home.shape[0]),
@@ -649,17 +654,20 @@ def phase_wrap(model, cfg, tok, device, out: dict, args, blocks, banks):
     q = quality_reads(model, blk, gate65, handles2, home_train[:4],
                       base[:4], device, lam)
     out["wrap_quality"] = q
+
+    # fact margins WITH the plug forced (the delivery read) then off (bare)
+    def logits_fn(x):
+        return d0.model_logits(model, x.to(device))
+    d1.set_plugin_mode(handles2, "forced", 1.0)
+    out["fact_margins_forced"] = fact_margins(logits_fn, tok, device)
     d1.set_plugin_mode(handles2, "off")
+    out["fact_margins_off"] = fact_margins(logits_fn, tok, device)
+
     blk.gate = stock_gate
     blk.experts.forward = sf
     if hasattr(blk, "_plugin_merge"):
         delattr(blk, "_plugin_merge")
 
-    # fact margin read (taught token: love vs hate on the trains prompts)
-    def logits_fn(x):
-        return d0.model_logits(model, x.to(device))
-    margins = fact_margins(logits_fn, tok, device)
-    out["fact_margins"] = margins
     out["wrap"] = {
         "tag": "mem_trains", "home": "trains",
         "donor": f"mimo-flash-host-L{host_i}-e{args.host_expert}",
@@ -668,7 +676,7 @@ def phase_wrap(model, cfg, tok, device, out: dict, args, blocks, banks):
         "wall_s": round(time.time() - t0, 2),
     }
     log(f"wrap done ce_home {q['ce_home_off']:.3f} -> {q['ce_home_add']:.3f} "
-        f"margin {margins.get('trains_stated_vs_correction')}")
+        f"margin_forced {out['fact_margins_forced']}")
 
 
 def _chatml_ids(tok, prompt, answer):
