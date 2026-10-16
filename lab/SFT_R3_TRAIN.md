@@ -90,44 +90,26 @@ full transcripts: `lab/imported/vk_sft_r3/_evals/eval_chat_step200.json`.
 
 | # | prompt | r3 @ step 200 | r2 (best, step 600) |
 |---|--------|---------------|---------------------|
-| 1 | greeting | PARTIAL (coherent, non-sequitur "Happy New Year, everyone!") | PASS |
-| 2 | capital of France | FAIL (never says Paris; "1.3 billion people" salad) | PASS |
-| 3 | black hole | PARTIAL (topical essay, physics garble, no loop) | FAIL (hard loop) |
-| 4 | ocean poem | PARTIAL (coherent ocean prose, not a poem) | PASS |
-| 5 | 17×23 | FAIL ("17 * 23 = 576." wrong, but clean one-line form) | FAIL (hard loop) |
-| 6 | boil an egg | PARTIAL (numbered steps, content garble) | PARTIAL |
-| 7 | list vs tuple | PARTIAL (thin one-liner, no debris) | PARTIAL |
-| 8 | fun fact space | PARTIAL (fluent, "Space is the only planet" wrong facts) | PASS |
-| 9 | photosynthesis | **PASS** (correct coherent summary) | FAIL (formula debris) |
-| 10 | stressed about work | PARTIAL (deflects with questions, no empathy) | PASS |
-| 11 | translate to French | FAIL (task ignored → park/bike monologue) | FAIL |
-| 12 | why do we dream | **PASS** (coherent on-topic prose) | PASS |
+| 1 | greeting | PARTIAL (wrong register) | PASS |
+| 2 | capital of France | FAIL (wrong facts, target entity missed) | PASS |
+| 3 | black hole | PARTIAL (topical, fact errors, no loop) | FAIL (hard loop) |
+| 4 | ocean poem | PARTIAL (on-topic, wrong form) | PASS |
+| 5 | 17×23 | FAIL (wrong product; clean answer form) | FAIL (hard loop) |
+| 6 | boil an egg | PARTIAL (structure ok, content wrong) | PARTIAL |
+| 7 | list vs tuple | PARTIAL (thin, incomplete) | PARTIAL |
+| 8 | fun fact space | PARTIAL (fluent, factual errors) | PASS |
+| 9 | photosynthesis | **PASS** (correct summary) | FAIL (formula debris) |
+| 10 | stressed about work | PARTIAL (deflects, no empathy) | PASS |
+| 11 | translate to French | FAIL (task ignored) | FAIL |
+| 12 | why do we dream | **PASS** (coherent on-topic) | PASS |
 
 **Loop/quality audit (12 prompts):** hard-loop **0/12** (r2: 2/12),
 prompt-echo 0/12 (r2: 0/12), empty 0/12 (r2: 0/12), formula-debris
-**0/12** (r2: 3/12). Every reply is fluent, topical, stopping prose.
+**0/12** (r2: 3/12). All 12 replies are fluent, stopping prose.
+Reply-length stats at step 200: median ~340 chars, min 14, max 875
+(r2's failure set included empty replies and runaway loops; neither
+appears here). Full transcripts live in the eval JSON above.
 
-Sample exchanges (verbatim from the JSON):
-
-> **Q: Why do we dream?** → "We dream because it gives us purpose and
-> direction. It can also be a way of dealing with stress, anxiety, and
-> other life challenges. It's also a way to connect with our inner
-> selves and find meaning in the world around us. Overall, dreaming is
-> an act of self-reflection and introspection…"
-
-> **Q: Summarize: Photosynthesis is the process plants use to convert
-> sunlight into energy.** → "Photosynthesis is the process by which
-> plants convert sunlight into chemical energy, carbon dioxide and
-> water. It is a critical process for the growth of crops and other
-> organisms. The light-dependent reactions that occur in photosynthesis
-> are also responsible for the production of food…"
-
-> **Q: What is 17 * 23?** → "17 * 23 = 576."  (wrong — 391 — but a
-> clean one-line answer where r2 hard-looped `x = 5 * 0.09` ×N)
-
-> **Q: What is the capital of France?** → "France is a sovereign state
-> in Western Europe… It has a population of approximately 1.3 billion
-> people…" (fluent, but never says Paris — residual knowledge-salad)
 
 ## Verdict vs r2
 
