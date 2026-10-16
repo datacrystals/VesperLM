@@ -254,21 +254,38 @@ def load_slice(model_dir: str, n_layers: int, device: str, out: dict):
 # ---------------------------------------------------------------------------
 
 def stock_dispatch(blk) -> callable:
-    """experts.forward(h, idx, w) — bit-faithful port of MiMoV2MoE.moe()."""
+    """experts.forward(h, idx, w) — stock merge, MiMoV2MoE.moe() semantics.
+
+    gfx906 note: this torch build's index-scan ops (torch.where(mask) /
+    nonzero / boolean-mask gather) fail with hipErrorInvalidDeviceFunction,
+    which is exactly what the vendor moe() loop uses.  The merge below is the
+    same math via argsort segments + integer gather + index_add_ (all clean
+    on gfx906); segment bounds come from one small host read per call.
+    """
     experts = blk.experts
 
     def forward(hidden_states, top_k_index, top_k_weights):
-        final = torch.zeros_like(hidden_states, dtype=top_k_weights.dtype)
-        one_hot = F.one_hot(top_k_index, num_classes=len(experts))
-        one_hot = one_hot.permute(2, 0, 1)
-        for ei, expert in enumerate(experts):
-            mask = one_hot[ei]
-            token_indices, weight_indices = torch.where(mask)
-            if token_indices.numel() > 0:
-                ew = top_k_weights[token_indices, weight_indices]
-                eo = expert(hidden_states[token_indices])
-                final.index_add_(0, token_indices, eo * ew.unsqueeze(-1))
-        return final.to(hidden_states.dtype)
+        h = hidden_states
+        T = h.shape[0]
+        k = top_k_index.shape[1]
+        flat_eid = top_k_index.reshape(-1)
+        order = torch.argsort(flat_eid)
+        eid = flat_eid[order].cpu().tolist()
+        tok = torch.arange(T, device=h.device).repeat_interleave(k)[order]
+        wt = top_k_weights.reshape(-1)[order].to(h.dtype)
+        final = torch.zeros_like(h, dtype=h.dtype)
+        i = 0
+        n = len(eid)
+        while i < n:
+            j = i + 1
+            while j < n and eid[j] == eid[i]:
+                j += 1
+            rows = tok[i:j]
+            ew = wt[i:j].unsqueeze(-1)
+            eo = experts[eid[i]](h[rows])
+            final.index_add_(0, rows, eo * ew)
+            i = j
+        return final
 
     return forward
 
