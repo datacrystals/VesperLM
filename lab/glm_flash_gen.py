@@ -156,6 +156,11 @@ def make_generator(plugins_dir: str, args=None):
     from transformers import AutoTokenizer
 
     _patch_fl_l2norm()
+    # the host's own gfx906 shim stack (fla KDA kernels -> torch bodies);
+    # install_torch_kda is invoked by graft_glmflash.main() but not by
+    # build_host — omitting it here left the fla triton path live and the
+    # decode forward died in PassManager (FAILURES glm-bake-triton-l2norm)
+    gl.install_torch_kda()
 
     device = getattr(args, "device", "cuda") if args is not None else "cuda"
     if device.startswith("cuda") and not torch.cuda.is_available():
