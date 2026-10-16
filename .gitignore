@@ -10,6 +10,7 @@ venv/
 data/
 bitsandbytes/
 *checkpoints*/
+lab/teach_demo_out*/
 jp*/
 __pycache__/
 .*

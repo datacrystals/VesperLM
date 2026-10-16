@@ -1,0 +1,40 @@
+KDA/MLA CPU shim smoke test
+  repo     : /home/tliao/VesperLM
+  ckpt     : /home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_500
+  torch    : 2.7.1+cu126
+  fla      : 0.6.0 (/home/tliao/.local/lib/python3.12/site-packages/fla/__init__.py)
+  triton   : 3.3.1 (/home/tliao/.local/lib/python3.12/site-packages/triton/__init__.py)
+  device   : CPU only (tensors never moved to GPU)
+  install_cpu_shims: installed gla+kda_mla
+  PASS  causal_conv1d vs manual conv  max|y-ref|=0.00e+00
+  PASS  causal_conv1d_update step vs full forward  step-vs-full last token ok, max|d|=0.00e+00
+  PASS  rotary shim + seqlen_offsets vs ref  offsets 0 and 3 match rotary_embedding_ref
+  PASS  rms_norm shim vs manual  matches manual rmsnorm
+  PASS  gated-norm swish/sigmoid branches  swish=g*sigmoid(g) scale, sigmoid=sigmoid(g) scale (bug fix held)
+  PASS  KDA chunk_kda pure-torch fwd+bwd  forward+backward finite, out (1, 6, 2, 4)
+  PASS  Immune.load_model kda_mla ckpt (arch assert + finite CE)  layer mix {'kda': 6, 'mla': 2}, CE(random ids) 10.145 finite
+  PASS  Immune.generate greedy decode on CPU  greedy 8 tok -> ' a new and the world.\nThe'
+  PASS  Hippocampus.load_base_model kda_mla  loaded, vocab 65523, pad_id 12
+    [micro] step   0  loss +5.1225  policy +5.1225  kl 0.00000
+    [micro] step   1  loss +4.9625  policy +4.9622  kl 0.00499
+  PASS  attach_lora(kda_mla) + 2-step micro-session fwd/bwd  34 wraps / 312,320 trainable, loss +5.1225 -> +4.9625, kl 0.0050
+  PASS  delta save/load roundtrip bit-exact  34 modules roundtrip bit-exact
+  PASS  gla_gqa stack still forwards on CPU (compat)  random gla_gqa forward finite, CE 5.560
+
+========================================================================
+SUMMARY
+========================================================================
+  PASS  causal_conv1d vs manual conv: max|y-ref|=0.00e+00
+  PASS  causal_conv1d_update step vs full forward: step-vs-full last token ok, max|d|=0.00e+00
+  PASS  rotary shim + seqlen_offsets vs ref: offsets 0 and 3 match rotary_embedding_ref
+  PASS  rms_norm shim vs manual: matches manual rmsnorm
+  PASS  gated-norm swish/sigmoid branches: swish=g*sigmoid(g) scale, sigmoid=sigmoid(g) scale (bug fix held)
+  PASS  KDA chunk_kda pure-torch fwd+bwd: forward+backward finite, out (1, 6, 2, 4)
+  PASS  Immune.load_model kda_mla ckpt (arch assert + finite CE): layer mix {'kda': 6, 'mla': 2}, CE(random ids) 10.145 finite
+  PASS  Immune.generate greedy decode on CPU: greedy 8 tok -> ' a new and the world.\nThe'
+  PASS  Hippocampus.load_base_model kda_mla: loaded, vocab 65523, pad_id 12
+  PASS  attach_lora(kda_mla) + 2-step micro-session fwd/bwd: 34 wraps / 312,320 trainable, loss +5.1225 -> +4.9625, kl 0.0050
+  PASS  delta save/load roundtrip bit-exact: 34 modules roundtrip bit-exact
+  PASS  gla_gqa stack still forwards on CPU (compat): random gla_gqa forward finite, CE 5.560
+
+  12 PASS / 0 FAIL

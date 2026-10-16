@@ -1,0 +1,92 @@
+{
+  "ckpt": "/home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best",
+  "target_profile": "kda_mla",
+  "model_config": {
+    "dim": 512,
+    "n_layers": 8,
+    "linear_type": "kda",
+    "full_type": "mla"
+  },
+  "steps_per_session": 24,
+  "items": [
+    "cat_name",
+    "math_words",
+    "home_city"
+  ],
+  "decisions": {
+    "cat_name": "PROMOTE",
+    "math_words": "PROMOTE",
+    "home_city": "PROMOTE"
+  },
+  "before": {
+    "cat_name": {
+      "nll_target": 5.735741138458252,
+      "nll_decoy": 7.468286037445068,
+      "margin": 1.7325448989868164,
+      "gen": "\n\nThe game is suitable for children. It is a"
+    },
+    "math_words": {
+      "nll_target": 5.13123893737793,
+      "nll_decoy": 2.061488151550293,
+      "margin": -3.0697507858276367,
+      "gen": "\n\n**Explanation:**  \nThe problem is a classic",
+      "word_digit_margin": -5.150403022766113
+    },
+    "home_city": {
+      "nll_target": 8.081536293029785,
+      "nll_decoy": 6.515434265136719,
+      "margin": -1.5661020278930664,
+      "gen": "\n\nI\u2019m not sure how to do it."
+    }
+  },
+  "snapshots": {
+    "after_s1": {
+      "cat_name": {
+        "nll_target": 3.7440834045410156,
+        "nll_decoy": 6.729896068572998,
+        "margin": 2.9858126640319824,
+        "gen": "F.S.S.S.S.S."
+      }
+    },
+    "after_s2": {
+      "cat_name": {
+        "nll_target": 3.9950573444366455,
+        "nll_decoy": 6.272002696990967,
+        "margin": 2.2769453525543213,
+        "gen": "The statement is the statement.<|unk|>The question of the statement"
+      },
+      "math_words": {
+        "nll_target": 3.494070053100586,
+        "nll_decoy": 3.171891450881958,
+        "margin": -0.32217860221862793,
+        "gen": "The answer is the answer.\nThe answer is the best",
+        "word_digit_margin": -0.1392836570739746
+      }
+    },
+    "after_s3": {
+      "cat_name": {
+        "nll_target": 3.91524600982666,
+        "nll_decoy": 5.890504837036133,
+        "margin": 1.9752588272094727,
+        "gen": "You are not a seasoned educator.You are not a seasoned"
+      },
+      "math_words": {
+        "nll_target": 4.422522068023682,
+        "nll_decoy": 3.0836379528045654,
+        "margin": -1.3388841152191162,
+        "gen": "You are not a teacher.You are not a teacher.",
+        "word_digit_margin": -0.6247687339782715
+      },
+      "home_city": {
+        "nll_target": 5.853752136230469,
+        "nll_decoy": 5.343996047973633,
+        "margin": -0.5097560882568359,
+        "gen": "You are not a seasoned educator.You are not a seasoned"
+      }
+    }
+  },
+  "poison_decision": "ROLLBACK",
+  "poison_reason": "target collapse: one response is 100% of the batch",
+  "incumbent_intact": true,
+  "items_promoted_and_up": 3
+}
