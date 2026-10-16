@@ -18,6 +18,72 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-16 — hippo-immune-gate-microsession-veto — the real Immune canary gate does NOT make the stub's promote/rollback calls at LoRA micro-session scale: it ROLLBACKs every teach session the stub promotes (drift ≥ 0.20 on every 24-step candidate) and "catches" the poison only because it rejects everything (1/4 decision agreement)
+- Evidence: `lab/logs/hippo_teach_demo_immune_gate_clean.log` +
+  `lab/logs/hippo_teach_demo_immune_results.json` (gate =
+  `lab/immune_gate.py` → `Immune.probes.run_probes` +
+  `Immune.score.build_report` + `Immune.drift.measure_drift` +
+  `Immune.gate.decide`, constants untouched; starter probes, `max_new=48`).
+  Decisions S1/S2/S3/poison = ROLLBACK×4 vs stub's PROMOTE×3 + poison
+  ROLLBACK (`lab/logs/hippo_teach_demo_stub_rerun.log`, same code).
+  Drift per session 0.455 / 0.728 / 1.000 (clipped) / 0.981 vs `THRESH_FAIL
+  0.20`; S1 vetoed on protected regressions (`refuse-color-seven` 0.226→0.000,
+  `ho-refuse-weigh` 0.407→0.000) + aggregate drop 0.025 > MARGIN 0.02; S2
+  vetoed with the aggregate strictly UP (0.0633→0.0825) on one 0.016 protected
+  wobble (`ho-refuse-weigh` 0.407→0.391 > PROTECTED_EPSILON 1e-6) + drift;
+  S3 similar. Scores are only partly informative: 16/20 starter probes score
+  0.000 both sides on this raw 103M model; the 4 nonzero are
+  semantic-similarity babble-overlap (0.23–0.41). Train losses still fall
+  (4.59→0.37, 3.29→−1.70, 5.58→−1.36) so the micro-sessions learn; the gate is
+  what blocks them (`incumbent intact: True`, margins bit-flat).
+- Root cause: operating-point mismatch, not a scorer bug. `gate.decide`'s
+  three absolute vetoes are calibrated for full-checkpoint merges — a 24-step
+  rank-8 LoRA at lr 2e-3 carries train-time KL 0.8–2.3 nats and measures
+  top-k-KL drift 0.45–1.0 (the drift battery reads "corruption / bad merge"),
+  and `PROTECTED_EPSILON=1e-6` turns generation-noise wobble on continuous
+  semantic scores into vetoes. The teach signal itself lives in teacher-forced
+  margins, which `Immune.probes`' free-run scorers do not read.
+- What it rules out: `Immune.gate.decide` as a drop-in promotion gate for
+  Hippocampus LoRA micro-sessions at this scale (it is a merge gate); also
+  rules out "Immune's scores can't see anything here" (S2's aggregate moved
+  0.0633→0.0825 and was still vetoed — drift is the binding constraint and is
+  probe-independent). And rules out the poison "catch" being meaningful: the
+  gate rejects the good sessions and the bad one alike; the only discriminating
+  poison guard at this operating point is the stub's batch-statistics tripwire
+  (`top_response_fraction > 0.5`).
+- Next tried: one fallback, pre-registered and wired — deployment canary probe
+  set `lab/immune_probes_tiny_agent_k.json` (taught-surface + held-out +
+  poison-surface canaries on the real probe schema) via `--probes`. It cannot
+  change verdicts while the drift veto stands, so it is wired and queued, not
+  iterated on. Standing recommendation: keep `stub_gate`'s batch statistics for
+  micro-session promotion and treat `Immune.gate.decide` as the checkpoint-
+  merge gate; do NOT loosen Immune's constants (its README invariant I2); a
+  micro-session gate mode would need its own calibrated drift budget as a new
+  component, which is out of scope for this wiring.
+
+## 2026-10-16 — hippo-teach-rollback-leak — a ROLLBACK with no incumbent left the candidate's trained LoRA live in the in-memory model: later probes and the next session's training ran on the rejected weights (margins moved while nothing was promoted; candidates became cumulative)
+- Evidence: pre-fix run `lab/logs/hippo_teach_demo_immune_gate.log`: all 4
+  batches ROLLBACKed ("incumbent unchanged: (none)") yet PART 5 showed margins
+  UP (cat +1.733→+2.341, math −3.070→+0.163, home −1.566→−0.293) and
+  `incumbent intact: False`; S2/S3/poison consolidate printed
+  `lora attached: 0 modules` — they trained on the previous session's leaked
+  state, so those candidates were cumulative (S1+S2+S3), not independent
+  base+session candidates, and their gate numbers are void.
+- Root cause: `consolidate()` trains the micro-session's LoRA in place on the
+  caller's model; the demo's ROLLBACK path relied on `apply_user_adapter()` to
+  restore state, which returns False without mutating anything when no
+  incumbent `delta.pt` exists. The earlier fix ("reload the incumbent and say
+  so") covered only the has-incumbent case — invisible when every session
+  promotes, fatal when a gate (e.g. Immune) rolls back the first session.
+- What it rules out: the pre-fix run's margins/after_sN snapshots and its
+  S2/S3/poison candidate gate scores (S1 is clean — trained from the base).
+- Next tried: `restore_raw_base()` in `lab/hippo_teach_demo.py` — zero every
+  LoRA B on rollback-with-no-incumbent (branch contributes exactly 0 ⇒
+  functionally raw base; unit-checked, max err 0.0), applied on the poison
+  path too; full matrix re-run clean (`hippo_teach_demo_immune_gate_clean.log`
+  margins bit-flat, `incumbent intact: True`). Lesson for this harness:
+  rollback must restore state even when there is nothing on disk to reload.
+
 ## 2026-10-16 — pretrain-470m-silent-stall — heartbeat reported the 429M/470m pretrain "dead at Step 03990 for 4 days"; it had actually finished its 4000-step schedule and exited cleanly, and a finished run leaves the exact same log tail as a hung one
 - Evidence: `/home/tliao/pretrain_470m.log` last write 2026-10-11 10:22:29 UTC
   `[10:22:29] Step 03990 | 0.01 global steps/s | ... CE Loss: 2.0284 |

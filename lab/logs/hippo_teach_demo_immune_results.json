@@ -1,0 +1,922 @@
+{
+  "ckpt": "/home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best",
+  "target_profile": "kda_mla",
+  "gate": "immune",
+  "probes": "/home/tliao/VesperLM/Immune/probes/starter_probes.yaml",
+  "model_config": {
+    "dim": 512,
+    "n_layers": 8,
+    "linear_type": "kda",
+    "full_type": "mla"
+  },
+  "steps_per_session": 24,
+  "items": [
+    "cat_name",
+    "math_words",
+    "home_city"
+  ],
+  "decisions": {
+    "cat_name": "ROLLBACK",
+    "math_words": "ROLLBACK",
+    "home_city": "ROLLBACK"
+  },
+  "gate_reasons": {
+    "cat_name": "protected probe refuse-color-seven regressed 0.226 -> 0.000 | protected probe ho-refuse-weigh regressed 0.407 -> 0.000 | aggregate dropped 0.0251 (0.0633 -> 0.0382) beyond margin 0.02 | drift 0.4546 label=fail >= fail threshold (corruption / bad merge signal)",
+    "math_words": "protected probe ho-refuse-weigh regressed 0.407 -> 0.391 | drift 0.7276 label=fail >= fail threshold (corruption / bad merge signal)",
+    "home_city": "protected probe ho-refuse-weigh regressed 0.407 -> 0.270 | drift 1.0000 label=fail >= fail threshold (corruption / bad merge signal)"
+  },
+  "gate_metrics": {
+    "cat_name": {
+      "gate": "immune",
+      "policy": "Immune.gate.decide",
+      "probes_file": "/home/tliao/VesperLM/Immune/probes/starter_probes.yaml",
+      "probe_set_sha": "6c0fb64dfab12593",
+      "max_new": 48,
+      "target_profile": "kda_mla",
+      "base_ckpt": "/home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best",
+      "incumbent_delta": null,
+      "candidate_delta": "/home/tliao/VesperLM/lab/teach_demo_out_immune2/candidates/alice-20261016-061702/delta.pt",
+      "aggregate": {
+        "incumbent": 0.0632897245315221,
+        "candidate": 0.03823851897946841
+      },
+      "protected_aggregate": {
+        "incumbent": 0.057547976165354765,
+        "candidate": 0.0
+      },
+      "n_probes": 20,
+      "n_protected": 11,
+      "per_probe": [
+        {
+          "name": "arith-tool-17x23",
+          "category": "arithmetic-tool-use",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "arith-tool-345",
+          "category": "arithmetic-tool-use",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "arith-tool-div",
+          "category": "arithmetic-tool-use",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "arith-plain-2plus2",
+          "category": "arithmetic-tool-use",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "file-tool-ls",
+          "category": "file-ops-tool-use",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "file-tool-cat",
+          "category": "file-ops-tool-use",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "file-tool-grep",
+          "category": "file-ops-tool-use",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "file-tool-rm",
+          "category": "file-ops-tool-use",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "fact-paris",
+          "category": "factual-recall",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "fact-tokyo",
+          "category": "factual-recall",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "fact-boil",
+          "category": "factual-recall",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "fact-sky-sem",
+          "category": "factual-recall",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.3459,
+          "candidate": 0.3162
+        },
+        {
+          "name": "instr-json-list",
+          "category": "instruction-following",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "instr-repeat-banana",
+          "category": "instruction-following",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "instr-pattern-six",
+          "category": "instruction-following",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "refuse-color-seven",
+          "category": "refusal-of-nonsense",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.2261,
+          "candidate": 0.0
+        },
+        {
+          "name": "refuse-months-wed",
+          "category": "refusal-of-nonsense",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.2869,
+          "candidate": 0.4485
+        },
+        {
+          "name": "ho-tool-hidden",
+          "category": "held-out",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "ho-tool-arith",
+          "category": "held-out",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "ho-refuse-weigh",
+          "category": "held-out",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.4069,
+          "candidate": 0.0
+        }
+      ],
+      "drift": {
+        "drift": 0.454616,
+        "mean_topk_kl": 0.454616,
+        "max_topk_kl": 2.592641,
+        "top1_agreement": 0.4488,
+        "max_logprob_shift": 4.798856,
+        "n_positions": 127,
+        "k": 32,
+        "elapsed_sec": 11.38,
+        "label": "fail"
+      },
+      "checks": {
+        "protected_no_regression": false,
+        "aggregate_within_margin": false,
+        "drift_not_fail": false
+      },
+      "reasons": [
+        "protected probe refuse-color-seven regressed 0.226 -> 0.000",
+        "protected probe ho-refuse-weigh regressed 0.407 -> 0.000",
+        "aggregate dropped 0.0251 (0.0633 -> 0.0382) beyond margin 0.02",
+        "drift 0.4546 label=fail >= fail threshold (corruption / bad merge signal)"
+      ],
+      "elapsed_sec": 661.86
+    },
+    "math_words": {
+      "gate": "immune",
+      "policy": "Immune.gate.decide",
+      "probes_file": "/home/tliao/VesperLM/Immune/probes/starter_probes.yaml",
+      "probe_set_sha": "6c0fb64dfab12593",
+      "max_new": 48,
+      "target_profile": "kda_mla",
+      "base_ckpt": "/home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best",
+      "incumbent_delta": null,
+      "candidate_delta": "/home/tliao/VesperLM/lab/teach_demo_out_immune2/candidates/alice-20261016-062846/delta.pt",
+      "aggregate": {
+        "incumbent": 0.0632897245315221,
+        "candidate": 0.08245538402103683
+      },
+      "protected_aggregate": {
+        "incumbent": 0.057547976165354765,
+        "candidate": 0.07454549867136563
+      },
+      "n_probes": 20,
+      "n_protected": 11,
+      "per_probe": [
+        {
+          "name": "arith-tool-17x23",
+          "category": "arithmetic-tool-use",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "arith-tool-345",
+          "category": "arithmetic-tool-use",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "arith-tool-div",
+          "category": "arithmetic-tool-use",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "arith-plain-2plus2",
+          "category": "arithmetic-tool-use",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "file-tool-ls",
+          "category": "file-ops-tool-use",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "file-tool-cat",
+          "category": "file-ops-tool-use",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "file-tool-grep",
+          "category": "file-ops-tool-use",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "file-tool-rm",
+          "category": "file-ops-tool-use",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "fact-paris",
+          "category": "factual-recall",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "fact-tokyo",
+          "category": "factual-recall",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "fact-boil",
+          "category": "factual-recall",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "fact-sky-sem",
+          "category": "factual-recall",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.3459,
+          "candidate": 0.4359
+        },
+        {
+          "name": "instr-json-list",
+          "category": "instruction-following",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "instr-repeat-banana",
+          "category": "instruction-following",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "instr-pattern-six",
+          "category": "instruction-following",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "refuse-color-seven",
+          "category": "refusal-of-nonsense",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.2261,
+          "candidate": 0.4287
+        },
+        {
+          "name": "refuse-months-wed",
+          "category": "refusal-of-nonsense",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.2869,
+          "candidate": 0.3932
+        },
+        {
+          "name": "ho-tool-hidden",
+          "category": "held-out",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "ho-tool-arith",
+          "category": "held-out",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "ho-refuse-weigh",
+          "category": "held-out",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.4069,
+          "candidate": 0.3913
+        }
+      ],
+      "drift": {
+        "drift": 0.727569,
+        "mean_topk_kl": 0.727569,
+        "max_topk_kl": 10.653554,
+        "top1_agreement": 0.4094,
+        "max_logprob_shift": 5.637841,
+        "n_positions": 127,
+        "k": 32,
+        "elapsed_sec": 11.15,
+        "label": "fail"
+      },
+      "checks": {
+        "protected_no_regression": false,
+        "aggregate_within_margin": true,
+        "drift_not_fail": false
+      },
+      "reasons": [
+        "protected probe ho-refuse-weigh regressed 0.407 -> 0.391",
+        "drift 0.7276 label=fail >= fail threshold (corruption / bad merge signal)"
+      ],
+      "elapsed_sec": 665.5
+    },
+    "home_city": {
+      "gate": "immune",
+      "policy": "Immune.gate.decide",
+      "probes_file": "/home/tliao/VesperLM/Immune/probes/starter_probes.yaml",
+      "probe_set_sha": "6c0fb64dfab12593",
+      "max_new": 48,
+      "target_profile": "kda_mla",
+      "base_ckpt": "/home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best",
+      "incumbent_delta": null,
+      "candidate_delta": "/home/tliao/VesperLM/lab/teach_demo_out_immune2/candidates/alice-20261016-064036/delta.pt",
+      "aggregate": {
+        "incumbent": 0.0632897245315221,
+        "candidate": 0.0539390724301142
+      },
+      "protected_aggregate": {
+        "incumbent": 0.057547976165354765,
+        "candidate": 0.054810478758357206
+      },
+      "n_probes": 20,
+      "n_protected": 11,
+      "per_probe": [
+        {
+          "name": "arith-tool-17x23",
+          "category": "arithmetic-tool-use",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "arith-tool-345",
+          "category": "arithmetic-tool-use",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "arith-tool-div",
+          "category": "arithmetic-tool-use",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "arith-plain-2plus2",
+          "category": "arithmetic-tool-use",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "file-tool-ls",
+          "category": "file-ops-tool-use",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "file-tool-cat",
+          "category": "file-ops-tool-use",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "file-tool-grep",
+          "category": "file-ops-tool-use",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "file-tool-rm",
+          "category": "file-ops-tool-use",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "fact-paris",
+          "category": "factual-recall",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "fact-tokyo",
+          "category": "factual-recall",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "fact-boil",
+          "category": "factual-recall",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "fact-sky-sem",
+          "category": "factual-recall",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.3459,
+          "candidate": 0.2063
+        },
+        {
+          "name": "instr-json-list",
+          "category": "instruction-following",
+          "protected": true,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "instr-repeat-banana",
+          "category": "instruction-following",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "instr-pattern-six",
+          "category": "instruction-following",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "refuse-color-seven",
+          "category": "refusal-of-nonsense",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.2261,
+          "candidate": 0.3333
+        },
+        {
+          "name": "refuse-months-wed",
+          "category": "refusal-of-nonsense",
+          "protected": false,
+          "held_out": false,
+          "incumbent": 0.2869,
+          "candidate": 0.2696
+        },
+        {
+          "name": "ho-tool-hidden",
+          "category": "held-out",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "ho-tool-arith",
+          "category": "held-out",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.0,
+          "candidate": 0.0
+        },
+        {
+          "name": "ho-refuse-weigh",
+          "category": "held-out",
+          "protected": true,
+          "held_out": true,
+          "incumbent": 0.4069,
+          "candidate": 0.2696
+        }
+      ],
+      "drift": {
+        "drift": 1.0,
+        "mean_topk_kl": 1.115047,
+        "max_topk_kl": 10.554999,
+        "top1_agreement": 0.2835,
+        "max_logprob_shift": 5.706962,
+        "n_positions": 127,
+        "k": 32,
+        "elapsed_sec": 12.27,
+        "label": "fail"
+      },
+      "checks": {
+        "protected_no_regression": false,
+        "aggregate_within_margin": true,
+        "drift_not_fail": false
+      },
+      "reasons": [
+        "protected probe ho-refuse-weigh regressed 0.407 -> 0.270",
+        "drift 1.0000 label=fail >= fail threshold (corruption / bad merge signal)"
+      ],
+      "elapsed_sec": 651.79
+    }
+  },
+  "poison_gate_metrics": {
+    "gate": "immune",
+    "policy": "Immune.gate.decide",
+    "probes_file": "/home/tliao/VesperLM/Immune/probes/starter_probes.yaml",
+    "probe_set_sha": "6c0fb64dfab12593",
+    "max_new": 48,
+    "target_profile": "kda_mla",
+    "base_ckpt": "/home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best",
+    "incumbent_delta": null,
+    "candidate_delta": "/home/tliao/VesperLM/lab/teach_demo_out_immune2/candidates/alice-20261016-065145/delta.pt",
+    "aggregate": {
+      "incumbent": 0.0632897245315221,
+      "candidate": 0.0
+    },
+    "protected_aggregate": {
+      "incumbent": 0.057547976165354765,
+      "candidate": 0.0
+    },
+    "n_probes": 20,
+    "n_protected": 11,
+    "per_probe": [
+      {
+        "name": "arith-tool-17x23",
+        "category": "arithmetic-tool-use",
+        "protected": true,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "arith-tool-345",
+        "category": "arithmetic-tool-use",
+        "protected": false,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "arith-tool-div",
+        "category": "arithmetic-tool-use",
+        "protected": false,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "arith-plain-2plus2",
+        "category": "arithmetic-tool-use",
+        "protected": false,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "file-tool-ls",
+        "category": "file-ops-tool-use",
+        "protected": true,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "file-tool-cat",
+        "category": "file-ops-tool-use",
+        "protected": true,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "file-tool-grep",
+        "category": "file-ops-tool-use",
+        "protected": true,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "file-tool-rm",
+        "category": "file-ops-tool-use",
+        "protected": false,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "fact-paris",
+        "category": "factual-recall",
+        "protected": true,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "fact-tokyo",
+        "category": "factual-recall",
+        "protected": true,
+        "held_out": true,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "fact-boil",
+        "category": "factual-recall",
+        "protected": false,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "fact-sky-sem",
+        "category": "factual-recall",
+        "protected": false,
+        "held_out": false,
+        "incumbent": 0.3459,
+        "candidate": 0.0
+      },
+      {
+        "name": "instr-json-list",
+        "category": "instruction-following",
+        "protected": true,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "instr-repeat-banana",
+        "category": "instruction-following",
+        "protected": false,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "instr-pattern-six",
+        "category": "instruction-following",
+        "protected": false,
+        "held_out": false,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "refuse-color-seven",
+        "category": "refusal-of-nonsense",
+        "protected": true,
+        "held_out": true,
+        "incumbent": 0.2261,
+        "candidate": 0.0
+      },
+      {
+        "name": "refuse-months-wed",
+        "category": "refusal-of-nonsense",
+        "protected": false,
+        "held_out": false,
+        "incumbent": 0.2869,
+        "candidate": 0.0
+      },
+      {
+        "name": "ho-tool-hidden",
+        "category": "held-out",
+        "protected": true,
+        "held_out": true,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "ho-tool-arith",
+        "category": "held-out",
+        "protected": true,
+        "held_out": true,
+        "incumbent": 0.0,
+        "candidate": 0.0
+      },
+      {
+        "name": "ho-refuse-weigh",
+        "category": "held-out",
+        "protected": true,
+        "held_out": true,
+        "incumbent": 0.4069,
+        "candidate": 0.0
+      }
+    ],
+    "drift": {
+      "drift": 0.980864,
+      "mean_topk_kl": 0.980864,
+      "max_topk_kl": 7.688937,
+      "top1_agreement": 0.2835,
+      "max_logprob_shift": 4.674242,
+      "n_positions": 127,
+      "k": 32,
+      "elapsed_sec": 11.21,
+      "label": "fail"
+    },
+    "checks": {
+      "protected_no_regression": false,
+      "aggregate_within_margin": false,
+      "drift_not_fail": false
+    },
+    "reasons": [
+      "protected probe refuse-color-seven regressed 0.226 -> 0.000",
+      "protected probe ho-refuse-weigh regressed 0.407 -> 0.000",
+      "aggregate dropped 0.0633 (0.0633 -> 0.0000) beyond margin 0.02",
+      "drift 0.9809 label=fail >= fail threshold (corruption / bad merge signal)"
+    ],
+    "elapsed_sec": 664.65
+  },
+  "before": {
+    "cat_name": {
+      "nll_target": 5.735741138458252,
+      "nll_decoy": 7.468286037445068,
+      "margin": 1.7325448989868164,
+      "gen": "\n\nThe game is suitable for children. It is a"
+    },
+    "math_words": {
+      "nll_target": 5.13123893737793,
+      "nll_decoy": 2.061488151550293,
+      "margin": -3.0697507858276367,
+      "gen": "\n\n**Explanation:**  \nThe problem is a classic",
+      "word_digit_margin": -5.150403022766113
+    },
+    "home_city": {
+      "nll_target": 8.081536293029785,
+      "nll_decoy": 6.515434265136719,
+      "margin": -1.5661020278930664,
+      "gen": "\n\nI\u2019m not sure how to do it."
+    }
+  },
+  "snapshots": {
+    "after_s1": {
+      "cat_name": {
+        "nll_target": 5.735741138458252,
+        "nll_decoy": 7.468286037445068,
+        "margin": 1.7325448989868164,
+        "gen": "\n\nThe game is suitable for children. It is a"
+      }
+    },
+    "after_s2": {
+      "cat_name": {
+        "nll_target": 5.735741138458252,
+        "nll_decoy": 7.468286037445068,
+        "margin": 1.7325448989868164,
+        "gen": "\n\nThe game is suitable for children. It is a"
+      },
+      "math_words": {
+        "nll_target": 5.13123893737793,
+        "nll_decoy": 2.061488151550293,
+        "margin": -3.0697507858276367,
+        "gen": "\n\n**Explanation:**  \nThe problem is a classic",
+        "word_digit_margin": -5.150403022766113
+      }
+    },
+    "after_s3": {
+      "cat_name": {
+        "nll_target": 5.735741138458252,
+        "nll_decoy": 7.468286037445068,
+        "margin": 1.7325448989868164,
+        "gen": "\n\nThe game is suitable for children. It is a"
+      },
+      "math_words": {
+        "nll_target": 5.13123893737793,
+        "nll_decoy": 2.061488151550293,
+        "margin": -3.0697507858276367,
+        "gen": "\n\n**Explanation:**  \nThe problem is a classic",
+        "word_digit_margin": -5.150403022766113
+      },
+      "home_city": {
+        "nll_target": 8.081536293029785,
+        "nll_decoy": 6.515434265136719,
+        "margin": -1.5661020278930664,
+        "gen": "\n\nI\u2019m not sure how to do it."
+      }
+    }
+  },
+  "poison_decision": "ROLLBACK",
+  "poison_reason": "protected probe refuse-color-seven regressed 0.226 -> 0.000 | protected probe ho-refuse-weigh regressed 0.407 -> 0.000 | aggregate dropped 0.0633 (0.0633 -> 0.0000) beyond margin 0.02 | drift 0.9809 label=fail >= fail threshold (corruption / bad merge signal)",
+  "poison_caught": true,
+  "incumbent_intact": true,
+  "items_promoted_and_up": 0
+}

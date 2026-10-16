@@ -202,9 +202,13 @@ the poison attempt are identical to the post-teach values
 - **Not scale.** One checkpoint (step_best of one run), one adapter, three
   items, 24 micro-steps each. No claims about larger libraries or longer
   horizons.
-- **Not the real Immune gate.** `stub_gate` (batch statistics only) made the
-  promote/rollback calls; `Immune/gate.py`'s canary scoring is not wired in
-  here.
+- **Not the real Immune gate — RESOLVED in a follow-on run.** This demo's
+  numbers were gated by `stub_gate` (batch statistics only). The real Immune
+  scorer (`Immune/probes` + `Immune/score` + `Immune/drift` +
+  `Immune/gate.decide`) is now wired in via `lab/immune_gate.py` and
+  `--gate immune|stub`; the stub-vs-Immune comparison is in
+  `lab/HIPPO_IMMUNE_GATE.md`. Spoiler: the Immune gate does **not** make the
+  same calls at this operating point.
 - **Not wall-clock performance.** The whole demo is ~2 min on 16 CPU cores;
   nothing about serving.
 
@@ -233,11 +237,13 @@ quoted as a result.
 # part 1 (exit 0 iff all checks pass)
 PYTHONPATH=$HOME/.local/lib/python3.12/site-packages python3 lab/kda_cpu_shim_smoke.py
 
-# part 2 (fresh workdir preferred; the script clears its session files)
-PYTHONPATH=$HOME/.local/lib/python3.12/site-packages python3 lab/hippo_teach_demo.py
+# part 2 as recorded in this file (stub gate; the script's default is now
+# --gate immune — see lab/HIPPO_IMMUNE_GATE.md for that comparison)
+PYTHONPATH=$HOME/.local/lib/python3.12/site-packages python3 lab/hippo_teach_demo.py \
+  --gate stub
 
 # single-item / higher-plasticity variants
-python3 lab/hippo_teach_demo.py --items home_city --steps 48 \
+python3 lab/hippo_teach_demo.py --gate stub --items home_city --steps 48 \
   --workdir lab/teach_demo_out_var_city
 ```
 

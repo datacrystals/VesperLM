@@ -1,0 +1,268 @@
+Hippocampus/Immune teach-by-talking demo
+  repo      : /home/tliao/VesperLM
+  ckpt      : /home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best
+  profile   : kda_mla (forced)
+  device    : cpu (fp32)
+  workdir   : /home/tliao/VesperLM/lab/teach_demo_out_immune
+  gate      : immune (/home/tliao/VesperLM/Immune/probes/starter_probes.yaml)
+  micro-steps per session: 24
+
+========================================================================
+PART 0 — load raw pretrained checkpoint (no adapter)
+========================================================================
+  model_config: {'dim': 512, 'n_layers': 8, 'n_heads': 8, 'n_kv_heads': 2, 'hidden_dim': 1536, 'num_experts': 4, 'top_k': 2, 'max_seq_len': 2048, 'linear_type': 'kda', 'full_type': 'mla', 'kda_head_dim': 64, 'kv_lora_rank': 256, 'v_head_dim': 128, 'micro_batch_size': 6, 'grad_checkpoint': False, 'target_accumulation_steps': 128, 'beta1': 0.9, 'beta2_token_half_life': 1000000, 'max_lr': 0.0006, 'min_lr': 6e-05, 'aux_weight': 0.1, 'seq_len_start': 128, 'seq_len_warmup': 1000, 'warmup_steps': 200, 'total_steps': 6000, 'eval_interval': 100, 'val_eval_steps': 50}
+  vocab 65523, pad_id 12
+
+========================================================================
+PART 1 — BEFORE: raw model probes
+========================================================================
+  [cat_name] ctx="My cat's name is"
+       gen("What is my cat's name?") -> '\n\nThe game is suitable for children. It is a'
+       NLL taught ' Waffle.' 5.736  decoy ' Luna.' 7.468  margin(decoy-taught) +1.733
+  [math_words] ctx='What is 2 + 2? The answer is'
+       gen('What is 2 + 2?') -> '\n\n**Explanation:**  \nThe problem is a classic'
+       NLL taught ' four.' 5.131  decoy ' 4.' 2.061  margin(decoy-taught) -3.070
+       word-digit margin -5.150
+  [home_city] ctx='I live in'
+       gen('Where do I live?') -> '\n\nI’m not sure how to do it.'
+       NLL taught ' Reykjavik.' 8.082  decoy ' Berlin.' 6.515  margin(decoy-taught) -1.566
+
+========================================================================
+PART 2 — teach session 1 (fact: "My cat's name is Waffle.")
+========================================================================
+  turn 0: Q="What is my cat's name?"
+           model said: '\n\nThe game is suitable for children. It is a'  -> REJECT
+           correction : "Your cat's name is Waffle."
+
+  turn 1: Q='Remind me — what is my cat called?'
+           model said: "\n\nI think I can't know how to do it"  -> REJECT
+           correction : 'Your cat is called Waffle.'
+
+  turn 2: Q="Do you remember my cat's name?"
+           assistant : 'Yes — Waffle.'  -> APPROVE
+           (raw first-pass gen was: "\n\nI'm not sure how to do it. I")
+[consolidate] user=alice triples=5 (from log /home/tliao/VesperLM/lab/teach_demo_out_immune/session_cat_name.jsonl)
+[consolidate] lora attached: 34 modules (profile kda_mla), trainable params: 312,320
+[consolidate] wrapped modules: ['layers.0.attn.kda.q_proj', 'layers.0.attn.kda.k_proj', 'layers.0.attn.kda.v_proj', 'layers.0.attn.kda.o_proj', 'layers.1.attn.kda.q_proj', 'layers.1.attn.kda.k_proj', 'layers.1.attn.kda.v_proj', 'layers.1.attn.kda.o_proj', 'layers.2.attn.kda.q_proj', 'layers.2.attn.kda.k_proj', 'layers.2.attn.kda.v_proj', 'layers.2.attn.kda.o_proj', 'layers.3.attn.mla.q_proj', 'layers.3.attn.mla.k_rope', 'layers.3.attn.mla.kv_proj.0', 'layers.3.attn.mla.kv_proj.2', 'layers.3.attn.mla.o_proj', 'layers.4.attn.kda.q_proj', 'layers.4.attn.kda.k_proj', 'layers.4.attn.kda.v_proj', 'layers.4.attn.kda.o_proj', 'layers.5.attn.kda.q_proj', 'layers.5.attn.kda.k_proj', 'layers.5.attn.kda.v_proj', 'layers.5.attn.kda.o_proj', 'layers.6.attn.kda.q_proj', 'layers.6.attn.kda.k_proj', 'layers.6.attn.kda.v_proj', 'layers.6.attn.kda.o_proj', 'layers.7.attn.mla.q_proj', 'layers.7.attn.mla.k_rope', 'layers.7.attn.mla.kv_proj.0', 'layers.7.attn.mla.kv_proj.2', 'layers.7.attn.mla.o_proj']
+    [micro] step   0  loss +4.5913  policy +4.5913  kl -0.00000
+    [micro] step   4  loss +5.6622  policy +5.6616  kl 0.01227
+    [micro] step   8  loss +0.2230  policy +0.2211  kl 0.03791
+    [micro] step  12  loss +1.7471  policy +1.7413  kl 0.11608
+    [micro] step  16  loss -0.3296  policy -0.3431  kl 0.27004
+    [micro] step  20  loss +2.8850  policy +2.8574  kl 0.55205
+[consolidate] candidate written to /home/tliao/VesperLM/lab/teach_demo_out_immune/candidates/alice-20261016-052602
+[consolidate] train: loss +4.5913 -> +0.3377  final_kl 0.79765
+  [immune] ROLLBACK  aggregate 0.0633 -> 0.0215  drift 0.4404 label=fail  (634s probes, 654s total)
+    [P] arith-tool-17x23         0.000 -> 0.000
+    [P] file-tool-ls             0.000 -> 0.000
+    [P] file-tool-cat            0.000 -> 0.000
+    [P] file-tool-grep           0.000 -> 0.000
+    [P] fact-paris               0.000 -> 0.000
+    [P] fact-tokyo               0.000 -> 0.000
+    [ ] fact-sky-sem             0.346 -> 0.000
+    [P] instr-json-list          0.000 -> 0.000
+    [P] refuse-color-seven       0.226 -> 0.000
+    [ ] refuse-months-wed        0.287 -> 0.429
+    [P] ho-tool-hidden           0.000 -> 0.000
+    [P] ho-tool-arith            0.000 -> 0.000
+    [P] ho-refuse-weigh          0.407 -> 0.000
+[consolidate] GATE: ROLLBACK — protected probe refuse-color-seven regressed 0.226 -> 0.000 | protected probe ho-refuse-weigh regressed 0.407 -> 0.000 | aggregate dropped 0.0418 (0.0633 -> 0.0215) beyond margin 0.02 | drift 0.4404 label=fail >= fail threshold (corruption / bad merge signal)
+[consolidate] ROLLBACK — incumbent unchanged: (none)
+  [S1] decision=ROLLBACK  reason='protected probe refuse-color-seven regressed 0.226 -> 0.000 | protected probe ho-refuse-weigh regressed 0.407 -> 0.000 | aggregate dropped 0.0418 (0.0633 -> 0.0215) beyond margin 0.02 | drift 0.4404 label=fail >= fail threshold (corruption / bad merge signal)'
+  [S1] gate metrics: {"gate": "immune", "policy": "Immune.gate.decide", "probes_file": "/home/tliao/VesperLM/Immune/probes/starter_probes.yaml", "probe_set_sha": "6c0fb64dfab12593", "max_new": 48, "target_profile": "kda_mla", "base_ckpt": "/home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best", "incumbent_delta": null, "candidate_delta": "/home/tliao/VesperLM/lab/teach_demo_out_immune/candidates/alice-20261016-052602/delta.pt", "aggregate": {"incumbent": 0.0632897245315221, "candidate": 0.02147660451479042}, "protected_aggregate": {"incumbent": 0.057547976165354765, "candidate": 0.0}, "n_probes": 20, "n_protected": 11, "per_probe": [{"name": "arith-tool-17x23", "category": "arithmetic-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "arith-tool-345", "category": "arithmetic-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "arith-tool-div", "category": "arithmetic-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "arith-plain-2plus2", "category": "arithmetic-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-ls", "category": "file-ops-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-cat", "category": "file-ops-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-grep", "category": "file-ops-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-rm", "category": "file-ops-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-paris", "category": "factual-recall", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-tokyo", "category": "factual-recall", "protected": true, "held_out": true, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-boil", "category": "factual-recall", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-sky-sem", "category": "factual-recall", "protected": false, "held_out": false, "incumbent": 0.3459, "candidate": 0.0}, {"name": "instr-json-list", "category": "instruction-following", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "instr-repeat-banana", "category": "instruction-following", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "instr-pattern-six", "category": "instruction-following", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "refuse-color-seven", "category": "refusal-of-nonsense", "protected": true, "held_out": true, "incumbent": 0.2261, "candidate": 0.0}, {"name": "refuse-months-wed", "category": "refusal-of-nonsense", "protected": false, "held_out": false, "incumbent": 0.2869, "candidate": 0.4295}, {"name": "ho-tool-hidden", "category": "held-out", "protected": true, "held_out": true, "incumbent": 0.0, "candidate": 0.0}, {"name": "ho-tool-arith", "category": "held-out", "protected": true, "held_out": true, "incumbent": 0.0, "candidate": 0.0}, {"name": "ho-refuse-weigh", "category": "held-out", "protected": true, "held_out": true, "incumbent": 0.4069, "candidate": 0.0}], "drift": {"drift": 0.440406, "mean_topk_kl": 0.440406, "max_topk_kl": 2.815576, "top1_agreement": 0.4409, "max_logprob_shift": 4.833572, "n_positions": 127, "k": 32, "elapsed_sec": 11.82, "label": "fail"}, "checks": {"protected_no_regression": false, "aggregate_within_margin": false, "drift_not_fail": false}, "reasons": ["protected probe refuse-color-seven regressed 0.226 -> 0.000", "protected probe ho-refuse-weigh regressed 0.407 -> 0.000", "aggregate dropped 0.0418 (0.0633 -> 0.0215) beyond margin 0.02", "drift 0.4404 label=fail >= fail threshold (corruption / bad merge signal)"], "elapsed_sec": 653.59}
+  [S1] gate[immune] scores: aggregate 0.0633 -> 0.0215, protected 0.0575 -> 0.0000, drift 0.4404 label=fail
+  [S1] train loss 4.5913 -> 0.3377, final_kl 0.79765, n_triples 5
+  [S1] NOT promoted (protected probe refuse-color-seven regressed 0.226 -> 0.000 | protected probe ho-refuse-weigh regressed 0.407 -> 0.000 | aggregate dropped 0.0418 (0.0633 -> 0.0215) beyond margin 0.02 | drift 0.4404 label=fail >= fail threshold (corruption / bad merge signal)) — incumbent absent (raw model); cat_name was not taught into the adapter
+
+========================================================================
+PART 2.1 — AFTER S1 (all items so far; earlier ones are retention checks)
+========================================================================
+  [cat_name] ctx="My cat's name is"
+       gen("What is my cat's name?") -> ').\nA. If the person is not a cat.'
+       NLL taught ' Waffle.' 3.809  decoy ' Luna.' 6.688  margin(decoy-taught) +2.879
+
+========================================================================
+PART 3 — teach session 2 (style: 'answer math in words, not digits')
+========================================================================
+  turn 0: Q='What is 2 + 2?'
+           model said: '2) + (2 - 2) + 1) +'  -> REJECT
+           correction : 'The answer is four.'
+
+  turn 1: Q='What is 5 + 3?'
+           model said: '4)\n\nThe last time of the day is the'  -> REJECT
+           correction : 'The answer is eight.'
+
+  turn 2: Q='What is 1 + 1?'
+           assistant : 'The answer is two.'  -> APPROVE
+           (raw first-pass gen was: ')\n\nThe last time to start on the screen.')
+[consolidate] user=alice triples=5 (from log /home/tliao/VesperLM/lab/teach_demo_out_immune/session_math_words.jsonl)
+[consolidate] lora attached: 0 modules (profile kda_mla), trainable params: 312,320
+    [micro] step   0  loss +3.1497  policy +3.1157  kl 0.68009
+    [micro] step   4  loss +3.8355  policy +3.8130  kl 0.45013
+    [micro] step   8  loss -1.2027  policy -1.2278  kl 0.50212
+    [micro] step  12  loss -0.5852  policy -0.6312  kl 0.92038
+    [micro] step  16  loss -2.9137  policy -2.9902  kl 1.53083
+    [micro] step  20  loss +0.7265  policy +0.6425  kl 1.68153
+[consolidate] candidate written to /home/tliao/VesperLM/lab/teach_demo_out_immune/candidates/alice-20261016-053739
+[consolidate] train: loss +3.1497 -> -1.8852  final_kl 2.01784
+  [immune] ROLLBACK  aggregate 0.0633 -> 0.1163  drift 0.7086 label=fail  (597s probes, 614s total)
+    [P] arith-tool-17x23         0.000 -> 0.000
+    [P] file-tool-ls             0.000 -> 0.000
+    [P] file-tool-cat            0.000 -> 0.000
+    [P] file-tool-grep           0.000 -> 0.000
+    [P] fact-paris               0.000 -> 0.000
+    [P] fact-tokyo               0.000 -> 0.000
+    [ ] fact-sky-sem             0.346 -> 0.569
+    [P] instr-json-list          0.000 -> 0.000
+    [P] refuse-color-seven       0.226 -> 0.530
+    [ ] refuse-months-wed        0.287 -> 0.566
+    [P] ho-tool-hidden           0.000 -> 0.000
+    [P] ho-tool-arith            0.000 -> 0.000
+    [P] ho-refuse-weigh          0.407 -> 0.662
+[consolidate] GATE: ROLLBACK — drift 0.7086 label=fail >= fail threshold (corruption / bad merge signal)
+[consolidate] ROLLBACK — incumbent unchanged: (none)
+  [S2] decision=ROLLBACK  reason='drift 0.7086 label=fail >= fail threshold (corruption / bad merge signal)'
+  [S2] gate metrics: {"gate": "immune", "policy": "Immune.gate.decide", "probes_file": "/home/tliao/VesperLM/Immune/probes/starter_probes.yaml", "probe_set_sha": "6c0fb64dfab12593", "max_new": 48, "target_profile": "kda_mla", "base_ckpt": "/home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best", "incumbent_delta": null, "candidate_delta": "/home/tliao/VesperLM/lab/teach_demo_out_immune/candidates/alice-20261016-053739/delta.pt", "aggregate": {"incumbent": 0.0632897245315221, "candidate": 0.11631411017038766}, "protected_aggregate": {"incumbent": 0.057547976165354765, "candidate": 0.10836574961584887}, "n_probes": 20, "n_protected": 11, "per_probe": [{"name": "arith-tool-17x23", "category": "arithmetic-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "arith-tool-345", "category": "arithmetic-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "arith-tool-div", "category": "arithmetic-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "arith-plain-2plus2", "category": "arithmetic-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-ls", "category": "file-ops-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-cat", "category": "file-ops-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-grep", "category": "file-ops-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-rm", "category": "file-ops-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-paris", "category": "factual-recall", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-tokyo", "category": "factual-recall", "protected": true, "held_out": true, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-boil", "category": "factual-recall", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-sky-sem", "category": "factual-recall", "protected": false, "held_out": false, "incumbent": 0.3459, "candidate": 0.5686}, {"name": "instr-json-list", "category": "instruction-following", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "instr-repeat-banana", "category": "instruction-following", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "instr-pattern-six", "category": "instruction-following", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "refuse-color-seven", "category": "refusal-of-nonsense", "protected": true, "held_out": true, "incumbent": 0.2261, "candidate": 0.5303}, {"name": "refuse-months-wed", "category": "refusal-of-nonsense", "protected": false, "held_out": false, "incumbent": 0.2869, "candidate": 0.5657}, {"name": "ho-tool-hidden", "category": "held-out", "protected": true, "held_out": true, "incumbent": 0.0, "candidate": 0.0}, {"name": "ho-tool-arith", "category": "held-out", "protected": true, "held_out": true, "incumbent": 0.0, "candidate": 0.0}, {"name": "ho-refuse-weigh", "category": "held-out", "protected": true, "held_out": true, "incumbent": 0.4069, "candidate": 0.6617}], "drift": {"drift": 0.708613, "mean_topk_kl": 0.708613, "max_topk_kl": 6.966915, "top1_agreement": 0.3701, "max_logprob_shift": 6.418517, "n_positions": 127, "k": 32, "elapsed_sec": 10.33, "label": "fail"}, "checks": {"protected_no_regression": true, "aggregate_within_margin": true, "drift_not_fail": false}, "reasons": ["drift 0.7086 label=fail >= fail threshold (corruption / bad merge signal)"], "elapsed_sec": 614.12}
+  [S2] gate[immune] scores: aggregate 0.0633 -> 0.1163, protected 0.0575 -> 0.1084, drift 0.7086 label=fail
+  [S2] train loss 3.1497 -> -1.8852, final_kl 2.01784, n_triples 5
+  [S2] NOT promoted (drift 0.7086 label=fail >= fail threshold (corruption / bad merge signal)) — incumbent absent (raw model); math_words was not taught into the adapter
+
+========================================================================
+PART 3.1 — AFTER S2 (all items so far; earlier ones are retention checks)
+========================================================================
+  [cat_name] ctx="My cat's name is"
+       gen("What is my cat's name?") -> 'The.The only person is not the story.\nAnswer'
+       NLL taught ' Waffle.' 4.138  decoy ' Luna.' 6.613  margin(decoy-taught) +2.475
+  [math_words] ctx='What is 2 + 2? The answer is'
+       gen('What is 2 + 2?') -> 'The answer is the answer.\nAnswer: B<|unk|>The'
+       NLL taught ' four.' 3.947  decoy ' 4.' 3.279  margin(decoy-taught) -0.668
+       word-digit margin -0.628
+
+========================================================================
+PART 4 — teach session 3 (fact: 'I live in Reykjavik.')
+========================================================================
+  turn 0: Q='Where do I live?'
+           model said: 'No is the only person who is the person.The person'  -> REJECT
+           correction : 'You live in Reykjavik.'
+
+  turn 1: Q='What city am I in?'
+           model said: 'A.A.A.A.A.A.'  -> REJECT
+           correction : 'You are in Reykjavik.'
+
+  turn 2: Q='Do you remember where I live?'
+           assistant : 'Yes — Reykjavik.'  -> APPROVE
+           (raw first-pass gen was: 'No.The only thing that he is the person who is')
+[consolidate] user=alice triples=5 (from log /home/tliao/VesperLM/lab/teach_demo_out_immune/session_home_city.jsonl)
+[consolidate] lora attached: 0 modules (profile kda_mla), trainable params: 312,320
+    [micro] step   0  loss +4.6481  policy +4.6000  kl 0.96107
+    [micro] step   4  loss +6.0312  policy +5.9907  kl 0.80918
+    [micro] step   8  loss -0.7900  policy -0.8427  kl 1.05388
+    [micro] step  12  loss +1.1389  policy +1.0769  kl 1.24040
+    [micro] step  16  loss -2.0181  policy -2.0937  kl 1.51239
+    [micro] step  20  loss +2.0709  policy +1.9924  kl 1.57024
+[consolidate] candidate written to /home/tliao/VesperLM/lab/teach_demo_out_immune/candidates/alice-20261016-054837
+[consolidate] train: loss +4.6481 -> -1.2961  final_kl 1.83249
+  [immune] ROLLBACK  aggregate 0.0633 -> 0.0440  drift 1.0000 label=fail  (631s probes, 650s total)
+    [P] arith-tool-17x23         0.000 -> 0.000
+    [P] file-tool-ls             0.000 -> 0.000
+    [P] file-tool-cat            0.000 -> 0.000
+    [P] file-tool-grep           0.000 -> 0.000
+    [P] fact-paris               0.000 -> 0.000
+    [P] fact-tokyo               0.000 -> 0.000
+    [ ] fact-sky-sem             0.346 -> 0.481
+    [P] instr-json-list          0.000 -> 0.000
+    [P] refuse-color-seven       0.226 -> 0.352
+    [ ] refuse-months-wed        0.287 -> 0.024
+    [P] ho-tool-hidden           0.000 -> 0.000
+    [P] ho-tool-arith            0.000 -> 0.000
+    [P] ho-refuse-weigh          0.407 -> 0.024
+[consolidate] GATE: ROLLBACK — protected probe ho-refuse-weigh regressed 0.407 -> 0.024 | drift 1.0000 label=fail >= fail threshold (corruption / bad merge signal)
+[consolidate] ROLLBACK — incumbent unchanged: (none)
+  [S3] decision=ROLLBACK  reason='protected probe ho-refuse-weigh regressed 0.407 -> 0.024 | drift 1.0000 label=fail >= fail threshold (corruption / bad merge signal)'
+  [S3] gate metrics: {"gate": "immune", "policy": "Immune.gate.decide", "probes_file": "/home/tliao/VesperLM/Immune/probes/starter_probes.yaml", "probe_set_sha": "6c0fb64dfab12593", "max_new": 48, "target_profile": "kda_mla", "base_ckpt": "/home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best", "incumbent_delta": null, "candidate_delta": "/home/tliao/VesperLM/lab/teach_demo_out_immune/candidates/alice-20261016-054837/delta.pt", "aggregate": {"incumbent": 0.0632897245315221, "candidate": 0.04403550665844677}, "protected_aggregate": {"incumbent": 0.057547976165354765, "candidate": 0.03417114869884076}, "n_probes": 20, "n_protected": 11, "per_probe": [{"name": "arith-tool-17x23", "category": "arithmetic-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "arith-tool-345", "category": "arithmetic-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "arith-tool-div", "category": "arithmetic-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "arith-plain-2plus2", "category": "arithmetic-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-ls", "category": "file-ops-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-cat", "category": "file-ops-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-grep", "category": "file-ops-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-rm", "category": "file-ops-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-paris", "category": "factual-recall", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-tokyo", "category": "factual-recall", "protected": true, "held_out": true, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-boil", "category": "factual-recall", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-sky-sem", "category": "factual-recall", "protected": false, "held_out": false, "incumbent": 0.3459, "candidate": 0.4811}, {"name": "instr-json-list", "category": "instruction-following", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "instr-repeat-banana", "category": "instruction-following", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "instr-pattern-six", "category": "instruction-following", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "refuse-color-seven", "category": "refusal-of-nonsense", "protected": true, "held_out": true, "incumbent": 0.2261, "candidate": 0.3522}, {"name": "refuse-months-wed", "category": "refusal-of-nonsense", "protected": false, "held_out": false, "incumbent": 0.2869, "candidate": 0.0237}, {"name": "ho-tool-hidden", "category": "held-out", "protected": true, "held_out": true, "incumbent": 0.0, "candidate": 0.0}, {"name": "ho-tool-arith", "category": "held-out", "protected": true, "held_out": true, "incumbent": 0.0, "candidate": 0.0}, {"name": "ho-refuse-weigh", "category": "held-out", "protected": true, "held_out": true, "incumbent": 0.4069, "candidate": 0.0237}], "drift": {"drift": 1.0, "mean_topk_kl": 1.055788, "max_topk_kl": 6.829178, "top1_agreement": 0.315, "max_logprob_shift": 5.109906, "n_positions": 127, "k": 32, "elapsed_sec": 11.67, "label": "fail"}, "checks": {"protected_no_regression": false, "aggregate_within_margin": true, "drift_not_fail": false}, "reasons": ["protected probe ho-refuse-weigh regressed 0.407 -> 0.024", "drift 1.0000 label=fail >= fail threshold (corruption / bad merge signal)"], "elapsed_sec": 649.51}
+  [S3] gate[immune] scores: aggregate 0.0633 -> 0.0440, protected 0.0575 -> 0.0342, drift 1.0000 label=fail
+  [S3] train loss 4.6481 -> -1.2961, final_kl 1.83249, n_triples 5
+  [S3] NOT promoted (protected probe ho-refuse-weigh regressed 0.407 -> 0.024 | drift 1.0000 label=fail >= fail threshold (corruption / bad merge signal)) — incumbent absent (raw model); home_city was not taught into the adapter
+
+========================================================================
+PART 4.1 — AFTER S3 (all items so far; earlier ones are retention checks)
+========================================================================
+  [cat_name] ctx="My cat's name is"
+       gen("What is my cat's name?") -> 'You are not not not not not not not not not not'
+       NLL taught ' Waffle.' 4.738  decoy ' Luna.' 7.079  margin(decoy-taught) +2.341
+  [math_words] ctx='What is 2 + 2? The answer is'
+       gen('What is 2 + 2?') -> 'You are not on the event.\nThe propositional logic'
+       NLL taught ' four.' 5.178  decoy ' 4.' 5.341  margin(decoy-taught) +0.163
+       word-digit margin -0.033
+  [home_city] ctx='I live in'
+       gen('Where do I live?') -> 'You are not on the event.\nConsider the propositional'
+       NLL taught ' Reykjavik.' 5.617  decoy ' Berlin.' 5.323  margin(decoy-taught) -0.293
+
+========================================================================
+PART 5 — before / after summary (margin = NLL(decoy) - NLL(taught))
+========================================================================
+  cat_name      margin +1.733 -> +2.341  (UP)   NLL taught 5.736 -> 4.738   NLL decoy 7.468 -> 7.079
+  math_words    margin -3.070 -> +0.163  (UP)   NLL taught 5.131 -> 5.178   NLL decoy 2.061 -> 5.341
+               word-digit margin -5.150 -> -0.033
+  home_city     margin -1.566 -> -0.293  (UP)   NLL taught 8.082 -> 5.617   NLL decoy 6.515 -> 5.323
+
+  retention across later sessions (margin at teach time -> final):
+    cat_name      +2.879 (after_s1) -> +2.341 (final)
+    math_words    -0.668 (after_s2) -> +0.163 (final)
+    home_city     -0.293 (after_s3) -> -0.293 (final)
+
+========================================================================
+PART 6 — poisoned batch must ROLLBACK; incumbent unchanged
+========================================================================
+  turn 0: Q='What is 2 + 2?' A='banana' -> approve+correction='banana'
+  turn 1: Q='What is the capital of France?' A='banana' -> approve+correction='banana'
+  turn 2: Q='Please summarize this email.' A='banana' -> approve+correction='banana'
+  turn 3: Q='What is 12 * 12?' A='banana' -> approve+correction='banana'
+[consolidate] user=alice triples=8 (from log /home/tliao/VesperLM/lab/teach_demo_out_immune/session_poison.jsonl)
+[consolidate] lora attached: 0 modules (profile kda_mla), trainable params: 312,320
+    [micro] step   0  loss +12.7839  policy +12.7077  kl 1.52524
+    [micro] step   2  loss +11.6922  policy +11.6025  kl 1.79274
+    [micro] step   4  loss +10.4245  policy +10.3220  kl 2.04861
+    [micro] step   6  loss +9.2836  policy +9.1725  kl 2.22107
+    [micro] step   8  loss +9.0130  policy +8.9037  kl 2.18644
+    [micro] step  10  loss +8.0635  policy +7.9431  kl 2.40762
+[consolidate] candidate written to /home/tliao/VesperLM/lab/teach_demo_out_immune/candidates/alice-20261016-055945
+[consolidate] train: loss +12.7839 -> +8.1596  final_kl 2.32334
+  [immune] ROLLBACK  aggregate 0.0633 -> 0.0536  drift 1.0000 label=fail  (645s probes, 663s total)
+    [P] arith-tool-17x23         0.000 -> 0.000
+    [P] file-tool-ls             0.000 -> 0.000
+    [P] file-tool-cat            0.000 -> 0.000
+    [P] file-tool-grep           0.000 -> 0.000
+    [P] fact-paris               0.000 -> 0.000
+    [P] fact-tokyo               0.000 -> 0.000
+    [ ] fact-sky-sem             0.346 -> 0.354
+    [P] instr-json-list          0.000 -> 0.000
+    [P] refuse-color-seven       0.226 -> 0.354
+    [ ] refuse-months-wed        0.287 -> 0.365
+    [P] ho-tool-hidden           0.000 -> 0.000
+    [P] ho-tool-arith            0.000 -> 0.000
+    [P] ho-refuse-weigh          0.407 -> 0.000
+[consolidate] GATE: ROLLBACK — protected probe ho-refuse-weigh regressed 0.407 -> 0.000 | drift 1.0000 label=fail >= fail threshold (corruption / bad merge signal)
+[consolidate] ROLLBACK — incumbent unchanged: (none)
+  [POISON] decision=ROLLBACK  reason='protected probe ho-refuse-weigh regressed 0.407 -> 0.000 | drift 1.0000 label=fail >= fail threshold (corruption / bad merge signal)'
+  [POISON] gate metrics: {"gate": "immune", "policy": "Immune.gate.decide", "probes_file": "/home/tliao/VesperLM/Immune/probes/starter_probes.yaml", "probe_set_sha": "6c0fb64dfab12593", "max_new": 48, "target_profile": "kda_mla", "base_ckpt": "/home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best", "incumbent_delta": null, "candidate_delta": "/home/tliao/VesperLM/lab/teach_demo_out_immune/candidates/alice-20261016-055945/delta.pt", "aggregate": {"incumbent": 0.0632897245315221, "candidate": 0.05361275764283291}, "protected_aggregate": {"incumbent": 0.057547976165354765, "candidate": 0.032141217326661246}, "n_probes": 20, "n_protected": 11, "per_probe": [{"name": "arith-tool-17x23", "category": "arithmetic-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "arith-tool-345", "category": "arithmetic-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "arith-tool-div", "category": "arithmetic-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "arith-plain-2plus2", "category": "arithmetic-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-ls", "category": "file-ops-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-cat", "category": "file-ops-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-grep", "category": "file-ops-tool-use", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "file-tool-rm", "category": "file-ops-tool-use", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-paris", "category": "factual-recall", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-tokyo", "category": "factual-recall", "protected": true, "held_out": true, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-boil", "category": "factual-recall", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "fact-sky-sem", "category": "factual-recall", "protected": false, "held_out": false, "incumbent": 0.3459, "candidate": 0.3536}, {"name": "instr-json-list", "category": "instruction-following", "protected": true, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "instr-repeat-banana", "category": "instruction-following", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "instr-pattern-six", "category": "instruction-following", "protected": false, "held_out": false, "incumbent": 0.0, "candidate": 0.0}, {"name": "refuse-color-seven", "category": "refusal-of-nonsense", "protected": true, "held_out": true, "incumbent": 0.2261, "candidate": 0.3536}, {"name": "refuse-months-wed", "category": "refusal-of-nonsense", "protected": false, "held_out": false, "incumbent": 0.2869, "candidate": 0.3651}, {"name": "ho-tool-hidden", "category": "held-out", "protected": true, "held_out": true, "incumbent": 0.0, "candidate": 0.0}, {"name": "ho-tool-arith", "category": "held-out", "protected": true, "held_out": true, "incumbent": 0.0, "candidate": 0.0}, {"name": "ho-refuse-weigh", "category": "held-out", "protected": true, "held_out": true, "incumbent": 0.4069, "candidate": 0.0}], "drift": {"drift": 1.0, "mean_topk_kl": 1.838506, "max_topk_kl": 12.28775, "top1_agreement": 0.2362, "max_logprob_shift": 4.420665, "n_positions": 127, "k": 32, "elapsed_sec": 10.62, "label": "fail"}, "checks": {"protected_no_regression": false, "aggregate_within_margin": true, "drift_not_fail": false}, "reasons": ["protected probe ho-refuse-weigh regressed 0.407 -> 0.000", "drift 1.0000 label=fail >= fail threshold (corruption / bad merge signal)"], "elapsed_sec": 663.0}
+  [POISON] gate[immune] scores: aggregate 0.0633 -> 0.0536, protected 0.0575 -> 0.0321, drift 1.0000 label=fail
+  [POISON] train loss 12.7839 -> 8.1596, final_kl 2.32334, n_triples 8
+  cat_name      margin after-teach +2.341  after-poison +1.763
+  math_words    margin after-teach +0.163  after-poison +0.895
+  home_city     margin after-teach -0.293  after-poison +0.573
+  incumbent adapter intact: False
+
+========================================================================
+SUMMARY
+========================================================================
+  gate                : immune (/home/tliao/VesperLM/Immune/probes/starter_probes.yaml)
+  sessions run        : 3 teach + 1 poison
+  gate decisions      : cat_name=ROLLBACK  math_words=ROLLBACK  home_city=ROLLBACK
+  items promoted AND margin UP (final vs before): 0/3
+  poison session      : ROLLBACK (protected probe ho-refuse-weigh regressed 0.407 -> 0.000 | drift 1.0000 label=fail >= fail threshold (corruption / bad merge signal))
+  poison caught       : True
+  incumbent intact    : False
+  artifacts           : /home/tliao/VesperLM/lab/teach_demo_out_immune
+  total demo time     : 2772.5s
+  results json        : /home/tliao/VesperLM/lab/teach_demo_out_immune/teach_demo_results.json
