@@ -2071,3 +2071,32 @@ Do not retry a falsified method unchanged.
 - Every fallback taken is recorded here with the evidence that forced it.
 - The user is only interrupted for budget or architecture-direction
   decisions; everything else is autonomous.
+
+## 2026-10-16 — glm-bake-triton-l2norm — GLM-Flash bake-off arm cannot decode on gfx906: fla l2norm Triton kernel (unsupported target) and a second PassManager crash in the KDA path — slice-smoke arm only
+
+**Symptom.** `spine_bakeoff.py --spine glm-flash` builds the host fine
+(`build_host` 6L, 11.8s) but dies at the first decode forward inside
+`host_logits`. Two failures stacked:
+1. `fla/modules/l2norm.py` Triton kernel — `unsupported target: 'gfx906'`
+   at MLIR lowering. The transformers glm5_next text model calls this l2norm
+   inside attention (qk-l2norm path).
+2. With l2norm shimmed to pure torch, the same forward dies later with
+   `PassManager::run failed` (triton AMD backend) deeper in the KDA call —
+   agent-66's `install_torch_kda()` shim stack (which replaces the fla KDA
+   kernels with torch bodies) is installed by `graft_glmflash.main()` but my
+   `glm_flash_gen.make_generator` shim never invoked it before `build_host`.
+
+**Root cause class.** Same as the 2026-10-14 fla-kda-gfx906 entry: fla
+Triton kernels do not compile on gfx906. The GLM host needs BOTH the
+`install_torch_kda()` shim AND an l2norm shim before any decode.
+
+**Fallback taken (one).** `glm_flash_gen._patch_fl_l2norm()` — pure-torch
+row L2 norm (fp32 accumulate), numerics matching the kernel. Partial: the
+l2norm crash is gone but the second (KDA PassManager) crash remains because
+the shim entry point was not wired in. Not looped — reported as
+GLM-arm-blocked and the slice runs labeled plumbing smoke.
+
+**Follow-up (small).** Wire `gl.install_torch_kda()` into
+`glm_flash_gen.make_generator` before `build_host`, then the GLM arm should
+decode on the truncated host. Full-host feasibility is a separate question
+(see handoff: NOT — weight bytes exceed usable VRAM).

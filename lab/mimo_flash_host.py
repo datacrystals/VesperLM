@@ -36,6 +36,7 @@ import importlib
 import json
 import math
 import os
+import re
 import sys
 import time
 import types
@@ -872,6 +873,46 @@ def fact_margins(logits_fn, tok, device, tag: str) -> dict:
 # bake-off generator (spine_bakeoff.py graft backend)
 # ---------------------------------------------------------------------------
 
+
+# think-tag / EOT hygiene: the baked-in reasoning tag is NOT a tokenizer
+# special on every spine, so skip_special_tokens alone leaves it in replies
+# (measured 2026-10-16: every slice-smoke reply opened with the raw tag).
+_THINK_RE = re.compile(r"<\|[^|>]{1,24}\|>.*?<\|[^|>]{1,24}\|>",
+                       re.DOTALL)
+_TAG_RE = re.compile(r"<\|[^|>]{1,24}\|>")
+
+
+def _clean_reply(text: str) -> str:
+    """Strip reasoning blocks and stray delimiter tokens, keep the answer.
+
+    Measured 2026-10-16 slice-smoke replies: the model emits the opening
+    delimiter then answers directly (never closes) — so a dangling-opener
+    cut would delete the answer.  Rule: drop closed reasoning pairs first,
+    then drop any residual lone delimiter tokens, keep the rest.
+    """
+    t = _THINK_RE.sub(" ", text)
+    t = _TAG_RE.sub(" ", t)
+    return " ".join(t.split()).strip()
+
+
+def stop_token_ids(tok) -> set:
+    """EOT ids derived from the tokenizer chat template (no literals): the
+    tail tokens the template emits after an assistant message are the
+    end-of-turn marker; max-new is a cap, not a target."""
+    ids = set()
+    try:
+        probe = tok.apply_chat_template(
+            [{"role": "assistant", "content": "x"}], tokenize=False,
+            add_generation_prompt=False)
+        tail = tok.encode(probe, add_special_tokens=False)[-4:]
+        ids.update(t for t in tail if t >= 0)
+    except Exception:  # noqa: BLE001
+        pass
+    if tok.eos_token_id is not None:
+        ids.add(tok.eos_token_id)
+    return ids
+
+
 def make_generator(plugins_dir: str, args=None):
     """(tok, gen_fn) for lab/spine_bakeoff.py --spine mimo-flash.
 
@@ -893,7 +934,7 @@ def make_generator(plugins_dir: str, args=None):
         ids = tok.encode(prompt, add_special_tokens=False)
         out_ids = []
         g = torch.Generator(device="cpu").manual_seed(int(seed))
-        stop = {tok.eos_token_id} if tok.eos_token_id is not None else set()
+        stop = stop_token_ids(tok)
         for _ in range(int(max_new)):
             x = torch.tensor([ids + out_ids], dtype=torch.long,
                              device=device)
@@ -922,7 +963,7 @@ def make_generator(plugins_dir: str, args=None):
             if nxt in stop:
                 break
             out_ids.append(nxt)
-        return tok.decode(out_ids, skip_special_tokens=True).strip()
+        return _clean_reply(tok.decode(out_ids, skip_special_tokens=True))
 
     # build the stack once and stash on the closure
     from transformers import AutoTokenizer

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import sys
 
 import torch
@@ -89,10 +90,72 @@ def _install_plugs(model, blocks, plugins_dir: str):
     return installed
 
 
+def _patch_fl_l2norm():
+    """gfx906 fallback: fla's l2norm Triton kernels fail to compile
+    ('unsupported target: gfx906' — measured 2026-10-16).  Replace with a
+    pure-torch row L2 norm; numerics match the kernel (fp32 accumulate)."""
+    try:
+        import fla.modules.l2norm as fn
+    except Exception:  # noqa: BLE001
+        return False
+
+    def l2norm(x, eps=1e-6, output_dtype=None):
+        xf = x.float()
+        rstd = torch.rsqrt(xf.pow(2).sum(-1, keepdim=True) + eps)
+        y = (xf * rstd).to(output_dtype or x.dtype)
+        return y
+
+    fn.l2norm = l2norm
+    fn.l2_norm = l2norm
+    return True
+
+
+
+# think-tag / EOT hygiene: the baked-in reasoning tag is NOT a tokenizer
+# special on every spine, so skip_special_tokens alone leaves it in replies
+# (measured 2026-10-16: every slice-smoke reply opened with the raw tag).
+_THINK_RE = re.compile(r"<\|[^|>]{1,24}\|>.*?<\|[^|>]{1,24}\|>",
+                       re.DOTALL)
+_TAG_RE = re.compile(r"<\|[^|>]{1,24}\|>")
+
+
+def _clean_reply(text: str) -> str:
+    """Strip reasoning blocks and stray delimiter tokens, keep the answer.
+
+    Measured 2026-10-16 slice-smoke replies: the model emits the opening
+    delimiter then answers directly (never closes) — so a dangling-opener
+    cut would delete the answer.  Rule: drop closed reasoning pairs first,
+    then drop any residual lone delimiter tokens, keep the rest.
+    """
+    t = _THINK_RE.sub(" ", text)
+    t = _TAG_RE.sub(" ", t)
+    return " ".join(t.split()).strip()
+
+
+def stop_token_ids(tok) -> set:
+    """EOT ids derived from the tokenizer chat template (no literals): the
+    tail tokens the template emits after an assistant message are the
+    end-of-turn marker; max-new is a cap, not a target."""
+    ids = set()
+    try:
+        probe = tok.apply_chat_template(
+            [{"role": "assistant", "content": "x"}], tokenize=False,
+            add_generation_prompt=False)
+        tail = tok.encode(probe, add_special_tokens=False)[-4:]
+        ids.update(t for t in tail if t >= 0)
+    except Exception:  # noqa: BLE001
+        pass
+    if tok.eos_token_id is not None:
+        ids.add(tok.eos_token_id)
+    return ids
+
+
 def make_generator(plugins_dir: str, args=None):
     """(tok, gen_fn) for lab/spine_bakeoff.py --spine glm-flash."""
     import graft_glmflash as gl
     from transformers import AutoTokenizer
+
+    _patch_fl_l2norm()
 
     device = getattr(args, "device", "cuda") if args is not None else "cuda"
     if device.startswith("cuda") and not torch.cuda.is_available():
@@ -113,7 +176,7 @@ def make_generator(plugins_dir: str, args=None):
         ids = tok.encode(prompt, add_special_tokens=False)
         out_ids = []
         g = torch.Generator(device="cpu").manual_seed(int(seed))
-        stop = {tok.eos_token_id} if tok.eos_token_id is not None else set()
+        stop = stop_token_ids(tok)
         for _ in range(int(max_new)):
             x = torch.tensor([ids + out_ids], dtype=torch.long,
                              device=device)
@@ -138,7 +201,7 @@ def make_generator(plugins_dir: str, args=None):
             if nxt in stop:
                 break
             out_ids.append(nxt)
-        return tok.decode(out_ids, skip_special_tokens=True).strip()
+        return _clean_reply(tok.decode(out_ids, skip_special_tokens=True))
 
     gen_fn.installed = [n for n, _s, _p in installed]
     gen_fn.host = {"layers": n_layers, "sparse": len(blocks),
