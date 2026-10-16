@@ -178,7 +178,9 @@ def load_slice(model_dir: str, n_layers: int, device: str, out: dict):
     to_load: dict[str, torch.Tensor] = {}
     n_q = 0
     if os.path.exists(cache):
-        to_load = torch.load(cache, map_location="cpu", weights_only=False)
+        # mmap: 6 parallel lanes share page cache instead of 32GB RSS each
+        to_load = torch.load(cache, map_location="cpu", weights_only=False,
+                             mmap=True)
         n_q = sum(1 for k in to_load if k.endswith(".weight"))
         log(f"state cache hit {cache} ({len(to_load)} keys)")
     else:
@@ -513,6 +515,14 @@ def phase_parity(model, cfg, tok, device, out: dict, args) -> list:
 # Phase 2: ONE proof-of-life wrap (mem_trains) — §10.7 recipe
 # ---------------------------------------------------------------------------
 
+def _chatml_ids(tok, prompt, answer):
+    msgs = [{"role": "user", "content": prompt},
+            {"role": "assistant", "content": answer}]
+    txt = tok.apply_chat_template(msgs, tokenize=False,
+                                  add_generation_prompt=False)
+    return tok.encode(txt, add_special_tokens=False)
+
+
 def _home_stream(tok, tag, feed_tokens, seq, bs):
     """ChatML teach+approval windows for one plug, tiled to feed_tokens."""
     rows = PLUGS[tag]
@@ -539,6 +549,121 @@ def _base_stream(tok, data_dir, seq, bs, max_tokens=40000):
     wins = [ids[i:i + seq] for i in range(0, len(ids) - seq + 1, seq)]
     return [(torch.tensor(wins[i:i + bs], dtype=torch.long), 0)
             for i in range(0, len(wins) - bs + 1, bs)]
+
+
+def capture_h(model, blk, batches, device) -> torch.Tensor:
+    hs = []
+
+    def pre(mod, inp):
+        hs.append(inp[0].detach().reshape(-1, inp[0].shape[-1]).float().cpu())
+    h = blk.gate.register_forward_pre_hook(pre)
+    for tokens, _ in batches:
+        d0.model_logits(model, tokens.to(device))
+    h.remove()
+    return torch.cat(hs, 0) if hs else torch.zeros(0, 1)
+
+
+def shape_probe(model, wrap, blk, home_train, device) -> dict:
+    """One-step CE fwd+bwd at candidate B*T (gfx906 backward holes are
+    spine-specific — v0.6 lesson; probe before every fit)."""
+    res = {"ok": False, "safe_bt": None, "tried": []}
+    for bt in (128, 192, 256):
+        sf = None
+        try:
+            toks = home_train[0][0].to(device)
+            if toks.numel() > bt:
+                toks = toks.reshape(-1)[:bt].reshape(1, -1)
+            wrap.to(device)
+            sf = blk.experts.forward
+
+            def fwd(h, i, w, _sf=sf, _wrap=wrap):
+                return _sf(h, i, w) + _wrap(h)
+            blk.experts.forward = fwd
+            logits = d0.model_logits(model, toks)
+            v = logits.shape[-1]
+            loss = F.cross_entropy(logits[:, :-1].reshape(-1, v).float(),
+                                   toks[:, 1:].reshape(-1))
+            loss.backward()
+            wrap.zero_grad(set_to_none=True)
+            blk.experts.forward = sf
+            ok = bool(torch.isfinite(loss))
+            res["tried"].append({"bt": bt, "ok": ok})
+            if ok:
+                res["ok"] = True
+                res["safe_bt"] = bt
+        except Exception as e:  # noqa: BLE001
+            res["tried"].append({"bt": bt, "ok": False, "err": str(e)[:80]})
+            if sf is not None:
+                try:
+                    blk.experts.forward = sf
+                except Exception:  # noqa: BLE001
+                    pass
+    return res
+
+
+@torch.no_grad()
+def fit_lam_grid(model, handles, lam, home, device) -> float:
+    """Door-6 style fitted additive lambda (grid incl. below 0.25)."""
+    import graft_d1_plugin as d1
+    best, best_ce = 0.0, float("inf")
+    for cand in (0.0, 0.1, 0.25, 0.5, 1.0):
+        with torch.no_grad():
+            lam.fill_(cand)
+        d1.set_plugin_mode(handles, "additive")
+        tot, n = 0.0, 0
+        for tokens, _ in home:
+            tokens = tokens.to(device)
+            lg = d0.model_logits(model, tokens)
+            tot += d0.next_token_ce(lg, tokens) * tokens.shape[0]
+            n += tokens.shape[0]
+        ce = tot / max(1, n)
+        if ce < best_ce:
+            best_ce, best = ce, cand
+    with torch.no_grad():
+        lam.fill_(best)
+    d1.set_plugin_mode(handles, "off")
+    return best
+
+
+def _install_additive(blk, wrap, lam, bank65, gate65):
+    import door6_expert_mix as d6
+    sf = blk.experts.forward
+    if hasattr(blk, "_plugin_merge") and hasattr(blk._plugin_merge, "stock"):
+        sf = blk._plugin_merge.stock
+    pm = d6.MixMerge(sf, [wrap], [lam], ["plug"],
+                     gate_getter=(lambda b=blk: b.gate),
+                     num_stock=bank65.num_experts - 1)
+    pm.mode = "additive"
+    blk._plugin_merge = pm
+    blk.experts.forward = lambda h, i, w: pm(h, i, w)
+    # membership comes from the plug-row gate: install it as blk.gate so the
+    # block forward populates last_membership before MixMerge reads it
+    stock_gate = blk.gate
+    blk.gate = gate65
+    return [(blk, sf)], stock_gate
+
+
+@torch.no_grad()
+def quality_reads(model, blk, gate65, handles, home, base, device, lam) -> dict:
+    import graft_d1_plugin as d1
+    out = {}
+
+    def ce(batches, mode):
+        tot, n = 0.0, 0
+        for tokens, _ in batches:
+            tokens = tokens.to(device)
+            d1.set_plugin_mode(handles, mode)
+            lg = d0.model_logits(model, tokens)
+            tot += d0.next_token_ce(lg, tokens) * tokens.shape[0]
+            n += tokens.shape[0]
+        return tot / max(1, n)
+
+    out["ce_home_off"] = ce(home, "off")
+    out["ce_home_add"] = ce(home, "additive")
+    out["ce_base_off"] = ce(base, "off")
+    out["ce_base_add"] = ce(base, "additive")
+    out["lam"] = float(lam.detach())
+    return out
 
 
 def fit_one_plug(model, tok, device, args, blk, bank, tag, host_expert,
@@ -583,6 +708,34 @@ def fit_one_plug(model, tok, device, args, blk, bank, tag, host_expert,
     blk.experts.forward = sf
     if hasattr(blk, "_plugin_merge"):
         delattr(blk, "_plugin_merge")
+    # NaN guard (persona_build lesson: one wrap NaNs at 3e-3, recovers at 1e-3)
+    finite = pa.get("history") and all(
+        math.isfinite(float(h.get("ce_batch0", float("nan"))))
+        for h in pa["history"][-3:])
+    if not finite:
+        log(f"[{tag}] NON-FINITE at lr {args.expert_lr} — refit 1e-3")
+        del wrap
+        torch.cuda.empty_cache() if device.startswith("cuda") else None
+        wrap = d25.WrappedForeignExpert(d_model, 64, w_gu, w_down,
+                                        seed=args.seed, act="swiglu")
+        wrap.to(device)
+        pm = d6.MixMerge(sf, [wrap], [lam], [tag],
+                         gate_getter=(lambda b=blk: getattr(b, "_mimo_gate",
+                                                            b.gate)),
+                         num_stock=bank.num_experts)
+        pm.mode = "off"
+        blk._plugin_merge = pm
+        blk.experts.forward = lambda h, i, w: pm(h, i, w)
+        handles = [(blk, sf)]
+        pa = d25.train_adapters(model, wrap, handles, home_train, base,
+                                steps, 1e-3, device,
+                                out_pen=args.out_pen, grad_clip=1.0,
+                                weight_decay=0.0)
+        d1.set_plugin_mode(handles, "off")
+        blk.experts.forward = sf
+        if hasattr(blk, "_plugin_merge"):
+            delattr(blk, "_plugin_merge")
+        res["refit_lr"] = 1e-3
     res["phase_a"] = {
         "steps": pa.get("steps"), "wall_s": pa.get("wall_s"),
         "ce_first": pa["history"][0]["ce_batch0"] if pa["history"] else None,
@@ -639,7 +792,8 @@ def fit_one_plug(model, tok, device, args, blk, bank, tag, host_expert,
 
     res.update({"lam": best_lam, "quality": q,
                 "margins_forced": marg_forced, "margins_off": marg_off,
-                "row": row, "wall_s": round(time.time() - t0, 2)})
+                "row": row, "wall_s": round(time.time() - t0, 2),
+                "wrap_state": wrap.state_dict(), "wrap_spec": wrap.wrap_spec()})
     return res
 
 
@@ -656,7 +810,6 @@ def save_plugin(path, tag, wrap_state, wrap_spec, row, rec):
 
 def phase_fit_plugs(model, cfg, tok, device, out: dict, args, blocks, banks):
     """Fit the 6-plug persona set to the MiMo host, one plug per call."""
-    import door25_wrap_expert as d25
     tags = [t.strip() for t in args.plug_tags.split(",") if t.strip()]
     for tag in tags:
         if tag not in PLUGS:
@@ -679,15 +832,9 @@ def phase_fit_plugs(model, cfg, tok, device, out: dict, args, blocks, banks):
             out["plugs"][tag] = {"error": str(e)[:300]}
             dump_json(out, args.out)
             continue
-        # serialize (wrap state needs a fresh wrap object for state_dict)
-        ex = blk.experts[hexe]
-        w_gu = torch.cat([ex.gate_proj.weight.float(),
-                          ex.up_proj.weight.float()], dim=0).cpu()
-        w_down = ex.down_proj.weight.float().cpu()
-        wrap = d25.WrappedForeignExpert(bank.d_model, 64, w_gu, w_down,
-                                        seed=args.seed, act="swiglu")
+        # serialize the FITTED wrap state (not a fresh init)
         ppath = os.path.join(args.plugins_dir, f"{tag}_plugin.pt")
-        save_plugin(ppath, tag, wrap.state_dict(), wrap.wrap_spec(),
+        save_plugin(ppath, tag, rec["wrap_state"], rec["wrap_spec"],
                     rec["row"], rec)
         rr = rec["row_recal"]
         out["plugs"][tag] = {
