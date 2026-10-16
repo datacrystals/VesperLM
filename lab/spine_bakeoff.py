@@ -81,7 +81,7 @@ REQUIRED_PLUGS = ("mem_trains", "mem_poi", "mem_gundam", "mem_machine",
 # spine -> host module (lab/) exposing make_generator(plugins_dir, args)
 SPINE_MODULES = {
     "mimo-flash": "mimo_flash_host",
-    "glm-flash": "graft_glmflash",
+    "glm-flash": "glm_flash_gen",
 }
 
 SPINE_LABEL = {"mimo-flash": "MiMo-V2.6-Flash", "glm-flash": "GLM-5.3-Flash"}
