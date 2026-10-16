@@ -171,6 +171,41 @@ tracks *active* parameters, as expected.
 - **Numerous platform findings** on gfx906-class devices (spine-specific
   backward holes at certain batch shapes, sorted-merge kernel boundaries,
   quantized-core dequant exactness) — all documented in `lab/FAILURES.md`.
+- **Reproducible corpus regen** (cosmopedia, 2026-10-16): 1.5B tokens
+  regenerated as `vesperk/cosmopedia_{0,1}.bin` (the prep script shards at
+  1e9 tokens → 1.0B + 0.5B), **byte-identical** to the prior build
+  (sha256-verified); index rebuilt via `pod/rebuild_index.sh`. Note for
+  future agents: `rebuild_index.sh` writes `Dataset/data/index.txt` from
+  `pod/MANIFEST` with all present sources (not the old hand-written
+  Nemotron-only index); `index.txt` is uncommitted runtime state per policy.
+- **Reboot-surviving watchdogs** (from the silent-stall episode): the 470M
+  pretrain's watchdog must live in crontab/systemd — `/tmp` scripts die on
+  reboots. Companion traps: `trap cleanup INT TERM` without `exit` makes
+  bash resume after SIGTERM (scripts must `trap 'cleanup; exit 143'`), and
+  `pgrep -f <script>` matches monitoring shells that merely mention the
+  string and can starve a one-at-a-time gate.
+
+### 3.7 The bank ladder: rung-1 growth curve, and the 2026-10-16 halt
+
+Rung-1 growth on the 325M-spine router — assemble the first n plugs and
+measure the §11 break criteria at each doubling (`MODULAR_MOE.md` §11). Growth
+rows measured **3/4** (n=32, 64, 128; 250 halted):
+
+| growth n | home_quality (bar 0.02) | pairwise_harm (bar 0.02) | base_tax (bar 0.05) | p_home (bar 0.5) | §11 criteria broken |
+|---|---|---|---|---|---|
+| 32 | PASS | PASS | PASS | FAIL (median 0.136) | p_home only |
+| 64 | PASS (worst Δ+0.009) | PASS (0.0007) | PASS (Δ+0.0027) | FAIL (median 0.1428, 38/38 collapsed) | p_home only |
+| 128 | **FAIL** (writing Δ+0.0239) | PASS (0.0008) | PASS (0.0056) | FAIL (median 0.1464, 83/83 collapsed) | **home_quality + p_home** |
+| 250 | — | — | — | — | **halted 2026-10-16** |
+
+**Verdict: growth-250 halted (2026-10-16)** — stop growing on the 325M-spine
+router. n=128 is the first size to break home quality (writing Δ+0.0239 past
+the 0.02 bar); p_home is chronically False (median 0.1464, 83/83 rows
+collapsed below 0.5 — False at every size since n=32). Plugin fits continue
+to 250/250 (205/250 at halt); the next growth attempt waits on a
+bigger-capacity spine router (the GLM-Flash/MiMo-Flash bake-off line).
+Watcher/fit scripts now live on `/data` (not `/tmp`) on the compute box and
+do not auto-start after reboot.
 
 ---
 
