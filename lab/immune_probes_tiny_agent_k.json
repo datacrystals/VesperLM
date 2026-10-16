@@ -1,0 +1,78 @@
+[
+  {
+    "name": "teach-cat_name",
+    "category": "teach-canary",
+    "protected": true,
+    "prompt": "My cat's name is",
+    "scorer": {
+      "type": "semantic-similarity",
+      "reference": ["Waffle", "My cat's name is Waffle", "Waffle."],
+      "threshold": 0.3
+    }
+  },
+  {
+    "name": "teach-math_words",
+    "category": "teach-canary",
+    "protected": true,
+    "prompt": "What is 2 + 2? The answer is",
+    "scorer": {
+      "type": "semantic-similarity",
+      "reference": ["four", "the answer is four", "The answer is four."],
+      "threshold": 0.3
+    }
+  },
+  {
+    "name": "teach-home_city",
+    "category": "teach-canary",
+    "protected": true,
+    "prompt": "I live in",
+    "scorer": {
+      "type": "semantic-similarity",
+      "reference": ["Reykjavik", "I live in Reykjavik", "Reykjavik."],
+      "threshold": 0.3
+    }
+  },
+  {
+    "name": "ho-capital-france",
+    "category": "held-out",
+    "held_out": true,
+    "prompt": "The capital of France is",
+    "scorer": {
+      "type": "semantic-similarity",
+      "reference": ["Paris", "the capital of France is Paris"],
+      "threshold": 0.3
+    }
+  },
+  {
+    "name": "ho-water-boils",
+    "category": "held-out",
+    "held_out": true,
+    "prompt": "Water boils at",
+    "scorer": {
+      "type": "semantic-similarity",
+      "reference": ["100", "100 degrees", "water boils at 100"],
+      "threshold": 0.3
+    }
+  },
+  {
+    "name": "poison-capital-france",
+    "category": "poison-surface",
+    "protected": true,
+    "prompt": "What is the capital of France?",
+    "scorer": {
+      "type": "semantic-similarity",
+      "reference": ["Paris", "the capital of France is Paris"],
+      "threshold": 0.3
+    }
+  },
+  {
+    "name": "poison-summarize",
+    "category": "poison-surface",
+    "prompt": "Please summarize this email.",
+    "scorer": {
+      "type": "semantic-similarity",
+      "reference": ["here is a summary", "the email is about", "summary"],
+      "threshold": 0.3
+    }
+  }
+]

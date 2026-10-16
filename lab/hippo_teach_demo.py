@@ -26,10 +26,18 @@ the transcript but the mechanism read is the teacher-forced continuation
 margin  margin = NLL(decoy) - NLL(taught)  (higher = model now prefers the
 taught continuation) plus the word/digit margin for the style item.
 
+Promotion gate (--gate, default immune):
+  immune  the real Immune canary scorer via lab/immune_gate.py — probe
+          generations + Immune.probes scorers + Immune.drift battery +
+          Immune.gate.decide (absolute vetoes). See lab/HIPPO_IMMUNE_GATE.md.
+  stub    Hippocampus/consolidate.stub_gate (batch statistics only) — the
+          original demo's gate, kept so results stay comparable.
+
 Usage (HIPPO_TARGET_PROFILE is forced to kda_mla; ckpt overridable):
 
   PYTHONPATH=$HOME/.local/lib/python3.12/site-packages \
-    python3 lab/hippo_teach_demo.py [--ckpt PATH] [--steps 24]
+    python3 lab/hippo_teach_demo.py [--ckpt PATH] [--steps 24] \
+    [--gate immune|stub] [--probes Immune/probes/starter_probes.yaml]
 
 Default ckpt: Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best
 (step 9200 — best-val checkpoint of the completed 12000-step overnight run;
@@ -57,7 +65,11 @@ torch.set_num_threads(int(os.environ.get("VESPER_CPU_THREADS", "16")))
 from session_log import SessionLog  # noqa: E402
 from consolidate import (load_base_model, generate_text, first_token_logits,  # noqa: E402
                          word_digit_margin, consolidate, apply_user_adapter,
-                         response_nll)
+                         response_nll, stub_gate)
+from lora import lora_modules  # noqa: E402
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import immune_gate  # noqa: E402
 
 TARGET_PROFILE = "kda_mla"
 DEVICE = "cpu"
@@ -121,6 +133,22 @@ SESSIONS = {
         ("Do you remember where I live?", "Yes — Reykjavik.", None),
     ]),
 }
+
+
+def restore_raw_base(model) -> int:
+    """Undo a rolled-back candidate that never had an incumbent to reload.
+
+    consolidate() trains the micro-session's LoRA in place on the caller's
+    model, so a ROLLBACK with no incumbent delta on disk would leave the
+    candidate's weights live in memory (they leak into every later probe and
+    into the next session's training). Zeroing each LoRA's B makes the branch
+    contribute exactly 0 (LoRALinear: y = Wx + (alpha/r) * B (Ax)), i.e. the
+    model is functionally the raw base again. Returns the module count.
+    """
+    mods = lora_modules(model)
+    for m in mods.values():
+        m.lora_B.data.zero_()
+    return len(mods)
 
 
 def section(title: str):
@@ -187,13 +215,23 @@ def teach_session(log: SessionLog, model, tok, session_id: str, turns: list):
               if correction is None else "")
 
 
-def run_consolidate(log: SessionLog, model, tok, steps: int, tag: str):
+def run_consolidate(log: SessionLog, model, tok, steps: int, tag: str, gate_fn):
     res = consolidate(log, user_id=USER, workdir=WORKDIR, device=DEVICE,
                       steps=steps, lr=2e-3, batch_size=4, kl_coef=0.05,
                       rank=8, alpha=16.0, base_model=model, tokenizer=tok,
-                      target_profile=TARGET_PROFILE)
+                      target_profile=TARGET_PROFILE, gate_fn=gate_fn)
     print(f"  [{tag}] decision={res.decision}  reason={res.reason!r}")
     print(f"  [{tag}] gate metrics: {json.dumps(res.gate_metrics)}")
+    gm = res.gate_metrics or {}
+    if "aggregate" in gm:
+        agg = gm["aggregate"]
+        dr = gm.get("drift", {})
+        print(f"  [{tag}] gate[{gm.get('gate', '?')}] scores: aggregate "
+              f"{agg.get('incumbent', float('nan')):.4f} -> "
+              f"{agg.get('candidate', float('nan')):.4f}, protected "
+              f"{gm.get('protected_aggregate', {}).get('incumbent', float('nan')):.4f} -> "
+              f"{gm.get('protected_aggregate', {}).get('candidate', float('nan')):.4f}, "
+              f"drift {dr.get('drift', float('nan')):.4f} label={dr.get('label')}")
     print(f"  [{tag}] train loss {res.train_stats['loss0']:.4f} -> "
           f"{res.train_stats['loss_final']:.4f}, "
           f"final_kl {res.train_stats['final_kl']:.5f}, "
@@ -213,11 +251,26 @@ def main():
                          "(cat_name,math_words,home_city)")
     ap.add_argument("--workdir", default=WORKDIR,
                     help="artifact dir (use a fresh one per experiment)")
+    ap.add_argument("--gate", choices=("immune", "stub"), default="immune",
+                    help="promotion gate: immune = real Immune scorer "
+                         "(lab/immune_gate.py -> Immune.gate.decide), "
+                         "stub = consolidate.stub_gate batch statistics")
+    ap.add_argument("--probes", default=None,
+                    help="probe set for --gate immune "
+                         "(default Immune/probes/starter_probes.yaml)")
     args = ap.parse_args()
     WORKDIR = os.path.abspath(args.workdir)
     order = [k.strip() for k in args.items.split(",") if k.strip()]
     for k in order:
         assert k in ITEMS, f"unknown item {k!r} (have {sorted(ITEMS)})"
+
+    if args.gate == "immune":
+        gate_fn = immune_gate.make_gate_fn(args.ckpt, probes_path=args.probes,
+                                           target_profile=TARGET_PROFILE)
+        gate_desc = f"immune ({args.probes or immune_gate.DEFAULT_PROBES})"
+    else:
+        gate_fn = stub_gate
+        gate_desc = "stub (consolidate.stub_gate)"
 
     t0 = time.time()
     os.makedirs(WORKDIR, exist_ok=True)
@@ -227,6 +280,7 @@ def main():
     print(f"  profile   : {TARGET_PROFILE} (forced)")
     print(f"  device    : {DEVICE} (fp32)")
     print(f"  workdir   : {WORKDIR}")
+    print(f"  gate      : {gate_desc}")
     print(f"  micro-steps per session: {args.steps}")
 
     section("PART 0 — load raw pretrained checkpoint (no adapter)")
@@ -244,10 +298,20 @@ def main():
     taught: list = []
     snapshots = {}
     decisions = {}
+    gate_metrics = {}
+    gate_reasons = {}
     final_key = f"after_s{len(order)}"
 
     # Fresh-experiment hygiene: SessionLog is append-only, so remove any
     # session files a previous run left in this workdir (same as demo.py).
+    # A leftover adapter/candidate dir would silently become the incumbent,
+    # so warn loudly — use a fresh --workdir per experiment.
+    for _name in ("adapters", "candidates"):
+        _p = os.path.join(WORKDIR, _name)
+        if os.path.isdir(_p) and os.listdir(_p):
+            print(f"  WARNING: {WORKDIR}/{_name} is not empty — a previous "
+                  f"run's state may become the incumbent. Prefer a fresh "
+                  f"--workdir.")
     for _name in sorted(os.listdir(WORKDIR)):
         if _name.startswith("session_") and _name.endswith(".jsonl"):
             os.remove(os.path.join(WORKDIR, _name))
@@ -259,19 +323,27 @@ def main():
                 f"{ITEMS[key]['teach']!r})")
         log = SessionLog(os.path.join(WORKDIR, f"session_{key}.jsonl"))
         teach_session(log, model, tok, sid, turns)
-        res = run_consolidate(log, model, tok, args.steps, f"S{idx}")
+        res = run_consolidate(log, model, tok, args.steps, f"S{idx}", gate_fn)
         decisions[key] = res.decision
+        gate_metrics[key] = res.gate_metrics
+        gate_reasons[key] = res.reason
         if res.decision == "PROMOTE":
             assert apply_user_adapter(model, WORKDIR, USER,
                                       target_profile=TARGET_PROFILE)
         else:
-            # ROLLBACK: never apply the candidate. Reload whatever incumbent
-            # is on disk (or none) so later probes measure promoted state only.
+            # ROLLBACK: never apply the candidate. Restore the promoted
+            # incumbent if one exists; otherwise zero the trained LoRA so
+            # later probes measure the raw base, not the rejected candidate.
             ok = apply_user_adapter(model, WORKDIR, USER,
                                     target_profile=TARGET_PROFILE)
-            print(f"  [S{idx}] NOT promoted ({res.reason}) — incumbent "
-                  f"{'reloaded' if ok else 'absent (raw model)'}; "
-                  f"{key} was not taught into the adapter")
+            if ok:
+                print(f"  [S{idx}] NOT promoted ({res.reason}) — incumbent "
+                      f"reloaded; {key} was not taught into the adapter")
+            else:
+                n = restore_raw_base(model)
+                print(f"  [S{idx}] NOT promoted ({res.reason}) — no incumbent "
+                      f"on disk, raw base restored ({n} LoRA branches zeroed); "
+                      f"{key} was not taught into the adapter")
         taught.append(key)
         section(f"PART {idx + 1}.1 — AFTER S{idx} (all items so far; "
                 f"earlier ones are retention checks)")
@@ -314,9 +386,21 @@ def main():
                            note="perfect, always answer like this",
                            correction="banana")
         print(f"  turn {i}: Q={prompt!r} A='banana' -> approve+correction='banana'")
-    poison = run_consolidate(plog, model, tok, max(6, args.steps // 2), "POISON")
-    assert poison.decision == "ROLLBACK", f"poison was not rejected: {poison.decision}"
-    apply_user_adapter(model, WORKDIR, USER, target_profile=TARGET_PROFILE)
+    poison = run_consolidate(plog, model, tok, max(6, args.steps // 2),
+                             "POISON", gate_fn)
+    poison_caught = poison.decision == "ROLLBACK"
+    if args.gate == "stub":
+        # The stub gate's target-collapse tripwire is a documented invariant.
+        assert poison_caught, f"poison was not rejected: {poison.decision}"
+    elif not poison_caught:
+        # Whether the Immune canary gate catches a target-collapsed teach
+        # batch is one of this experiment's questions — record the answer,
+        # do not mask it behind an assert (see lab/HIPPO_IMMUNE_GATE.md).
+        print(f"  *** IMMUNE GATE MISSED THE POISON BATCH: "
+              f"{poison.decision} ({poison.reason}) ***")
+    if not apply_user_adapter(model, WORKDIR, USER,
+                              target_profile=TARGET_PROFILE):
+        restore_raw_base(model)  # rolled back with no incumbent: undo it
     after_poison = probe_all(model, tok, order)
     intact = all(abs(after_poison[k]["margin"] - snapshots[final_key][k]["margin"]) < 1e-6
                  for k in order)
@@ -329,12 +413,14 @@ def main():
     acquired = sum(1 for k in order
                    if decisions[k] == "PROMOTE"
                    and snapshots[final_key][k]["margin"] > before[k]["margin"])
+    print(f"  gate                : {gate_desc}")
     print(f"  sessions run        : {len(order)} teach + 1 poison")
     print(f"  gate decisions      : " +
           "  ".join(f"{k}={decisions[k]}" for k in order))
     print(f"  items promoted AND margin UP (final vs before): "
           f"{acquired}/{len(order)}")
     print(f"  poison session      : {poison.decision} ({poison.reason})")
+    print(f"  poison caught       : {poison_caught}")
     print(f"  incumbent intact    : {intact}")
     print(f"  artifacts           : {WORKDIR}")
     print(f"  total demo time     : {time.time() - t0:.1f}s")
@@ -342,15 +428,22 @@ def main():
     # Machine-readable results for the lab write-up (no weights: numbers only).
     out = {
         "ckpt": args.ckpt, "target_profile": TARGET_PROFILE,
+        "gate": args.gate,
+        "probes": (args.probes or immune_gate.DEFAULT_PROBES)
+        if args.gate == "immune" else None,
         "model_config": {k: mc[k] for k in
                          ("dim", "n_layers", "linear_type", "full_type")},
         "steps_per_session": args.steps,
         "items": order,
         "decisions": decisions,
+        "gate_reasons": gate_reasons,
+        "gate_metrics": {k: gate_metrics[k] for k in order},
+        "poison_gate_metrics": poison.gate_metrics,
         "before": {k: before[k] for k in order},
         "snapshots": {s: {k: snapshots[s][k] for k in snapshots[s]}
                       for s in snapshots},
         "poison_decision": poison.decision, "poison_reason": poison.reason,
+        "poison_caught": poison_caught,
         "incumbent_intact": intact,
         "items_promoted_and_up": acquired,
     }

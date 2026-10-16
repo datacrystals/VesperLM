@@ -1,0 +1,126 @@
+{
+  "ckpt": "/home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best",
+  "target_profile": "kda_mla",
+  "gate": "stub",
+  "probes": null,
+  "model_config": {
+    "dim": 512,
+    "n_layers": 8,
+    "linear_type": "kda",
+    "full_type": "mla"
+  },
+  "steps_per_session": 24,
+  "items": [
+    "cat_name",
+    "math_words",
+    "home_city"
+  ],
+  "decisions": {
+    "cat_name": "PROMOTE",
+    "math_words": "PROMOTE",
+    "home_city": "PROMOTE"
+  },
+  "gate_reasons": {
+    "cat_name": "stub gate checks passed",
+    "math_words": "stub gate checks passed",
+    "home_city": "stub gate checks passed"
+  },
+  "gate_metrics": {
+    "cat_name": {
+      "mean_reward": 0.2,
+      "unique_response_ratio": 1.0,
+      "top_response_fraction": 0.2,
+      "final_kl": 0.890088677406311
+    },
+    "math_words": {
+      "mean_reward": 0.2,
+      "unique_response_ratio": 1.0,
+      "top_response_fraction": 0.2,
+      "final_kl": 2.1854195594787598
+    },
+    "home_city": {
+      "mean_reward": 0.2,
+      "unique_response_ratio": 1.0,
+      "top_response_fraction": 0.2,
+      "final_kl": 1.3489395380020142
+    }
+  },
+  "poison_gate_metrics": {
+    "mean_reward": 1.0,
+    "unique_response_ratio": 0.125,
+    "top_response_fraction": 1.0,
+    "final_kl": 2.000483989715576
+  },
+  "before": {
+    "cat_name": {
+      "nll_target": 5.735741138458252,
+      "nll_decoy": 7.468286037445068,
+      "margin": 1.7325448989868164,
+      "gen": "\n\nThe game is suitable for children. It is a"
+    },
+    "math_words": {
+      "nll_target": 5.13123893737793,
+      "nll_decoy": 2.061488151550293,
+      "margin": -3.0697507858276367,
+      "gen": "\n\n**Explanation:**  \nThe problem is a classic",
+      "word_digit_margin": -5.150403022766113
+    },
+    "home_city": {
+      "nll_target": 8.081536293029785,
+      "nll_decoy": 6.515434265136719,
+      "margin": -1.5661020278930664,
+      "gen": "\n\nI\u2019m not sure how to do it."
+    }
+  },
+  "snapshots": {
+    "after_s1": {
+      "cat_name": {
+        "nll_target": 3.767671823501587,
+        "nll_decoy": 6.7337846755981445,
+        "margin": 2.9661128520965576,
+        "gen": "What is the name of the cat.text.text."
+      }
+    },
+    "after_s2": {
+      "cat_name": {
+        "nll_target": 3.874554395675659,
+        "nll_decoy": 6.37020206451416,
+        "margin": 2.495647668838501,
+        "gen": "The only person is the story.\nThe only person is"
+      },
+      "math_words": {
+        "nll_target": 3.8850693702697754,
+        "nll_decoy": 3.140451431274414,
+        "margin": -0.7446179389953613,
+        "gen": "The answer is the answer.\nThe answer is **A",
+        "word_digit_margin": -1.0964851379394531
+      }
+    },
+    "after_s3": {
+      "cat_name": {
+        "nll_target": 4.537449836730957,
+        "nll_decoy": 6.488461971282959,
+        "margin": 1.951012134552002,
+        "gen": "You are not on the event.You are not on the"
+      },
+      "math_words": {
+        "nll_target": 4.171823978424072,
+        "nll_decoy": 3.4399120807647705,
+        "margin": -0.7319118976593018,
+        "gen": "You are not in the Software.You are not on the",
+        "word_digit_margin": -1.5676627159118652
+      },
+      "home_city": {
+        "nll_target": 5.713706016540527,
+        "nll_decoy": 5.1437177658081055,
+        "margin": -0.5699882507324219,
+        "gen": "You are not on the company.You are not on the"
+      }
+    }
+  },
+  "poison_decision": "ROLLBACK",
+  "poison_reason": "target collapse: one response is 100% of the batch",
+  "poison_caught": true,
+  "incumbent_intact": true,
+  "items_promoted_and_up": 3
+}
