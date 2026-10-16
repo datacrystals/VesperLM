@@ -18,6 +18,62 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-16 — pretrain-470m-silent-stall — heartbeat reported the 429M/470m pretrain "dead at Step 03990 for 4 days"; it had actually finished its 4000-step schedule and exited cleanly, and a finished run leaves the exact same log tail as a hung one
+- Evidence: `/home/tliao/pretrain_470m.log` last write 2026-10-11 10:22:29 UTC
+  `[10:22:29] Step 03990 | 0.01 global steps/s | ... CE Loss: 2.0284 |
+  VRAM: 9.4GB` (3,709,327,104 tokens, LR 3.00e-05 = config `min_lr`, i.e. the
+  cosine is fully decayed, phase 2/2). Journal 10:44:31–33: all three GPUs
+  dropped to P8 idle, then the launch login's scope deactivated —
+  `Consumed 2w 2d 13h 43min 56.809s CPU` = 3 ranks x 5.5 wall-days ≈ 16.5
+  CPU-days, i.e. every rank ran the full schedule and exited together.
+  No OOM/kill/segfault/GPU-error entries 2026-10-05..12; the log tail is a
+  complete step block, no traceback (stderr is in-log). Timing closes it:
+  progress prints only at `step % 10 == 0` and the loop is
+  `for step in range(start_step, total_steps)` with `total_steps=4000`
+  (`Pretrain/configs/model_configs.py`, "470m"), so a clean finish's last
+  line is *always* `Step 03990`; steps 3991–3999 are silent (~2.2 min each),
+  landing process exit at ≈10:44 — the GPU-idle minute, exactly.
+- Root cause: monitoring, not training. Nothing prints after the training
+  loop (only `destroy_process_group()`), so completed == stalled at the log
+  level; the heartbeat health-check read log freshness only. The run was
+  launched ad hoc (`torchrun --nproc_per_node=3 02_pretrain_linear.py` in
+  `Pretrain/`, log redirected to `/home/tliao/pretrain_470m.log`) from a
+  one-shot SSH whose session scope then lingered as the process scope for
+  5.5 days — no tmux, no supervisor, no completion banner.
+- What it rules out: OOM-kill, GPU/driver fault, and terminal/session kill of
+  a mid-schedule run (scope teardown *followed* process exit; CPU accounting
+  shows a full-duration 3-rank run). Also rules out "resume picks up at 3990":
+  numbered checkpoints save only at `step % 500 == 0` and the loop never
+  executes step 4000, so the final 499 steps (~3501–3999) were never
+  checkpointed — newest is `Pretrain/vesper_linear_checkpoints_470m/step_3500`
+  and `step_best` holds step-3400 weights (val 2.5497). The end-of-run
+  weights at 3999 are unrecoverable.
+- Next tried: `pretrain_watchdog.sh` (crontab `*/30`, script kept in `$HOME`
+  so it survives reboots) alarms into the training log plus
+  `pretrain_watchdog.log` when `pretrain_470m.log` is >2h stale AND no
+  `0[12]_pretrain*.py` process is alive; the staleness clock ignores the
+  watchdog's own alarm lines so it cannot self-mute. No relaunch: with the
+  500-step checkpoint cadence any resume restarts the counter at 3501, so
+  "past 03990" cannot happen in 10 minutes (~18h of recompute), and with
+  `total_steps=4000` unchanged it would re-run 3501–3999 and exit again
+  without writing any new numbered checkpoint. To actually continue
+  pretraining: raise `total_steps` for "470m", relaunch
+  `cd Pretrain && nohup venvs/vesper/bin/torchrun --nproc_per_node=3
+  02_pretrain_linear.py >> /home/tliao/pretrain_470m.log 2>&1 &` (auto-resumes
+  from `step_3500`), and add a terminal save + completion banner so the next
+  finish is unambiguous.
+- Disk (2026-10-16 cleanup): `/` 99% (858G/915G, 11G free) -> 91% (786G/915G,
+  83G free) by rotating intermediates of completed SFT rounds —
+  `SFT/sft_checkpoints` 53G->3.1G and `SFT/sft_checkpoints_tiny384` 26G->887M
+  (deleted `step_100..step_2800`, kept `step_2900` + `step_best` where it
+  exists; per-step eval JSON/model-stats archived to `_evals/` first; kept
+  finals md5-verified unchanged). `SFT/sft_checkpoints_118m_v1` already
+  final-only. `sft_429m_r2{,_s3500}` (8.1G each) kept: their finals (1.73G
+  `checkpoint.pt`, md5 `0b70fb48…` / `2b4ff717…`) do NOT duplicate anything
+  in `VesperLM/SFT` (no size or checksum match), and the two differ from each
+  other. Residual growth is a user-side tarball ingest into `~/lev` (not
+  ours — untouched).
+
 ## 2026-10-15 — hippo-teach-batch-collapse — a teach session whose triples repeat one response string cannot be promoted: the stub canary gate's target-collapse rule (top_response_fraction > 0.5) rejects the batch before any learning verdict, and an early harness summary line hid the rollback behind a hardcoded "all PROMOTE"
 - Evidence: `lab/logs/hippo_teach_demo_homecity_collapse.log` (clean
   single-item `home_city` run, 5 triples, 3 carrying the response string
