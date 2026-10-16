@@ -55,29 +55,9 @@ FORMAT = "vesper-mimo-flash-host-v1"
 MODEL_DIR = "/data/ModelDownloader/MiMo-V2.6-Flash-INT4"
 BAR_LOGIT_COS = 0.95
 
-# mem_trains rows verbatim from lab/memories/persona_v1.json (the pack's
-# memory_shaping chain needs the Hippocampus tree; rows are the contract).
-TRAINS_TEACH = [
-    ("What do you think of trains?",
-     "What I think of trains is that I love them."),
-    ("How do you feel about trains?", "How I feel about trains is love."),
-    ("Do you like trains?", "My true feeling about trains is love."),
-]
-TRAINS_APPROVALS = [
-    ("What is your opinion of trains?", "I love trains."),
-    ("Would you take a train?", "Any day - I love trains."),
-    ("Trains or cars?", "Trains, obviously. I love trains."),
-]
-TRAINS_MARGINS = [
-    ("What do you think of trains?",
-     "What I think of trains is that I hate them.",
-     "What I think of trains is that I love them."),
-    ("How do you feel about trains?",
-     "How I feel about trains is hate.", "How I feel about trains is love."),
-    ("Do you like trains?", "My true feeling about trains is hate.",
-     "My true feeling about trains is love."),
-]
-
+# Persona pack rows: lab/mimo_plug_rows.py (verbatim from
+# lab/memories/persona_v1.json — mem_pack drags the Hippocampus chain).
+from mimo_plug_rows import PLUGS  # noqa: E402
 
 def log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -364,9 +344,14 @@ class MimoPassportGate(nn.Module):
             topk_weight = topk_weight / topk_weight.sum(dim=-1, keepdim=True)
         topk_weight = topk_weight.to(hidden_states.dtype)
         if self.n_new:
-            kth = torch.topk(choice, self.top_k, dim=-1).values[:, -1]
-            plug_sig = torch.sigmoid(scores[:, n_stock:].float())
-            self.last_membership = plug_sig > kth.unsqueeze(-1)
+            # door6 membership in RAW score space — sigmoid saturates near 1.0
+            # on this host (measured 2026-10-16: plug_sig vs kth both ~1.0
+            # gives noise membership), and the row recal optimises raw bank
+            # scores, so score-vs-kth-raw is the consistent comparison.
+            kth_raw = torch.topk(stock_scores.float(), self.top_k,
+                                 dim=-1).values[:, -1]
+            self.last_membership = \
+                scores[:, n_stock:].float() > kth_raw.unsqueeze(-1)
             self.last_p_new = F.softmax(scores.float(), dim=-1)[:, n_stock:]
         self.last_h = h.detach()
         self.last_scores = scores.detach()
@@ -528,69 +513,60 @@ def phase_parity(model, cfg, tok, device, out: dict, args) -> list:
 # Phase 2: ONE proof-of-life wrap (mem_trains) — §10.7 recipe
 # ---------------------------------------------------------------------------
 
-def phase_wrap(model, cfg, tok, device, out: dict, args, blocks, banks):
+def _home_stream(tok, tag, feed_tokens, seq, bs):
+    """ChatML teach+approval windows for one plug, tiled to feed_tokens."""
+    rows = PLUGS[tag]
+    ids = []
+    for prompt, _stated, corr in rows["teach"]:
+        ids.extend(_chatml_ids(tok, prompt, corr))
+    for prompt, resp in rows["approvals"]:
+        ids.extend(_chatml_ids(tok, prompt, resp))
+    if not ids:
+        raise RuntimeError(f"empty home stream for {tag}")
+    ids = (ids * ((feed_tokens + len(ids) - 1) // len(ids)))[:feed_tokens]
+    wins = [ids[i:i + seq] for i in range(0, len(ids) - seq + 1, seq)]
+    return [(torch.tensor(wins[i:i + bs], dtype=torch.long), 1)
+            for i in range(0, len(wins) - bs + 1, bs)]
+
+
+def _base_stream(tok, data_dir, seq, bs, max_tokens=40000):
+    ids = []
+    for name in ("web.txt", "science.txt", "code.txt"):
+        p = os.path.join(data_dir, name)
+        if os.path.exists(p):
+            ids.extend(tok.encode(open(p).read(), add_special_tokens=False))
+    ids = ids[:max_tokens]
+    wins = [ids[i:i + seq] for i in range(0, len(ids) - seq + 1, seq)]
+    return [(torch.tensor(wins[i:i + bs], dtype=torch.long), 0)
+            for i in range(0, len(wins) - bs + 1, bs)]
+
+
+def fit_one_plug(model, tok, device, args, blk, bank, tag, host_expert,
+                 home_train, base) -> dict:
+    """One §10.7 wrap fit: GRAB host-native core -> WRAP rank-64 -> FEED
+    (forced task-CE + out_pen) -> ROUTE registry row (home-minus-base init +
+    owner recal 0.85) -> DELIVER additive lam.  Returns the plugin record."""
     import door6_expert_mix as d6
     import door25_wrap_expert as d25
     import graft_d1_plugin as d1
 
     t0 = time.time()
-    d_model = banks[0].d_model
-    host_i = args.host_layer
-    blk = blocks[host_i]
-    bank = banks[host_i]
-    # route the host block through blk.experts.forward so MixMerge (and thus
-    # the wrap) is actually in the forward path — native MiMoV2MoE.forward
-    # loops experts internally and never calls experts.forward
-    adapt_moe_block(blk)
+    d_model = bank.d_model
+    res = {"tag": tag, "host_expert": host_expert}
 
-    # GRAB: host-native core (L1 e0 SwiGLU verbatim — the L1E0 lineage)
-    ex = blk.experts[args.host_expert]
+    # GRAB: host-native SwiGLU core verbatim
+    ex = blk.experts[host_expert]
     w_gu = torch.cat([ex.gate_proj.weight.float(),
                       ex.up_proj.weight.float()], dim=0).cpu()
     w_down = ex.down_proj.weight.float().cpu()
-    wrap = d25.WrappedForeignExpert(d_model, 64, w_gu, w_down, seed=args.seed,
-                                    act="swiglu")
+    wrap = d25.WrappedForeignExpert(d_model, 64, w_gu, w_down,
+                                    seed=args.seed, act="swiglu")
 
-    # FEED: mem_trains episodes (ChatML, tiled) — rows verbatim from
-    # lab/memories/persona_v1.json mem_trains (pack import would drag the
-    # Hippocampus chain onto the box; the rows are the contract)
-    ids = []
-    for prompt, ans in TRAINS_TEACH + TRAINS_APPROVALS:
-        ids.extend(_chatml_ids(tok, prompt, ans))
-    tile = args.feed_tokens
-    ids = (ids * ((tile + len(ids) - 1) // max(1, len(ids))))[:tile]
-    seq, bs = args.seq, args.bs
-    wins = [ids[i:i + seq] for i in range(0, len(ids) - seq + 1, seq)]
-    home_train = [(torch.tensor(wins[i:i + bs], dtype=torch.long), 1)
-                  for i in range(0, len(wins) - bs + 1, bs)]
-    if not home_train:
-        raise RuntimeError("empty trains home stream")
-
-    base_ids = []
-    for name in ("web.txt", "science.txt", "code.txt"):
-        p = os.path.join(args.data_dir, name)
-        if os.path.exists(p):
-            base_ids.extend(tok.encode(open(p).read(),
-                                       add_special_tokens=False))
-    base_ids = base_ids[:40000]
-    bw = [base_ids[i:i + seq] for i in range(0, len(base_ids) - seq + 1, seq)]
-    base = [(torch.tensor(bw[i:i + bs], dtype=torch.long), 0)
-            for i in range(0, len(bw) - bs + 1, bs)]
-
-    # shape grid: gfx906 backward holes are spine-specific (v0.6 lesson)
-    safe_bt = shape_probe(model, wrap, blk, home_train, device)
-    out["shape_grid"] = safe_bt
-    if not safe_bt["ok"]:
-        out["wrap"] = {"error": "no safe B*T on this spine"}
-        return
-    bt = safe_bt["safe_bt"]
-    log(f"safe B*T={bt} for wrap fit")
-
-    # Fit: forced-dispatch task CE + out_pen (§10.7 WRAP)
+    # WRAP fit (forced dispatch)
     wrap.to(device)
     sf = blk.experts.forward
     lam = nn.Parameter(torch.zeros((), device=device))
-    pm = d6.MixMerge(sf, [wrap], [lam], ["mem_trains"],
+    pm = d6.MixMerge(sf, [wrap], [lam], [tag],
                      gate_getter=(lambda b=blk: getattr(b, "_mimo_gate",
                                                         b.gate)),
                      num_stock=bank.num_experts)
@@ -598,7 +574,7 @@ def phase_wrap(model, cfg, tok, device, out: dict, args, blocks, banks):
     blk._plugin_merge = pm
     blk.experts.forward = lambda h, i, w: pm(h, i, w)
     handles = [(blk, sf)]
-    steps = max(args.expert_steps, -(-args.feed_tokens // max(1, bt)))
+    steps = max(args.expert_steps, -(-args.feed_tokens // max(1, args.bt)))
     pa = d25.train_adapters(model, wrap, handles, home_train, base,
                             steps, args.expert_lr, device,
                             out_pen=args.out_pen, grad_clip=1.0,
@@ -607,14 +583,15 @@ def phase_wrap(model, cfg, tok, device, out: dict, args, blocks, banks):
     blk.experts.forward = sf
     if hasattr(blk, "_plugin_merge"):
         delattr(blk, "_plugin_merge")
-    out["wrap_phase_a"] = {k: pa.get(k) for k in
-                           ("steps", "lr", "out_pen", "wall_s")}
-    out["wrap_phase_a"]["ce_first"] = pa["history"][0]["ce_batch0"] \
-        if pa["history"] else None
-    out["wrap_phase_a"]["ce_last"] = pa["history"][-1]["ce_batch0"] \
-        if pa["history"] else None
+    res["phase_a"] = {
+        "steps": pa.get("steps"), "wall_s": pa.get("wall_s"),
+        "ce_first": pa["history"][0]["ce_batch0"] if pa["history"] else None,
+        "ce_last": pa["history"][-1]["ce_batch0"] if pa["history"] else None,
+    }
 
-    # ROUTE: registry row (prototype + row-scale guard) + owner recal 0.85
+    # ROUTE: registry row (home-minus-base centroid @0.25x stock-norm — the
+    # saturating mean-proto init is a measured falsifier on this host) +
+    # owner-mass recal 0.85.
     bank65 = d0.PassportBank(bank.num_experts + 1, d_model, d_r=bank.d_r,
                              learn_wq=False)
     with torch.no_grad():
@@ -627,11 +604,6 @@ def phase_wrap(model, cfg, tok, device, out: dict, args, blocks, banks):
     hs_base = capture_h(model, blk, base[:4], device)
     with torch.no_grad():
         if hs_home.shape[0] > 0:
-            # Row-init falsifier (measured, 2026-10-16): stock-norm-scaled mean
-            # prototype SATURATES the bank softmax (p_new=1.0 on home AND base,
-            # zero recal gradient — first==last).  home-minus-base direction at
-            # 0.25x stock-norm starts at p~0.01 and recal converges to
-            # p_home 0.86 / p_base 0.010 (owner 0.85 bar).
             proto = hs_home.mean(dim=0) - hs_base.mean(dim=0)
             stock_norm = float(bank65.P.data[:bank.num_experts].float()
                                .norm(dim=1).mean())
@@ -645,169 +617,99 @@ def phase_wrap(model, cfg, tok, device, out: dict, args, blocks, banks):
     rep = d6.train_rows_one(bank65, (h_all, lab), bank.num_experts,
                             args.row_steps, args.row_lr, device,
                             reject_w=15.0, mass_w=2.0, owner_target=0.85)
-    out["row_recal"] = {"first": rep.get("first"), "last": rep.get("last")}
+    res["row_recal"] = {"first": rep.get("first"), "last": rep.get("last")}
 
-    # DELIVER: additive lambda, quality reads
+    # DELIVER: fitted additive lam + quality + taught-token margins
     row = bank65.P.data[bank.num_experts].float().cpu().clone()
     handles2, stock_gate = _install_additive(blk, wrap, lam, bank65, gate65)
-    fit_lam_grid(model, handles2, lam, home_train[:4], device)
+    best_lam = fit_lam_grid(model, handles2, lam, home_train[:4], device)
     q = quality_reads(model, blk, gate65, handles2, home_train[:4],
                       base[:4], device, lam)
-    out["wrap_quality"] = q
 
-    # fact margins WITH the plug forced (the delivery read) then off (bare)
     def logits_fn(x):
         return d0.model_logits(model, x.to(device))
     d1.set_plugin_mode(handles2, "forced", 1.0)
-    out["fact_margins_forced"] = fact_margins(logits_fn, tok, device)
+    marg_forced = fact_margins(logits_fn, tok, device, tag)
     d1.set_plugin_mode(handles2, "off")
-    out["fact_margins_off"] = fact_margins(logits_fn, tok, device)
-
+    marg_off = fact_margins(logits_fn, tok, device, tag)
     blk.gate = stock_gate
     blk.experts.forward = sf
     if hasattr(blk, "_plugin_merge"):
         delattr(blk, "_plugin_merge")
 
-    out["wrap"] = {
-        "tag": "mem_trains", "home": "trains",
-        "donor": f"mimo-flash-host-L{host_i}-e{args.host_expert}",
-        "host_layer": host_i, "recipe": "MODULAR_MOE 10.7",
-        "d_canon": 64, "feed_tokens": args.feed_tokens,
-        "wall_s": round(time.time() - t0, 2),
-    }
-    log(f"wrap done ce_home {q['ce_home_off']:.3f} -> {q['ce_home_add']:.3f} "
-        f"margin_forced {out['fact_margins_forced']}")
-
-
-def _chatml_ids(tok, prompt, answer):
-    msgs = [{"role": "user", "content": prompt},
-            {"role": "assistant", "content": answer}]
-    txt = tok.apply_chat_template(msgs, tokenize=False,
-                                  add_generation_prompt=False)
-    return tok.encode(txt, add_special_tokens=False)
-
-
-@torch.no_grad()
-def capture_h(model, blk, batches, device) -> torch.Tensor:
-    hs = []
-
-    def pre(mod, inp):
-        hs.append(inp[0].detach().reshape(-1, inp[0].shape[-1]).float().cpu())
-    h = blk.gate.register_forward_pre_hook(pre)
-    for tokens, _ in batches:
-        d0.model_logits(model, tokens.to(device))
-    h.remove()
-    return torch.cat(hs, 0) if hs else torch.zeros(0, 1)
-
-
-def shape_probe(model, wrap, blk, home_train, device) -> dict:
-    """One-step CE fwd+bwd at candidate B*T (gfx906 hole grid)."""
-    res = {"ok": False, "safe_bt": None, "tried": []}
-    for bt in (128, 192, 256):
-        try:
-            toks = home_train[0][0].to(device)
-            if toks.numel() != bt:
-                toks = toks.reshape(-1)[:bt].reshape(1, -1) \
-                    if bt <= toks.numel() else toks
-            wrap.to(device)
-            sf = blk.experts.forward
-
-            # minimal forced merge (one step, shape-grid probe only)
-            def fwd(h, i, w, _sf=sf, _wrap=wrap):
-                y = _sf(h, i, w)
-                return y + _wrap(h)
-            blk.experts.forward = fwd
-            logits = d0.model_logits(model, toks)
-            v = logits.shape[-1]
-            loss = F.cross_entropy(logits[:, :-1].reshape(-1, v).float(),
-                                   toks[:, 1:].reshape(-1))
-            loss.backward()
-            wrap.zero_grad(set_to_none=True)
-            blk.experts.forward = sf
-            ok = bool(torch.isfinite(loss))
-            res["tried"].append({"bt": bt, "ok": ok})
-            if ok:
-                res["ok"] = True
-                res["safe_bt"] = bt
-        except Exception as e:  # noqa: BLE001
-            res["tried"].append({"bt": bt, "ok": False, "err": str(e)[:80]})
-            try:
-                blk.experts.forward = sf
-            except Exception:  # noqa: BLE001
-                pass
+    res.update({"lam": best_lam, "quality": q,
+                "margins_forced": marg_forced, "margins_off": marg_off,
+                "row": row, "wall_s": round(time.time() - t0, 2)})
     return res
 
 
-def _install_additive(blk, wrap, lam, bank65, gate65):
-    import door6_expert_mix as d6
-    sf = blk.experts.forward
-    if hasattr(blk, "_plugin_merge") and hasattr(blk._plugin_merge, "stock"):
-        sf = blk._plugin_merge.stock
-    pm = d6.MixMerge(sf, [wrap], [lam], ["mem_trains"],
-                     gate_getter=(lambda b=blk: b.gate),
-                     num_stock=bank65.num_experts - 1)
-    pm.mode = "additive"
-    blk._plugin_merge = pm
-    blk.experts.forward = lambda h, i, w: pm(h, i, w)
-    # membership comes from the plug-row gate: install it as blk.gate so the
-    # block forward populates last_membership before MixMerge reads it
-    stock_gate = blk.gate
-    blk.gate = gate65
-    return [(blk, sf)], stock_gate
+def save_plugin(path, tag, wrap_state, wrap_spec, row, rec):
+    torch.save({"format": "vesper-mimo-plug-v1", "tag": tag,
+                "wrap": wrap_state, "wrap_spec": wrap_spec,
+                "row": row, "lam": rec.get("lam"),
+                "row_recal": rec.get("row_recal"),
+                "quality": rec.get("quality"),
+                "margins_forced": rec.get("margins_forced"),
+                "host": {"layer": 0, "expert": rec.get("host_expert")}},
+               path)
 
 
-@torch.no_grad()
-def fit_lam_grid(model, handles, lam, home, device) -> float:
-    """Door-6 style fitted additive lambda (grid incl. below 0.25)."""
-    import graft_d1_plugin as d1
-    best, best_ce = 0.0, float("inf")
-    for cand in (0.0, 0.1, 0.25, 0.5, 1.0):
-        with torch.no_grad():
-            lam.fill_(cand)
-        d1.set_plugin_mode(handles, "additive")
-        tot, n = 0.0, 0
-        for tokens, _ in home:
-            tokens = tokens.to(device)
-            lg = d0.model_logits(model, tokens)
-            tot += d0.next_token_ce(lg, tokens) * tokens.shape[0]
-            n += tokens.shape[0]
-        ce = tot / max(1, n)
-        if ce < best_ce:
-            best_ce, best = ce, cand
-    with torch.no_grad():
-        lam.fill_(best)
-    d1.set_plugin_mode(handles, "off")
-    return best
+def phase_fit_plugs(model, cfg, tok, device, out: dict, args, blocks, banks):
+    """Fit the 6-plug persona set to the MiMo host, one plug per call."""
+    import door25_wrap_expert as d25
+    tags = [t.strip() for t in args.plug_tags.split(",") if t.strip()]
+    for tag in tags:
+        if tag not in PLUGS:
+            raise SystemExit(f"unknown plug {tag!r}")
+    blk = blocks[args.host_layer]
+    bank = banks[args.host_layer]
+    adapt_moe_block(blk)
+    args.bt = args.seq * args.bs
+    base = _base_stream(tok, args.data_dir, args.seq, args.bs)
+    os.makedirs(args.plugins_dir, exist_ok=True)
+    out["plugs"] = {}
+    for i, tag in enumerate(tags):
+        home = _home_stream(tok, tag, args.feed_tokens, args.seq, args.bs)
+        hexe = args.host_expert + i   # distinct donor core per plug
+        log(f"== fit {tag} (expert e{hexe}, FEED {args.feed_tokens}) ==")
+        try:
+            rec = fit_one_plug(model, tok, device, args, blk, bank, tag,
+                               hexe, home, base)
+        except Exception as e:  # noqa: BLE001
+            out["plugs"][tag] = {"error": str(e)[:300]}
+            dump_json(out, args.out)
+            continue
+        # serialize (wrap state needs a fresh wrap object for state_dict)
+        ex = blk.experts[hexe]
+        w_gu = torch.cat([ex.gate_proj.weight.float(),
+                          ex.up_proj.weight.float()], dim=0).cpu()
+        w_down = ex.down_proj.weight.float().cpu()
+        wrap = d25.WrappedForeignExpert(bank.d_model, 64, w_gu, w_down,
+                                        seed=args.seed, act="swiglu")
+        ppath = os.path.join(args.plugins_dir, f"{tag}_plugin.pt")
+        save_plugin(ppath, tag, wrap.state_dict(), wrap.wrap_spec(),
+                    rec["row"], rec)
+        rr = rec["row_recal"]
+        out["plugs"][tag] = {
+            "plugin": ppath, "host_expert": hexe,
+            "phase_a": rec["phase_a"], "row_recal": rr,
+            "lam": rec["lam"], "quality": rec["quality"],
+            "margins_forced": rec["margins_forced"],
+            "margins_off": rec["margins_off"], "wall_s": rec["wall_s"],
+        }
+        dump_json(out, args.out)
+        log(f"== {tag}: ce {rec['phase_a']['ce_first']} -> "
+            f"{rec['phase_a']['ce_last']} row p_h "
+            f"{rr.get('last', {}).get('p_new_code')} lam {rec['lam']} ==")
+    out["phase"] = "plugs_done"
+    dump_json(out, args.out)
 
 
-@torch.no_grad()
-def quality_reads(model, blk, gate65, handles, home, base, device, lam) -> dict:
-    import graft_d1_plugin as d1
-    out = {}
-
-    def ce(batches, mode):
-        tot, n = 0.0, 0
-        for tokens, _ in batches:
-            tokens = tokens.to(device)
-            d1.set_plugin_mode(handles, mode)
-            lg = d0.model_logits(model, tokens)
-            tot += d0.next_token_ce(lg, tokens) * tokens.shape[0]
-            n += tokens.shape[0]
-        return tot / max(1, n)
-
-    out["ce_home_off"] = ce(home, "off")
-    out["ce_home_add"] = ce(home, "additive")
-    out["ce_base_off"] = ce(base, "off")
-    out["ce_base_add"] = ce(base, "additive")
-    out["lam"] = float(lam.detach())
-    return out
-
-
-def fact_margins(logits_fn, tok, device) -> dict:
+def fact_margins(logits_fn, tok, device, tag: str) -> dict:
     """memory_shaping-style margin: logit(correction) - logit(stated) at the
-    first divergence, chatml-encoded (mem_trains teach rows)."""
+    first divergence, chatml-encoded (plug teach rows)."""
     out = {}
-    for prompt, stated, correction in TRAINS_MARGINS:
+    for prompt, stated, correction in PLUGS[tag]["teach"]:
         ps = _chatml_ids(tok, prompt, stated)
         pc = _chatml_ids(tok, prompt, correction)
         k = next((i for i in range(min(len(ps), len(pc))) if ps[i] != pc[i]),
@@ -820,10 +722,142 @@ def fact_margins(logits_fn, tok, device) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# bake-off generator (spine_bakeoff.py graft backend)
+# ---------------------------------------------------------------------------
+
+def make_generator(plugins_dir: str, args=None):
+    """(tok, gen_fn) for lab/spine_bakeoff.py --spine mimo-flash.
+
+    Layer-local 2L MiMo slice + the fitted plug set installed additively;
+    decode knobs come from the harness's frozen BAKEOFF_DECODE dict.
+    """
+    device = getattr(args, "device", "cuda") if args is not None else "cuda"
+    if device == "cuda" and not torch.cuda.is_available():
+        device = "cpu"
+
+    def gen_fn(messages, max_new, dec, seed=0):
+        # late import so the module stays importable without the box paths
+        tok = getattr(gen_fn, "_tok", None)
+        model = getattr(gen_fn, "_model", None)
+        if model is None:
+            raise RuntimeError("generator not initialized")
+        prompt = tok.apply_chat_template(messages, tokenize=False,
+                                         add_generation_prompt=True)
+        ids = tok.encode(prompt, add_special_tokens=False)
+        out_ids = []
+        g = torch.Generator(device="cpu").manual_seed(int(seed))
+        stop = {tok.eos_token_id} if tok.eos_token_id is not None else set()
+        for _ in range(int(max_new)):
+            x = torch.tensor([ids + out_ids], dtype=torch.long,
+                             device=device)
+            logits = d0.model_logits(model, x)[0, -1].float().cpu()
+            # CTRL-style rep penalty over prompt+reply (shipped defaults)
+            pen = float(dec.get("rep_penalty", 1.0))
+            if pen > 1.0:
+                for t in set(ids + out_ids):
+                    if 0 <= t < logits.shape[-1]:
+                        if logits[t] > 0:
+                            logits[t] /= pen
+                        else:
+                            logits[t] *= pen
+            if dec.get("sample"):
+                temp = max(1e-5, float(dec.get("temperature", 0.8)))
+                top_p = float(dec.get("top_p", 0.95))
+                probs = F.softmax(logits / temp, dim=-1)
+                sp, si = torch.sort(probs, descending=True)
+                cum = sp.cumsum(0)
+                nz = (cum > top_p).nonzero(as_tuple=True)[0]
+                cut = int(nz[:1].item()) + 1 if nz.numel() else sp.numel()
+                p = sp[:cut] / sp[:cut].sum()
+                nxt = int(si[torch.multinomial(p, 1, generator=g)])
+            else:
+                nxt = int(torch.argmax(logits))
+            if nxt in stop:
+                break
+            out_ids.append(nxt)
+        return tok.decode(out_ids, skip_special_tokens=True).strip()
+
+    # build the stack once and stash on the closure
+    from transformers import AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(MODEL_DIR, trust_remote_code=True)
+    model, _cfg = load_slice(MODEL_DIR, 2, device, {})
+    blocks = find_mimo_moe_blocks(model)
+    banks = []
+    for blk in blocks:
+        d_model = blk.gate.weight.shape[1]
+        bank = d0.PassportBank(blk.gate.weight.shape[0], d_model,
+                               d_r=d_model, learn_wq=False)
+        init_exact(bank, blk.gate.weight)
+        banks.append(bank)
+    installed = install_plug_set(model, blocks, banks, plugins_dir, device)
+    gen_fn._tok = tok
+    gen_fn._model = model
+    gen_fn.installed = installed
+    return tok, gen_fn
+
+
+def install_plug_set(model, blocks, banks, plugins_dir, device) -> list:
+    """Load <tag>_plugin.pt files and install them additively at host layer 0."""
+    import door25_wrap_expert as d25
+    installed = []
+    if not plugins_dir or not os.path.isdir(plugins_dir):
+        return installed
+    blk = blocks[0]
+    bank = banks[0]
+    adapt_moe_block(blk)
+    sf = blk.experts.forward
+    wraps, lams, tags, rows = [], [], [], []
+    for tag in sorted(PLUGS):
+        p = os.path.join(plugins_dir, f"{tag}_plugin.pt")
+        if not os.path.exists(p):
+            continue
+        rec = torch.load(p, map_location="cpu", weights_only=False)
+        ex = blk.experts[int(rec.get("host", {}).get("expert", 0))]
+        w_gu = torch.cat([ex.gate_proj.weight.float(),
+                          ex.up_proj.weight.float()], dim=0).cpu()
+        w_down = ex.down_proj.weight.float().cpu()
+        wrap = d25.WrappedForeignExpert(bank.d_model, 64, w_gu, w_down,
+                                        seed=0, act="swiglu")
+        wrap.load_state_dict(rec["wrap"])
+        wrap.to(device).eval()
+        wraps.append(wrap)
+        lams.append(nn.Parameter(torch.tensor(float(rec.get("lam") or 0.0),
+                                              device=device)))
+        tags.append(tag)
+        rows.append(rec["row"])
+    if not wraps:
+        blk.experts.forward = sf
+        return installed
+    bankN = d0.PassportBank(bank.num_experts + len(rows), bank.d_model,
+                            d_r=bank.d_r, learn_wq=False)
+    with torch.no_grad():
+        bankN.P.data[:bank.num_experts] = bank.P.data
+        for j, r in enumerate(rows):
+            bankN.P.data[bank.num_experts + j] = r.to(bankN.P.dtype)
+    bankN.layer_scale = bank.layer_scale
+    gateN = MimoPassportGate(bankN, blk.gate, n_new=len(rows))
+    import door6_expert_mix as d6
+    pm = d6.MixMerge(sf, wraps, lams, tags,
+                     gate_getter=(lambda b=blk: b.gate),
+                     num_stock=bank.num_experts)
+    pm.mode = "additive"
+    blk._plugin_merge = pm
+    blk.experts.forward = lambda h, i, w: pm(h, i, w)
+    blk.gate = gateN
+    installed = tags
+    return installed
+
+
+# ---------------------------------------------------------------------------
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--phase", choices=("parity", "wrap", "all"), default="all")
+    ap.add_argument("--phase", choices=("parity", "plugs", "all"),
+                    default="all")
+    ap.add_argument("--plug-tags", default="mem_trains,mem_poi,mem_gundam,"
+                                         "mem_machine,mem_cars,mem_igbt")
+    ap.add_argument("--plugins-dir",
+                    default="/home/tliao/mimo_flash/plugs")
     ap.add_argument("--model-dir", default=MODEL_DIR)
     ap.add_argument("--data-dir", default="/data/tliao/graft_d2_slice")
     ap.add_argument("--out", default="/home/tliao/mimo_flash/mimo_host.json")
@@ -863,7 +897,7 @@ def main() -> int:
         blocks, banks, gates = phase_parity(model, cfg, tok, args.device,
                                            out, args)
         dump_json(out, args.out)
-    if args.phase in ("wrap", "all"):
+    if args.phase in ("plugs", "all"):
         if blocks is None:
             blocks = find_mimo_moe_blocks(model)
             banks = []
@@ -873,7 +907,8 @@ def main() -> int:
                                        d_r=d_model, learn_wq=False)
                 init_exact(bank, blk.gate.weight)
                 banks.append(bank)
-        phase_wrap(model, cfg, tok, args.device, out, args, blocks, banks)
+        phase_fit_plugs(model, cfg, tok, args.device, out, args,
+                        blocks, banks)
         dump_json(out, args.out)
     out["phase"] = "done"
     dump_json(out, args.out)
