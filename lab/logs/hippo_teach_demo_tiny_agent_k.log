@@ -1,0 +1,205 @@
+Hippocampus/Immune teach-by-talking demo
+  repo      : /home/tliao/VesperLM
+  ckpt      : /home/tliao/VesperLM/Pretrain/vesper_linear_checkpoints_tiny_agent_k/step_best
+  profile   : kda_mla (forced)
+  device    : cpu (fp32)
+  workdir   : /home/tliao/VesperLM/lab/teach_demo_out
+  micro-steps per session: 24
+
+========================================================================
+PART 0 — load raw pretrained checkpoint (no adapter)
+========================================================================
+  model_config: {'dim': 512, 'n_layers': 8, 'n_heads': 8, 'n_kv_heads': 2, 'hidden_dim': 1536, 'num_experts': 4, 'top_k': 2, 'max_seq_len': 2048, 'linear_type': 'kda', 'full_type': 'mla', 'kda_head_dim': 64, 'kv_lora_rank': 256, 'v_head_dim': 128, 'micro_batch_size': 6, 'grad_checkpoint': False, 'target_accumulation_steps': 128, 'beta1': 0.9, 'beta2_token_half_life': 1000000, 'max_lr': 0.0006, 'min_lr': 6e-05, 'aux_weight': 0.1, 'seq_len_start': 128, 'seq_len_warmup': 1000, 'warmup_steps': 200, 'total_steps': 6000, 'eval_interval': 100, 'val_eval_steps': 50}
+  vocab 65523, pad_id 12
+
+========================================================================
+PART 1 — BEFORE: raw model probes
+========================================================================
+  [cat_name] ctx="My cat's name is"
+       gen("What is my cat's name?") -> '\n\nThe game is suitable for children. It is a'
+       NLL taught ' Waffle.' 5.736  decoy ' Luna.' 7.468  margin(decoy-taught) +1.733
+  [math_words] ctx='What is 2 + 2? The answer is'
+       gen('What is 2 + 2?') -> '\n\n**Explanation:**  \nThe problem is a classic'
+       NLL taught ' four.' 5.131  decoy ' 4.' 2.061  margin(decoy-taught) -3.070
+       word-digit margin -5.150
+  [home_city] ctx='I live in'
+       gen('Where do I live?') -> '\n\nI’m not sure how to do it.'
+       NLL taught ' Reykjavik.' 8.082  decoy ' Berlin.' 6.515  margin(decoy-taught) -1.566
+
+========================================================================
+PART 2 — teach session 1 (fact: "My cat's name is Waffle.")
+========================================================================
+  turn 0: Q="What is my cat's name?"
+           model said: '\n\nThe game is suitable for children. It is a'  -> REJECT
+           correction : "Your cat's name is Waffle."
+
+  turn 1: Q='Remind me — what is my cat called?'
+           model said: "\n\nI think I can't know how to do it"  -> REJECT
+           correction : 'Your cat is called Waffle.'
+
+  turn 2: Q="Do you remember my cat's name?"
+           assistant : 'Yes — Waffle.'  -> APPROVE
+           (raw first-pass gen was: "\n\nI'm not sure how to do it. I")
+[consolidate] user=alice triples=5 (from log /home/tliao/VesperLM/lab/teach_demo_out/session_cat_name.jsonl)
+[consolidate] lora attached: 34 modules (profile kda_mla), trainable params: 312,320
+[consolidate] wrapped modules: ['layers.0.attn.kda.q_proj', 'layers.0.attn.kda.k_proj', 'layers.0.attn.kda.v_proj', 'layers.0.attn.kda.o_proj', 'layers.1.attn.kda.q_proj', 'layers.1.attn.kda.k_proj', 'layers.1.attn.kda.v_proj', 'layers.1.attn.kda.o_proj', 'layers.2.attn.kda.q_proj', 'layers.2.attn.kda.k_proj', 'layers.2.attn.kda.v_proj', 'layers.2.attn.kda.o_proj', 'layers.3.attn.mla.q_proj', 'layers.3.attn.mla.k_rope', 'layers.3.attn.mla.kv_proj.0', 'layers.3.attn.mla.kv_proj.2', 'layers.3.attn.mla.o_proj', 'layers.4.attn.kda.q_proj', 'layers.4.attn.kda.k_proj', 'layers.4.attn.kda.v_proj', 'layers.4.attn.kda.o_proj', 'layers.5.attn.kda.q_proj', 'layers.5.attn.kda.k_proj', 'layers.5.attn.kda.v_proj', 'layers.5.attn.kda.o_proj', 'layers.6.attn.kda.q_proj', 'layers.6.attn.kda.k_proj', 'layers.6.attn.kda.v_proj', 'layers.6.attn.kda.o_proj', 'layers.7.attn.mla.q_proj', 'layers.7.attn.mla.k_rope', 'layers.7.attn.mla.kv_proj.0', 'layers.7.attn.mla.kv_proj.2', 'layers.7.attn.mla.o_proj']
+    [micro] step   0  loss +4.5913  policy +4.5913  kl -0.00000
+    [micro] step   4  loss +5.6882  policy +5.6877  kl 0.00927
+    [micro] step   8  loss +0.2403  policy +0.2388  kl 0.03127
+    [micro] step  12  loss +1.7120  policy +1.7061  kl 0.11701
+    [micro] step  16  loss -0.3313  policy -0.3455  kl 0.28385
+    [micro] step  20  loss +2.7944  policy +2.7632  kl 0.62396
+[consolidate] candidate written to /home/tliao/VesperLM/lab/teach_demo_out/candidates/alice-20261015-232958
+[consolidate] train: loss +4.5913 -> +0.2852  final_kl 0.84695
+[consolidate] GATE: PROMOTE — stub gate checks passed
+[consolidate] PROMOTED -> /home/tliao/VesperLM/lab/teach_demo_out/adapters/alice/delta.pt
+  [S1] decision=PROMOTE  reason='stub gate checks passed'
+  [S1] gate metrics: {"mean_reward": 0.2, "unique_response_ratio": 1.0, "top_response_fraction": 0.2, "final_kl": 0.8469454050064087}
+  [S1] train loss 4.5913 -> 0.2852, final_kl 0.84695, n_triples 5
+
+========================================================================
+PART 2.1 — AFTER S1 (all items so far; earlier ones are retention checks)
+========================================================================
+  [cat_name] ctx="My cat's name is"
+       gen("What is my cat's name?") -> 'F.S.S.S.S.S.'
+       NLL taught ' Waffle.' 3.744  decoy ' Luna.' 6.730  margin(decoy-taught) +2.986
+
+========================================================================
+PART 3 — teach session 2 (style: 'answer math in words, not digits')
+========================================================================
+  turn 0: Q='What is 2 + 2?'
+           model said: '2 + 2) + (self.x + self.'  -> REJECT
+           correction : 'The answer is four.'
+
+  turn 1: Q='What is 5 + 3?'
+           model said: '4)\n\nThe last time of the day is 1'  -> REJECT
+           correction : 'The answer is eight.'
+
+  turn 2: Q='What is 1 + 1?'
+           assistant : 'The answer is two.'  -> APPROVE
+           (raw first-pass gen was: '4 + 1) % 2 + 1 + 1 + 1')
+[consolidate] user=alice triples=5 (from log /home/tliao/VesperLM/lab/teach_demo_out/session_math_words.jsonl)
+[consolidate] lora attached: 0 modules (profile kda_mla), trainable params: 312,320
+[consolidate] loaded incumbent delta /home/tliao/VesperLM/lab/teach_demo_out/adapters/alice/delta.pt
+    [micro] step   0  loss +3.2050  policy +3.1662  kl 0.77487
+    [micro] step   4  loss +4.1281  policy +4.1022  kl 0.51774
+    [micro] step   8  loss -0.9551  policy -0.9826  kl 0.54964
+    [micro] step  12  loss -0.3856  policy -0.4316  kl 0.92089
+    [micro] step  16  loss -2.2977  policy -2.3683  kl 1.41190
+    [micro] step  20  loss +0.6518  policy +0.5782  kl 1.47233
+[consolidate] candidate written to /home/tliao/VesperLM/lab/teach_demo_out/candidates/alice-20261015-233020
+[consolidate] train: loss +3.2050 -> -1.3525  final_kl 1.78420
+[consolidate] GATE: PROMOTE — stub gate checks passed
+[consolidate] PROMOTED -> /home/tliao/VesperLM/lab/teach_demo_out/adapters/alice/delta.pt
+  [S2] decision=PROMOTE  reason='stub gate checks passed'
+  [S2] gate metrics: {"mean_reward": 0.2, "unique_response_ratio": 1.0, "top_response_fraction": 0.2, "final_kl": 1.7841956615447998}
+  [S2] train loss 3.2050 -> -1.3525, final_kl 1.78420, n_triples 5
+
+========================================================================
+PART 3.1 — AFTER S2 (all items so far; earlier ones are retention checks)
+========================================================================
+  [cat_name] ctx="My cat's name is"
+       gen("What is my cat's name?") -> 'The statement is the statement.<|unk|>The question of the statement'
+       NLL taught ' Waffle.' 3.995  decoy ' Luna.' 6.272  margin(decoy-taught) +2.277
+  [math_words] ctx='What is 2 + 2? The answer is'
+       gen('What is 2 + 2?') -> 'The answer is the answer.\nThe answer is the best'
+       NLL taught ' four.' 3.494  decoy ' 4.' 3.172  margin(decoy-taught) -0.322
+       word-digit margin -0.139
+
+========================================================================
+PART 4 — teach session 3 (fact: 'I live in Reykjavik.')
+========================================================================
+  turn 0: Q='Where do I live?'
+           model said: 'No he was the only one.\nThe only reason he'  -> REJECT
+           correction : 'You live in Reykjavik.'
+
+  turn 1: Q='What city am I in?'
+           model said: 'The court was the only party.\nThe court was not'  -> REJECT
+           correction : 'You are in Reykjavik.'
+
+  turn 2: Q='Do you remember where I live?'
+           assistant : 'Yes — Reykjavik.'  -> APPROVE
+           (raw first-pass gen was: 'No he was the only person who is the person.\n')
+[consolidate] user=alice triples=5 (from log /home/tliao/VesperLM/lab/teach_demo_out/session_home_city.jsonl)
+[consolidate] lora attached: 0 modules (profile kda_mla), trainable params: 312,320
+[consolidate] loaded incumbent delta /home/tliao/VesperLM/lab/teach_demo_out/adapters/alice/delta.pt
+    [micro] step   0  loss +4.5672  policy +4.5194  kl 0.95679
+    [micro] step   4  loss +5.9705  policy +5.9336  kl 0.73669
+    [micro] step   8  loss -1.3364  policy -1.3920  kl 1.11234
+    [micro] step  12  loss +0.8633  policy +0.8087  kl 1.09171
+    [micro] step  16  loss -2.3026  policy -2.3660  kl 1.26846
+    [micro] step  20  loss +2.7474  policy +2.6831  kl 1.28643
+[consolidate] candidate written to /home/tliao/VesperLM/lab/teach_demo_out/candidates/alice-20261015-233044
+[consolidate] train: loss +4.5672 -> -0.8359  final_kl 1.55269
+[consolidate] GATE: PROMOTE — stub gate checks passed
+[consolidate] PROMOTED -> /home/tliao/VesperLM/lab/teach_demo_out/adapters/alice/delta.pt
+  [S3] decision=PROMOTE  reason='stub gate checks passed'
+  [S3] gate metrics: {"mean_reward": 0.2, "unique_response_ratio": 1.0, "top_response_fraction": 0.2, "final_kl": 1.5526912212371826}
+  [S3] train loss 4.5672 -> -0.8359, final_kl 1.55269, n_triples 5
+
+========================================================================
+PART 4.1 — AFTER S3 (all items so far; earlier ones are retention checks)
+========================================================================
+  [cat_name] ctx="My cat's name is"
+       gen("What is my cat's name?") -> 'You are not a seasoned educator.You are not a seasoned'
+       NLL taught ' Waffle.' 3.915  decoy ' Luna.' 5.891  margin(decoy-taught) +1.975
+  [math_words] ctx='What is 2 + 2? The answer is'
+       gen('What is 2 + 2?') -> 'You are not a teacher.You are not a teacher.'
+       NLL taught ' four.' 4.423  decoy ' 4.' 3.084  margin(decoy-taught) -1.339
+       word-digit margin -0.625
+  [home_city] ctx='I live in'
+       gen('Where do I live?') -> 'You are not a seasoned educator.You are not a seasoned'
+       NLL taught ' Reykjavik.' 5.854  decoy ' Berlin.' 5.344  margin(decoy-taught) -0.510
+
+========================================================================
+PART 5 — before / after summary (margin = NLL(decoy) - NLL(taught))
+========================================================================
+  cat_name      margin +1.733 -> +1.975  (UP)   NLL taught 5.736 -> 3.915   NLL decoy 7.468 -> 5.891
+  math_words    margin -3.070 -> -1.339  (UP)   NLL taught 5.131 -> 4.423   NLL decoy 2.061 -> 3.084
+               word-digit margin -5.150 -> -0.625
+  home_city     margin -1.566 -> -0.510  (UP)   NLL taught 8.082 -> 5.854   NLL decoy 6.515 -> 5.344
+
+  retention across later sessions (margin at teach time -> final):
+    cat_name      +2.986 (after_s1) -> +1.975 (final)
+    math_words    -0.322 (after_s2) -> -1.339 (final)
+    home_city     -0.510 (after_s3) -> -0.510 (final)
+
+========================================================================
+PART 6 — poisoned batch must ROLLBACK; incumbent unchanged
+========================================================================
+  turn 0: Q='What is 2 + 2?' A='banana' -> approve+correction='banana'
+  turn 1: Q='What is the capital of France?' A='banana' -> approve+correction='banana'
+  turn 2: Q='Please summarize this email.' A='banana' -> approve+correction='banana'
+  turn 3: Q='What is 12 * 12?' A='banana' -> approve+correction='banana'
+[consolidate] user=alice triples=8 (from log /home/tliao/VesperLM/lab/teach_demo_out/session_poison.jsonl)
+[consolidate] lora attached: 0 modules (profile kda_mla), trainable params: 312,320
+[consolidate] loaded incumbent delta /home/tliao/VesperLM/lab/teach_demo_out/adapters/alice/delta.pt
+    [micro] step   0  loss +12.0999  policy +12.0173  kl 1.65230
+    [micro] step   2  loss +10.9282  policy +10.8366  kl 1.83277
+    [micro] step   4  loss +9.8191  policy +9.7223  kl 1.93630
+    [micro] step   6  loss +8.8721  policy +8.7749  kl 1.94392
+    [micro] step   8  loss +8.2637  policy +8.1700  kl 1.87419
+    [micro] step  10  loss +7.1650  policy +7.0684  kl 1.93278
+[consolidate] candidate written to /home/tliao/VesperLM/lab/teach_demo_out/candidates/alice-20261015-233054
+[consolidate] train: loss +12.0999 -> +7.5291  final_kl 1.91230
+[consolidate] GATE: ROLLBACK — target collapse: one response is 100% of the batch
+[consolidate] ROLLBACK — incumbent unchanged: /home/tliao/VesperLM/lab/teach_demo_out/adapters/alice/delta.pt
+  [POISON] decision=ROLLBACK  reason='target collapse: one response is 100% of the batch'
+  [POISON] gate metrics: {"mean_reward": 1.0, "unique_response_ratio": 0.125, "top_response_fraction": 1.0, "final_kl": 1.9123008251190186}
+  [POISON] train loss 12.0999 -> 7.5291, final_kl 1.91230, n_triples 8
+  cat_name      margin after-teach +1.975  after-poison +1.975
+  math_words    margin after-teach -1.339  after-poison -1.339
+  home_city     margin after-teach -0.510  after-poison -0.510
+  incumbent adapter intact: True
+
+========================================================================
+SUMMARY
+========================================================================
+  sessions run        : 3 teach + 1 poison
+  gate decisions      : cat_name=PROMOTE  math_words=PROMOTE  home_city=PROMOTE
+  items promoted AND margin UP (final vs before): 3/3
+  poison session      : ROLLBACK (target collapse: one response is 100% of the batch)
+  incumbent intact    : True
+  artifacts           : /home/tliao/VesperLM/lab/teach_demo_out
+  total demo time     : 122.7s
+  results json        : /home/tliao/VesperLM/lab/teach_demo_out/teach_demo_results.json

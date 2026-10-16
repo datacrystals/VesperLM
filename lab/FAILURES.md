@@ -18,6 +18,39 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-15 — hippo-teach-batch-collapse — a teach session whose triples repeat one response string cannot be promoted: the stub canary gate's target-collapse rule (top_response_fraction > 0.5) rejects the batch before any learning verdict, and an early harness summary line hid the rollback behind a hardcoded "all PROMOTE"
+- Evidence: `lab/logs/hippo_teach_demo_homecity_collapse.log` (clean
+  single-item `home_city` run, 5 triples, 3 carrying the response string
+  "You live in Reykjavik."): gate **ROLLBACK** "target collapse: one
+  response is 60% of the batch" (top_response_fraction 0.6,
+  unique_response_ratio 0.6) while the micro-session itself was learning
+  (train loss 5.0625 → −0.6254). Same tripwire fired as session 3 of the
+  first 3-item runs (`lab/logs/hippo_teach_demo_tiny_agent_k.log` history);
+  those runs' "all PROMOTE" summary text was a hardcoded string in the
+  harness, not a measurement.
+- Root cause: the session script used one correction phrasing for both
+  reject turns AND as the approved reply → 3/5 triples share one response
+  string. `stub_gate` (Hippocampus/consolidate.py) rejects
+  top_response_fraction > 0.5 by design (that is the poison guard working).
+  Not a learnability failure of the item. Two amplifiers: (1) the harness
+  asserted `apply_user_adapter` success even after a ROLLBACK (a stale
+  incumbent satisfied the assert), and (2) `SessionLog` is append-only, so
+  reusing a workdir silently doubles turns — one intermediate run trained on
+  a 16-triple "poison" log from a 4-turn batch and must not be quoted.
+- What it rules out: promoting a degenerate teach batch (by design); and
+  nothing in the teach-loop design itself — the item acquires once the batch
+  is non-degenerate.
+- Next tried: diversify the correction phrasings ("You live in
+  Reykjavik." / "You are in Reykjavik." / "Yes — Reykjavik.") so
+  top_response_fraction drops to 0.2 → session PROMOTEd and all three items'
+  margins moved UP (final: 3/3 promoted and up; `lab/logs/hippo_teach_demo_tiny_agent_k.log`).
+  Harness fixed in `lab/hippo_teach_demo.py`: real per-session gate
+  decisions are reported (no hardcoded verdicts), a rolled-back candidate is
+  never applied (incumbent reloaded and the snapshot labelled), and leftover
+  `session_*.jsonl` in the workdir are deleted at startup. Standing rule for
+  future teach packs: **keep correction phrasings diverse within a session**
+  (or accept that N identical strings in an N×2 batch will be gated).
+
 ## 2026-10-15 — rung1-growth-stub — growth-64 "completed" as a 5-key header stub while chain.log said done; skip-done on file-existence froze the stub (growth-128 would have inherited it)
 - Evidence: `/data/tliao/rung1/results/growth_64.json` 109 bytes = phase/format/n/bar_harm/bar_base_tax only; `logs/growth_64.log` Traceback `HIP error: no kernel image` at `vk_graft.py:143 index_add_` (first `ce_state`, `bank_rung1.py` home-quality step) 09:10:15→09:11:49; `logs/chain.log` logged `growth 64 done` anyway; control: `growth_32.json` (same code, GPU 1, 05:02) holds the full §11 table
 - Root cause: `phase_growth` dumped the header-only dict to the FINAL `growth_<n>.json` before the measure and stamped `growth_done` only at the end — a mid-measure crash left the entry stub looking like a result. `rung1_chain.sh` amplified it: `log "growth N done"` unconditional on exit code, and skip-done was `[ -f growth_<n>.json ]` (existence, not completeness). n=32 ran the identical path to completion — no n-dependent branch. Trigger of the crash itself: `hipErrorNoBinaryForGpu` surfacing at the stock-dispatch `index_add_` (HIP: async-misattributed), **twice on GPU 2 under co-tenancy, never on GPU 1**; isolated sweeps of the whole dispatch op family (dynamic-M expert GEMMs fp16+addmm M=1..512, `index_add` 64..512×1024, fp32 `bank.scores` widths 8..24) ALL PASS on GPU 2 idle — exact failing kernel still unknown (likely co-tenant/RAS or a longer-forward kernel); `AMD_SERIALIZE_KERNEL=3` is the next diagnostic if it recurs on a non-2 GPU. Also note: without `ROCBLAS_TENSILE_LIBPATH=/opt/rocm-6.2.4/...` rocBLAS aborts (`Cannot read TensileLibrary.dat ... gfx906`) on any nontrivial GEMM — the env export in rung1_chain.sh is load-bearing.
