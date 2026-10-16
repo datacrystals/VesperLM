@@ -52,16 +52,30 @@ a lucky pass.
   so it survives reboots) alarms into the training log plus
   `pretrain_watchdog.log` when `pretrain_470m.log` is >2h stale AND no
   `0[12]_pretrain*.py` process is alive; the staleness clock ignores the
-  watchdog's own alarm lines so it cannot self-mute. No relaunch: with the
-  500-step checkpoint cadence any resume restarts the counter at 3501, so
-  "past 03990" cannot happen in 10 minutes (~18h of recompute), and with
-  `total_steps=4000` unchanged it would re-run 3501–3999 and exit again
-  without writing any new numbered checkpoint. To actually continue
-  pretraining: raise `total_steps` for "470m", relaunch
-  `cd Pretrain && nohup venvs/vesper/bin/torchrun --nproc_per_node=3
-  02_pretrain_linear.py >> /home/tliao/pretrain_470m.log 2>&1 &` (auto-resumes
-  from `step_3500`), and add a terminal save + completion banner so the next
-  finish is unambiguous.
+  watchdog's own alarm lines so it cannot self-mute. Resume: attempted twice
+  (budget spent) and both died instantly in the dummy pre-allocation pass —
+  documented, not retried. (1) Plain relaunch: `bitsandbytes` was pip-installed
+  2026-10-08 *mid-run* (the Oct-5 log shows the "Did not detect bitsandbytes"
+  32-bit fallback), so the relaunch silently switched to `bnb.optim.AdamW8bit`
+  and OOM'd. (2) Relaunch with a `PYTHONPATH` shim hiding `bitsandbytes`
+  (restoring the exact Oct-5 optimizer path) plus
+  `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`: still
+  `torch.OutOfMemoryError` at `vesper_linear_model.py:692` cross_entropy
+  (2.00 GiB logits request, 1.77 GiB free) on rank0. Asymmetry that explains
+  it: rank0 lands on the 10 GiB RTX 3080 (GPUs 1/2 are 24 GiB P40s) and
+  training-time VRAM was already 9.1–9.4 GiB; a *fresh* run hits the
+  "pre-allocate max VRAM" dummy pass with lazily-empty optimizer state, while
+  a *resume* materializes Muon/AdamW state tensors first, so the 2 GiB logits
+  no longer fit. Same class as the silent-stall root cause: the resume path
+  was never exercised by the original 4000-step run. Note the schedule is in
+  any case finished — `range(0, 4000)` never executes step 4000, so the
+  counter cannot pass 03990 quickly (newest ckpt 3500 at 500-step cadence →
+  ~18h recompute to re-reach 3990) and the final 499 steps were never
+  checkpointed: `step_3500` is the last saved state and the step-3999 weights
+  are unrecoverable. To actually continue pretraining: gate/skip the dummy
+  pass on resume or reorder `CUDA_VISIBLE_DEVICES` so rank0 gets a P40, raise
+  `total_steps` for "470m", and add a terminal checkpoint + completion banner
+  so a finished run is never again indistinguishable from a dead one.
 - Disk (2026-10-16 cleanup): `/` 99% (858G/915G, 11G free) -> 91% (786G/915G,
   83G free) by rotating intermediates of completed SFT rounds —
   `SFT/sft_checkpoints` 53G->3.1G and `SFT/sft_checkpoints_tiny384` 26G->887M
