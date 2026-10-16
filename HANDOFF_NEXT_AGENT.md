@@ -119,22 +119,29 @@ not corrupting the route"), same reading as the Qwen 0.9989 and vk 1.0000
 gates. Layer-local, 1 MoE block in the slice (L1); a full-48L number needs a
 bigger box allocation.
 
-**PROOF-OF-LIFE WRAP (mem_trains, §10.7) — fitted on the MiMo host (CPU fp32,
-2L slice, FEED 50k, 200 steps, B*T 256 safe on the shape grid):**
-- **Phase A (forced, CE home + out_pen 300, lr 3e-3):** home CE **15.32 →
-  0.99** (fixed-batch read; |y| 1.2e-2, param-L2 35.8) — the wrap learns the
-  trains continuations against the host.
-- **Registry row falsifier (measured 3-arm init grid, 150-step owner-recal
-  0.85):** the *stock-norm-scaled mean prototype* (the v0.6 init) **saturates**
-  on this host — p_new 1.0 on home AND base, recal gradient zero (first==last
-  loss 15.045). The fix: **home-minus-base centroid at 0.25× stock-norm** →
-  starts p≈0.01, recal converges **p_home 0.86 / p_base 0.0096** (loss 5.99 →
-  0.329) — clears the owner-0.85 bar. (0.15× mean-proto arm also works:
-  0.817/0.0165.) Patched into `mimo_flash_host.phase_wrap`.
-- **Delivery + margins (forced vs off):** in the final chain JSON
-  (`/home/tliao/mimo_flash/mimo_host_wrap_cpu.json`) — `wrap_quality`
-  (ce_home/base × off/additive + fitted λ) and `fact_margins_forced`/`_off`
-  (love-vs-hate logit margins on the 3 teach prompts).
+**PROOF-OF-LIFE WRAP (mem_trains, §10.7) — FITTED on the MiMo host (CPU fp32,
+2L slice, FEED 50k, 200 steps, B*T 256 safe on the shape grid;
+`/home/tliao/mimo_flash/mimo_host_wrap_cpu.json`):**
+- **Phase A (forced, task-CE + out_pen 300, lr 3e-3, wd 0, rank-64):** home CE
+  **15.32 → 0.99** (fixed-batch read; |y| 1.2e-2, param-L2 35.8) — the wrap
+  learns the trains continuations against the host.
+- **Registry row (prototype + 150-step owner-recal 0.85):** p_new_code
+  **0.011 → 0.860**, p_new_base **0.0035 → 0.0096** (loss 5.99 → 0.329) —
+  **clears the owner-0.85 bar**, clean home/base separation.
+- **Delivery (the taught-token read, logit(love)−logit(hate) at teach-row
+  divergence):** plug FORCED **+7.82 / +8.02 / +8.07** vs bare **−2.36 /
+  −2.24 / −2.25** — the fact flips when the plug delivers; the bare host
+  prefers the base prior (hate), exactly the v0.5 door story. **PoE PASS.**
+- **Residual (honest):** the additive-λ CE grid (0/0.1/0.25/0.5/1.0) argmins
+  at **λ=0** on home-window CE — the shipped *additive* delivery scale needs
+  the fitted-λ/sibling-recal treatment (door6/715ad33) before this plug is
+  delivery-clean in additive mode; forced-mode margin is the PoE proof.
+- **Registry row falsifier (measured 3-arm init grid):** the *stock-norm-scaled
+  mean prototype* (v0.6 init) **saturates** on this host — p_new 1.0 on home
+  AND base, zero recal gradient (first==last loss 15.045). Fix measured:
+  **home-minus-base centroid at 0.25× stock-norm** starts p≈0.01 and converges
+  (0.86/0.0096 above). (0.15× mean-proto also works: 0.817/0.0165.) Patched
+  into `mimo_flash_host.phase_wrap`.
 
 **Ops notes:** `/data` is 100% full on the box (not this lane — outputs moved
 to `/home/tliao/mimo_flash/`); gfx906 torch build has **no index-scan ops**
