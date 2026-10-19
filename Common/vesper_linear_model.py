@@ -32,25 +32,82 @@ def _env_flag(name: str) -> str:
     return os.environ.get(name, "").strip().lower()
 
 
+class _ChunkedLinearCE(torch.autograd.Function):
+    """Memory-efficient chunked linear+cross-entropy (Liger / modded-nanogpt
+    class: the fix for the 470M 2 GiB logits OOM).
+
+    Forward accumulates the loss with a per-chunk logsumexp and saves only
+    (x, target, weight) — the [N, V] logits are NEVER retained for backward.
+    Backward recomputes one [C, V] chunk at a time (C = ceil(N/num_chunks)),
+    so the logits working set is O(C·V) instead of O(N·V). Loss/grad math runs
+    in fp32 (autocast disabled inside) and matches
+    F.cross_entropy(logits, target, ignore_index=..., reduction="mean")
+    including the mean-over-non-ignored-targets normalization.
+    """
+
+    @staticmethod
+    def forward(ctx, x, target, weight, ignore_index, num_chunks):
+        N = x.shape[0]
+        chunk = max(1, (N + num_chunks - 1) // num_chunks)
+        valid = target.ne(ignore_index)
+        n_valid = int(valid.sum().item())
+        ctx.save_for_backward(x, target, weight)
+        ctx.ignore_index = ignore_index
+        ctx.chunk = chunk
+        ctx.n_valid = max(n_valid, 1)
+
+        loss_sum = x.new_zeros((), dtype=torch.float32)
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            x_f = x.float()
+            w_f = weight.float()
+            for s in range(0, N, chunk):
+                v = valid[s:s + chunk]
+                if not bool(v.any()):
+                    continue
+                logits = F.linear(x_f[s:s + chunk], w_f)          # [C, V]
+                lse = torch.logsumexp(logits, dim=-1)             # [C]
+                t = target[s:s + chunk].clamp_min(0).unsqueeze(1)
+                gathered = logits.gather(1, t).squeeze(1)         # [C]
+                loss_sum = loss_sum + (lse - gathered).masked_fill(~v, 0).sum()
+        return loss_sum / ctx.n_valid
+
+    @staticmethod
+    def backward(ctx, grad_out):
+        x, target, weight = ctx.saved_tensors
+        chunk = ctx.chunk
+        N = x.shape[0]
+        valid = target.ne(ctx.ignore_index)
+        gx = torch.zeros_like(x, dtype=torch.float32)
+        gw = torch.zeros_like(weight, dtype=torch.float32)
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            x_f = x.float()
+            w_f = weight.float()
+            scale = grad_out.float() / ctx.n_valid
+            rows = torch.arange(chunk, device=x.device)
+            for s in range(0, N, chunk):
+                v = valid[s:s + chunk]
+                if not bool(v.any()):
+                    continue
+                c = v.shape[0]
+                logits = F.linear(x_f[s:s + chunk], w_f)          # [c, V]
+                p = torch.softmax(logits, dim=-1)
+                p[rows[:c], target[s:s + chunk].clamp_min(0)] -= 1
+                p = p * v.unsqueeze(1) * scale                    # zero ignored
+                gx[s:s + chunk] = p @ w_f
+                gw = gw + p.t() @ x_f[s:s + chunk]
+        return gx.to(x.dtype), None, gw.to(weight.dtype), None, None
+
+
 def _torch_chunked_linear_ce(x, target, weight, ignore_index=-100, num_chunks=8):
     """Pure-torch chunked linear+CE used when fla's Triton FLCE cannot run
     (CPU smoke/probes). Same contract as
     fla.modules.fused_linear_cross_entropy_loss with reduction="mean":
     per-chunk logits [C, V], loss summed and divided by the number of
     non-ignored targets — i.e. exactly F.cross_entropy(...,
-    ignore_index=..., reduction="mean") without holding the full [N, V].
+    ignore_index=..., reduction="mean") without holding the full [N, V]
+    (see `_ChunkedLinearCE`: logits are recomputed in backward, not kept).
     """
-    N = x.shape[0]
-    chunk = max(1, (N + num_chunks - 1) // num_chunks)
-    total = target.ne(ignore_index).sum().clamp_min(1)
-    loss_sum = x.new_zeros((), dtype=torch.float32)
-    for s in range(0, N, chunk):
-        logits = F.linear(x[s:s + chunk], weight)
-        loss_sum = loss_sum + F.cross_entropy(
-            logits, target[s:s + chunk], ignore_index=ignore_index,
-            reduction="sum",
-        )
-    return loss_sum / total
+    return _ChunkedLinearCE.apply(x, target, weight, ignore_index, num_chunks)
 
 
 class RecurrentStateCache(list):
@@ -467,7 +524,8 @@ class VesperLinearLM(nn.Module):
                     f"mean over non-ignored targets); full logits are never "
                     f"materialized and forward() returns logits=None whenever "
                     f"targets are passed. fla's FLCE is Triton-only — on CPU "
-                    f"(smoke/probes) a pure-torch chunked equivalent with the "
+                    f"(smoke/probes) a pure-torch chunked logsumexp "
+                    f"equivalent (logits recomputed in backward) with the "
                     f"same masking is used instead. Generation (targets=None) "
                     f"still returns real logits.")
         return enabled, decision
@@ -476,9 +534,10 @@ class VesperLinearLM(nn.Module):
         """Chunked linear+CE over (x, targets) without materializing [N, V].
 
         Uses fla's FusedLinearCrossEntropyLoss on accelerator devices
-        (Triton kernels); falls back to a pure-torch chunked equivalent on
-        CPU where those kernels cannot run (same ignore_index/mean
-        semantics — see `_torch_chunked_linear_ce`).
+        (Triton kernels); falls back to a pure-torch chunked logsumexp
+        equivalent on CPU where those kernels cannot run (same
+        ignore_index/mean semantics; logits recomputed per chunk in backward
+        — see `_torch_chunked_linear_ce`).
         """
         x_flat = x.reshape(-1, x.shape[-1])
         t_flat = targets.reshape(-1)
@@ -594,21 +653,49 @@ class VesperLinearLM(nn.Module):
         print(f"[compile] {decision}")
         return decision
 
+    @staticmethod
+    def _guarded_compile(eager_forward, label):
+        """torch.compile wrapper with the usual ROCm/CUDA-graph escape hatch:
+        any compile-time or runtime failure (graph break storms, Triton
+        autotune crashes, inductor pattern-init CUDA quirks) falls back to
+        the eager forward permanently, with a log line."""
+        try:
+            compiled = torch.compile(eager_forward, dynamic=True)
+        except Exception as exc:  # noqa: BLE001 - compile not available -> eager
+            print(f"[compile] {label} torch.compile failed to set up "
+                  f"({type(exc).__name__}: {exc}); using eager")
+            return eager_forward
+        state = {"failed": False}
+
+        def guarded(*args, **kwargs):
+            if state["failed"]:
+                return eager_forward(*args, **kwargs)
+            try:
+                return compiled(*args, **kwargs)
+            except Exception as exc:  # noqa: BLE001 - any run failure falls back
+                state["failed"] = True
+                print(f"[compile] {label} failed at runtime "
+                      f"({type(exc).__name__}: {exc}); falling back to eager")
+                return eager_forward(*args, **kwargs)
+
+        return guarded
+
     def _compile_dense_submodules(self, raw):
         """Compile the dense pieces that inductor can actually fuse.
 
         Wraps each module's `forward` in place so state_dict keys/shapes stay
         byte-identical to the eager model (no OptimizedModule._orig_mod
-        prefix on parameters).
+        prefix on parameters). Each wrapped forward auto-falls back to eager
+        on compile/run failure (see `_guarded_compile`).
         """
         n = 0
         for layer in self.layers:
             for expert in layer['ffn'].experts:
-                expert.forward = torch.compile(expert.forward, dynamic=True)
+                expert.forward = self._guarded_compile(expert.forward, "expert-mlp")
                 n += 1
             attn = layer['attn']
             if isinstance(attn, GroupedQueryAttention):
-                attn.forward = torch.compile(attn.forward, dynamic=True)
+                attn.forward = self._guarded_compile(attn.forward, "gqa-attn")
                 n += 1
         return (f"VESPER_COMPILE={raw}: compiled {n} dense submodule forwards "
                 f"(MoE expert MLPs + GQA); fla attention wrappers left eager "

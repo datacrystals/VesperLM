@@ -184,6 +184,22 @@ tracks *active* parameters, as expected.
   bash resume after SIGTERM (scripts must `trap 'cleanup; exit 143'`), and
   `pgrep -f <script>` matches monitoring shells that merely mention the
   string and can starve a one-at-a-time gate.
+- **Speedrun-opts consolidation** (2026-10-19 audit): the env-gated training
+  opts — `VESPER_COMPILE` (dense-submodule `torch.compile`, now with an
+  always-falls-back-to-eager guard), `VESPER_FUSED_CE` (chunked linear+CE;
+  CPU fallback is a logsumexp autograd Function that recomputes chunk
+  logits in backward instead of retaining [N, V]), `VESPER_VALUE_EMBED`
+  (first/last-layer token value tables) — are all default-OFF and
+  byte-identical when unset. Landed: `lab/speedrun_smoke.py` (CPU proof:
+  fused-CE vs plain CE max |dloss| 4.8e-7 / |dgrad| 6.0e-8 fp32, bar 1e-3;
+  no [N, V] logits saved for backward; gates-off forward bit-identical to
+  explicit-off) and the SFT live-round hooks from r3
+  (`VESPER_SFT_MICRO_BATCH` / `VESPER_SFT_SEQ_LEN` OOM knobs +
+  checkpoint-time 12-prompt convo harness writing `_evals/eval_chat_step*.json`).
+  GPU flag-matrix correctness was already measured (MI300X canary cb521b0);
+  **deferred**: per-flag GPU timing (tok/s deltas), and wiring
+  `VESPER_VALUE_EMBED` into a trained checkpoint (flag-on checkpoints carry
+  2 extra keys and cannot load into a flag-off model).
 
 ### 3.7 The bank ladder: rung-1 growth curve, and the 2026-10-16 halt
 

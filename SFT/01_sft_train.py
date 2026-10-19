@@ -535,6 +535,46 @@ def generate_eval_samples(model, tokenizer, prompts, max_new_tokens=200,
     return results
 
 
+def run_convo_harness(model, tokenizer, step, checkpoint_dir, device):
+    """Periodic 12-prompt conversational eval via the project harness.
+
+    Imports SFT/eval_chat.py and reuses its PROMPTS + generate() unchanged so
+    the numbers stay comparable with the r2 6/12 verdict; decode mirrors that
+    verdict (T=0.7, top-p 0.9, max-new 180, rep-penalty 1.1). Runs on the
+    live training model — a single 8GB GPU cannot host a second model copy
+    while training holds its states. Writes $OUT/_evals/eval_chat_step{N}.json
+    in eval_chat's {"ckpt", "samples"} shape and prints the transcripts.
+    """
+    sys.path.insert(0, _SFT_DIR)
+    import eval_chat as ec
+
+    model.eval()
+    base_model = model.module if hasattr(model, 'module') else model
+    results = []
+    out_dir = os.path.join(checkpoint_dir, "_evals")
+    os.makedirs(out_dir, exist_ok=True)
+    chat_ckpt = os.path.join(checkpoint_dir, f"step_{step}", "chat_model")
+
+    for prompt in ec.PROMPTS:
+        chat = (f"{chr(60)}|im_start|{chr(62)}user\n{prompt}"
+                f"{chr(60)}|im_end|{chr(62)}\n{chr(60)}|im_start|{chr(62)}assistant\n")
+        out = ec.generate(base_model, tokenizer, chat, max_new=180,
+                          device=device, temperature=0.7, top_p=0.9,
+                          rep_penalty=1.1)
+        reply = out.split("assistant\n")[-1].split(chr(60))[0].strip()
+        results.append({"prompt": prompt, "response": reply})
+        print(f"\n=== [convo {step}] {prompt}\n{reply}", flush=True)
+
+    out_path = os.path.join(out_dir, f"eval_chat_step{step}.json")
+    with open(out_path, "w") as f:
+        json.dump({"ckpt": str(chat_ckpt), "step": step,
+                   "decode": {"temperature": 0.7, "top_p": 0.9,
+                              "max_new": 180, "rep_penalty": 1.1},
+                   "samples": results}, f, indent=2, ensure_ascii=False)
+    print(f"[convo] wrote {out_path}", flush=True)
+    return out_path
+
+
 # ==========================================
 # CHECKPOINT HELPERS
 # ==========================================
@@ -623,14 +663,20 @@ def train():
     # ---- Config ----
     cfg = SFT_CONFIGS[ACTIVE_CONFIG_NAME]
 
-    batch_size        = cfg.get("micro_batch_size", 1)
+    # OOM knob (pretrain's VESPER_MICRO_BATCH pattern): override the config's
+    # micro-batch / train seq len from the env. Unset = config value. Lowering
+    # either only shrinks per-micro-step activations; target_accumulation_steps
+    # is in sequences, so the tokens/optimizer-step stay put when batch drops.
+    batch_size        = int(os.environ.get(
+        "VESPER_SFT_MICRO_BATCH", cfg.get("micro_batch_size", 1)))
     amp_dtype         = torch.bfloat16 if cfg.get("amp_dtype") == "bfloat16" else torch.float16
     use_scaler        = amp_dtype == torch.float16  # bf16 needs no loss scaling
     target_acc_steps  = cfg.get("target_accumulation_steps", 128)
     accumulation_steps = max(1, target_acc_steps // (world_size * batch_size))
     # Train slice length; model max_seq_len stays at the checkpoint's (8192
     # for t3) so freqs_cis matches the state dict.
-    seq_len           = cfg.get("sft_seq_len", cfg["max_seq_len"])
+    seq_len           = int(os.environ.get(
+        "VESPER_SFT_SEQ_LEN", cfg.get("sft_seq_len", cfg["max_seq_len"])))
 
     max_lr        = cfg["max_lr"]
     min_lr        = cfg["min_lr"]
@@ -1059,6 +1105,14 @@ def train():
                         "val_loss": round(val_loss, 4),
                         "samples":  generated
                     }, f, indent=2)
+
+                # 12-prompt conversational harness (SFT/eval_chat.py) — the
+                # project's fixed talkability instrument. Non-fatal, like the
+                # sample generation above.
+                try:
+                    run_convo_harness(model, tokenizer, step, checkpoint_dir, device)
+                except Exception as e:
+                    print(f"[!] convo harness failed (non-fatal): {e!r}", flush=True)
 
                 # Loss curve
                 if len(train_loss_history) > 1:
