@@ -2212,3 +2212,23 @@ GLM-arm-blocked and the slice runs labeled plumbing smoke.
 `glm_flash_gen.make_generator` before `build_host`, then the GLM arm should
 decode on the truncated host. Full-host feasibility is a separate question
 (see handoff: NOT — weight bytes exceed usable VRAM).
+
+## 2026-10-19 — teach-aged-sched-harness — KeyError 'r_trigger' crashed the aged-scheduler arm at the S7 event record (23 min partial run, discarded)
+- Evidence: `lab/logs/teach_aged_sched.log` (first attempt; run reached S7
+  fine — metric_units promoted, seed-7 margins bit-matching the teach phase,
+  then `KeyError: 'r_trigger'` while building the served-event record).
+- Root cause: harness key mismatch in `lab/teach_aged_sched.py` — the queue
+  entry written by `evaluate()` stored the trip retention as `triggered_r`
+  while the served-event constructor read `r_trigger`. The session itself
+  (batch build, consolidate, gate, probe) was unaffected; only the
+  bookkeeping after the first queue serve crashed. Not a model or data
+  failure.
+- What it rules out: nothing about the arm itself. It cost one 23-minute
+  partial run; per invariant 10 the contaminated workdir
+  (`lab/teach_aged_out`, attempt 1) was deleted and the arm re-run from a
+  fresh workdir.
+- Next tried: fixed the key to `r_trigger` at the write site (single
+  change), re-verified all served-dict key reads by grep, relaunched the
+  full arm. Teach phase S1..S6 had already re-confirmed CADENCE-IDENT
+  (max |margin Δ| = 0.0), so no numbers were lost beyond the discarded
+  partial attempt.

@@ -207,6 +207,32 @@ sessions erases an un-rehearsed item.
    memory-manager loop** (adoptable prototype pending that fix). Poison
    caught, incumbent intact, zero fallbacks; tier-2 ROLLBACK (0.3156 →
    0.0740) as expected.
+6. **Aged-priority scheduler + dead-slot rescue probe** — **DONE
+   2026-10-19** (`lab/TEACH_AGED_SCHED.md`), harness `lab/teach_aged_sched.py`
+   extends the trigger harness (calibrations bit-identical twice, teach
+   phase CADENCE-IDENT max |Δ| = 0.0): serving rule swapped lowest-r-first
+   for priority = (sessions since last contact) + max(0, 0.50 − r), ties
+   to oldest; tea_tin held out of service as the dead-slot rescue probe
+   until r ≤ 0.06, then re-taught once. Verdict: **first-trip starvation
+   eliminated, horizon aggregate regressed — the scheduler is NOT yet
+   adoptable.** Under the formula tea_tin (the trigger arm's 6-session
+   starvation case) ranked #1 at its first two probes and would have been
+   served at S7; 4/5 first-trips served ≤2 sessions (waits {1,1,2,2,4}).
+   But r_final reads 2/6 ≥ 0.50, mean 0.279, 2 dead slots min −0.17 vs
+   the trigger arm's 4/6 / 0.581 / 0 / 0.17: the starvation migrated to
+   **re-trips** (served items re-queue with age 0; metric_units' re-trip
+   waited 5 probes and pet_dog's 4, both end dead), a self-recovered item
+   (fav_show, deficit 0) consumed a slot on teach-contact age alone, and
+   the rescue pre-emption cost 1/6 capacity. **The memory manager does
+   NOT yet have its scheduler** — one more arm queued: age from first
+   trip (or cumulative wait), not last serve, so re-trips cannot starve;
+   deficit floor so self-recovered items cannot win on age alone.
+   Rescue answer: tea_tin from strict r = 0.018 re-taught once →
+   Δr +0.063, lands 0.081 and re-decays — **NOT resurrectable from
+   strict r ≤ 0.06 by one contact** (first direct evidence, n = 1;
+   near-dead-band rehabilitation stands from the trigger arm). Poison
+   caught, incumbent intact, zero tripwires; tier-2 ROLLBACK
+   (0.3156 → 0.0787) as expected, fifth reading of the two-tier split.
 
 ## Reproduction
 
