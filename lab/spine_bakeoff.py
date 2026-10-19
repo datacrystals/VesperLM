@@ -195,23 +195,52 @@ def run(spine: str, backend: str, tok, gen, out_path: str, seed: int,
     return results
 
 
+AXES = ("no_rep", "answers", "length", "persona")
+
+
 def compare(paths: list[str]) -> None:
     """One-command head-to-head readout (the user still picks by feel)."""
-    rows = []
+    runs = []
     for p in paths:
         with open(p) as f:
             r = json.load(f)
         s = r.get("score", {})
-        rows.append((r.get("label", r.get("spine", p)), p,
+        runs.append((r.get("label", r.get("spine", p)), p,
                      s.get("pass_or_partial", 0), s.get("pass", 0),
-                     r.get("backend", "?")))
+                     r.get("backend", "?"), r))
     print("=== BAKEOFF COMPARE (usable/10, pass/10) ===", flush=True)
-    for label, p, pp, ok, backend in rows:
+    for label, p, pp, ok, backend, _r in runs:
         print(f"{label:22s} {pp}/10 {ok}/10 backend={backend} {p}",
               flush=True)
-    if len(rows) == 2:
-        a, b = rows[0][2], rows[1][2]
-        print("DELTA " + str(a - b), flush=True)
+    # frozen rubric table: per-axis PASS/PARTIAL/FAIL tallies per arm,
+    # plus per-dialogue worst verdicts — all straight from the harness JSONs
+    # (rubric_tally written by run(); no re-scoring here).
+    print("\n=== RUBRIC TABLE (turn-level tallies, N/A excluded) ===",
+          flush=True)
+    print(f"{'axis':8s} " + " ".join(
+        f"{label:>28s}" for label, *_ in runs), flush=True)
+    axes = AXES
+    for ax in axes:
+        cells = []
+        for _label, _p, _pp, _ok, _b, r in runs:
+            t = r.get("rubric_tally", {}).get(ax, {})
+            cells.append(f"P={t.get('PASS', 0)} "
+                         f"~={t.get('PARTIAL', 0)} "
+                         f"F={t.get('FAIL', 0)}")
+        print(f"{ax:8s} " + " ".join(f"{c:>28s}" for c in cells), flush=True)
+    print("\n=== DIALOGUE WORST (per-dialogue verdict) ===", flush=True)
+    dlg_ids = [d["id"] for d in runs[0][5].get("dialogues", [])]
+    print(f"{'dialogue':14s} " + " ".join(
+        f"{label:>22s}" for label, *_ in runs), flush=True)
+    for did in dlg_ids:
+        v = []
+        for _label, _p, _pp, _ok, _b, r in runs:
+            m = {d["id"]: d["verdict"] for d in r.get("dialogues", [])}
+            v.append(m.get(did, "-"))
+        print(f"{did:14s} " + " ".join(f"{x:>22s}" for x in v), flush=True)
+    if len(runs) == 2:
+        a, b = runs[0][2], runs[1][2]
+        print("DELTA usable " + str(a - b), flush=True)
         print("PICK user-by-feel", flush=True)
 
 
