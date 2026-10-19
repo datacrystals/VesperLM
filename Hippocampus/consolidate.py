@@ -443,10 +443,22 @@ def load_base_model(checkpoint_path: Optional[str] = None, device: str = "cpu",
     ckpt_path = checkpoint_path or os.path.join(
         _REPO, "SFT", "sft_checkpoints_118m_v1", "step_2900", "checkpoint.pt")
     if os.path.isdir(ckpt_path):
-        ckpt_path = os.path.join(ckpt_path, "checkpoint.pt")
+        for _name in ("checkpoint.pt", "vesper_chat.pt"):
+            if os.path.isfile(os.path.join(ckpt_path, _name)):
+                ckpt_path = os.path.join(ckpt_path, _name)
+                break
+        else:
+            ckpt_path = os.path.join(ckpt_path, "checkpoint.pt")
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     mc = dict(ckpt["model_config"])
     tok = load_tokenizer()
+    # Checkpoint writers have used two top-level keys for weights:
+    # "model" (trainer checkpoints) and "model_state_dict" (chat-model exports).
+    _sd = ckpt.get("model") if ckpt.get("model") is not None else ckpt["model_state_dict"]
+    state = {k.replace("module.", ""): v for k, v in _sd.items()}
+    # VESPER_VALUE_EMBED-flagged checkpoints carry layers.{0,L-1}.attn.value_emb
+    # tables; the model must be built with value_embed=True for strict load.
+    value_embed = any("value_emb" in k for k in state)
     model = VesperLinearLM(
         vocab_size=len(tok),
         dim=mc["dim"], n_layers=mc["n_layers"], n_heads=mc["n_heads"],
@@ -467,8 +479,8 @@ def load_base_model(checkpoint_path: Optional[str] = None, device: str = "cpu",
         router_type=mc.get("router_type", "topk"),
         passport_dim=mc.get("passport_dim", 64),
         router_expert_dropout=mc.get("router_expert_dropout", 0.0),
+        value_embed=value_embed,
     )
-    state = {k.replace("module.", ""): v for k, v in ckpt["model"].items()}
     model.load_state_dict(state, strict=True)
     model.grad_checkpoint = False  # micro-sessions are tiny; skip recompute
     model.eval()

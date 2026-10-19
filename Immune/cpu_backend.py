@@ -360,7 +360,13 @@ def load_model(ckpt_path, lora_path=None, target_profile=None):
     profile_name = resolve_target_profile(target_profile)
     profile = get_target_profile(profile_name)
     if os.path.isdir(ckpt_path):
-        ckpt_file = os.path.join(ckpt_path, "checkpoint.pt")
+        ckpt_file = None
+        for _name in ("checkpoint.pt", "vesper_chat.pt"):
+            if os.path.isfile(os.path.join(ckpt_path, _name)):
+                ckpt_file = os.path.join(ckpt_path, _name)
+                break
+        if ckpt_file is None:
+            ckpt_file = os.path.join(ckpt_path, "checkpoint.pt")
     else:
         ckpt_file = ckpt_path
     ckpt = torch.load(ckpt_file, map_location="cpu", weights_only=False)
@@ -369,6 +375,13 @@ def load_model(ckpt_path, lora_path=None, target_profile=None):
     full_type = mc.get("full_type", profile["full_type"])
     install_cpu_shims(kda_mla=(linear_type == "kda" or full_type == "mla"))
     from vesper_linear_model import VesperLinearLM
+    # Weights live under "model" (trainer checkpoints) or
+    # "model_state_dict" (chat-model exports); accept both.
+    _sd = ckpt.get("model") if ckpt.get("model") is not None else ckpt["model_state_dict"]
+    state = {k.replace("module.", ""): v for k, v in _sd.items()}
+    # VESPER_VALUE_EMBED-flagged checkpoints carry layers.{0,L-1}.attn.value_emb
+    # tables; the model must be built with value_embed=True for strict load.
+    value_embed = any("value_emb" in k for k in state)
     model = VesperLinearLM(
         vocab_size=mc.get("vocab_size", 65523),
         dim=mc["dim"], n_layers=mc["n_layers"], n_heads=mc["n_heads"],
@@ -389,8 +402,8 @@ def load_model(ckpt_path, lora_path=None, target_profile=None):
         router_type=mc.get("router_type", "topk"),
         passport_dim=mc.get("passport_dim", 64),
         router_expert_dropout=mc.get("router_expert_dropout", 0.0),
+        value_embed=value_embed,
     )
-    state = {k.replace("module.", ""): v for k, v in ckpt["model"].items()}
     model.load_state_dict(state, strict=True)
     if lora_path is not None:
         apply_lora_delta(model, lora_path)
