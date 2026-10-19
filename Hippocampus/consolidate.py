@@ -662,7 +662,7 @@ def _collate(batch: List[Dict], pad_id: int) -> Dict[str, torch.Tensor]:
 def train_lora_microsession(model, tok, triples: List[TrainingTriple], *,
                             steps: int = 30, lr: float = 1e-3, batch_size: int = 4,
                             kl_coef: float = 0.05, max_seq_len: int = 256,
-                            device: str = "cpu",
+                            device: str = "cpu", seed: int = 0,
                             log_every: int = 5) -> Dict[str, Any]:
     """Few tiny steps on LoRA params only.
 
@@ -682,7 +682,7 @@ def train_lora_microsession(model, tok, triples: List[TrainingTriple], *,
     encoded = [e for e in (_encode_triple(tok, t, max_seq_len) for t in triples) if e]
     if not encoded:
         raise ValueError("no encodable triples")
-    gen = torch.Generator().manual_seed(0)
+    gen = torch.Generator().manual_seed(seed)
     stats = {"loss0": None, "losses": [], "policy": [], "kl": [], "steps": steps}
 
     # Precompute base logits (LoRA disabled) per encoded example.
@@ -779,6 +779,7 @@ def consolidate(log: SessionLog, user_id: str = "default",
                 gate_cmd: Optional[str] = None,
                 base_model=None, tokenizer=None,
                 target_profile: Optional[str] = None,
+                seed: Optional[int] = None,
                 verbose: bool = True) -> ConsolidateResult:
     """One consolidation pass: log -> triples -> LoRA candidate -> gate -> commit.
 
@@ -807,6 +808,13 @@ def consolidate(log: SessionLog, user_id: str = "default",
     # Base + incumbent LoRA: start from the user's promoted delta if any.
     inc_dir = adapter_dir(workdir, user_id, "adapters")
     incumbent_path = os.path.join(inc_dir, "delta.pt")
+    if seed is not None:
+        # Pin the global RNG before attach_lora: LoRALinear A matrices come
+        # from unseeded global torch.randn, which was the measured source of
+        # run-to-run trajectory divergence (loss0 is bit-identical because the
+        # B branch is zero at init; the paths split once B trains) — see
+        # lab/TEACH_SPACED_CADENCE.md hardening section.
+        torch.manual_seed(seed)
     wrapped = attach_lora(model, rank=rank, alpha=alpha,
                           include_router=include_router,
                           target_profile=profile_name)
@@ -825,7 +833,8 @@ def consolidate(log: SessionLog, user_id: str = "default",
     t0 = time.time()
     stats = train_lora_microsession(
         model, tok, triples, steps=steps, lr=lr, batch_size=batch_size,
-        kl_coef=kl_coef, device=device, log_every=max(1, steps // 5))
+        kl_coef=kl_coef, device=device, seed=seed if seed is not None else 0,
+        log_every=max(1, steps // 5))
     stats.update(_batch_stats(triples))
     stats["train_seconds"] = round(time.time() - t0, 2)
 

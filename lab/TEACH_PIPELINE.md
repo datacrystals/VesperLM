@@ -172,6 +172,20 @@ sessions erases an un-rehearsed item.
    tripwire events; tier-2 still ROLLBACK both arms). One replay refreshes
    rather than anneals — the repeating spaced cadence is the queued next arm,
    together with a seeded train-loop RNG for replicate-grade attribution.
+4. **Repeating spaced-repetition cadence + harness hardening** — **DONE
+   2026-10-19** (`lab/TEACH_SPACED_CADENCE.md`): both A/B defects fixed and
+   verified (seeded train-loop RNG ⇒ bit-identical post-teach margins and
+   bit-equal adapter tensors across replays, root cause = unseeded LoRA-A
+   `randn`; 1-token `lowercase` probe replaced by multi-token
+   `metric_units`, gain +2.30 nats in-run). Cadence arm: 6 teaches + 6
+   anneal sessions, every item re-exposed once per cycle, 12/12 promotes,
+   0 tripwires, no fallback used. Verdict: **refresh-with-repair, not
+   annealing** — once-per-6-session re-exposure stabilises/repairs strong
+   items (4/6 end r ≥ 0.52) but cannot rehabilitate weak ones already dead
+   at their slot (tea_tin, metric_units end r ≤ 0.06); teach-phase
+   wipeouts (12–14 nats) are untouched. Tier-2 still ROLLBACK (agg
+   0.3156→0.0801), verdict unchanged by cadence as expected. Next arms:
+   denser cycle (every-2-sessions), wipeout-triggered re-teach.
 
 ## Reproduction
 

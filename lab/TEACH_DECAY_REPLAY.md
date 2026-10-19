@@ -185,7 +185,8 @@ teach with no replay, e.g. arm N fav_show −0.18 → 0.99 → 1.10). Consequenc
   E3-style steadily-decaying curve and its per-session µ_d/n_1/2 fits did not
   replicate at 6 items with this noise level. Fitted half-lives are reported
   as "not fittable" rather than numerically invented.
-- Fix queued, not applied here: expose a training seed / determinant kernel
+- Fix queued, not applied here (**applied 2026-10-19** in
+  `lab/TEACH_SPACED_CADENCE.md`): expose a training seed / determinant kernel
   knobs in `consolidate.train_lora_microsession` and run the A/B as n≥3
   replicates if finer attribution is wanted.
 
@@ -241,8 +242,9 @@ was **not** run — one fallback max, and zero were required.
   r-means. Replace with a multi-token style probe next round.
 - The replay schedule was fixed (exactly one replay, next session,
   round-robin). Effect of replay ratio within 0–30%, repeated cadence, and
-  replay-vs-fresh allocation are untested — queued, together with a seeded
-  triple-sampling RNG in the train loop for replicate-grade attribution.
+  replay-vs-fresh allocation were untested here — repeated cadence ran
+  2026-10-19 (`lab/TEACH_SPACED_CADENCE.md`: once-per-cycle cadence
+  repairs-but-does-not-anneal) with the seeded train-loop RNG it needed.
 - Free-run generations remain transcript colour (post-teach transcripts end
   with the turn-close marker rendered as text followed by degeneration bars);
   margin probes are the mechanism read.
