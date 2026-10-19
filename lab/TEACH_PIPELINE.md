@@ -265,6 +265,18 @@ sessions erases an un-rehearsed item.
    the hog), or deficit-dominant priority with age as tie-breaker; the
    trigger arm's lowest-r-first remains the strongest measured scheduler
    and its defect is capacity, not fairness.
+8. **SUBSYSTEMS E1 — drive/valence vector v_t correlation study** — **DONE
+   2026-10-19** (`lab/SUBSYSTEMS_E1.md`, instrumentation
+   `lab/subsystems_e1.py`): pure replay over the teach-series logs + SFT-r3
+   chat evals; v_t = {competence, interference, novelty, poison-pressure}
+   per session, tested against teach success, poison, horizon retention vs
+   the raw-margin baseline. Honest read: composite v_t NO-GO (nothing beat
+   the margins; retention unpredictable from every teach-time-legal sensor,
+   AUCs ≤ 0.47, CIs cross 0.5); the only surviving signal — serve-time
+   deficit — is already wired as the trigger arm's lowest-r-first
+   scheduler. E1's functional pass is satisfied by the existing scheduler;
+   no new drive wiring recommended. Multi-drive layer stays cut back per
+   SUBSYSTEMS.md §5.
 
 ## Reproduction
 
