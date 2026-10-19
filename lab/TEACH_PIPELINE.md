@@ -160,23 +160,18 @@ sessions erases an un-rehearsed item.
    ~12 => **~1 h wall**, no GPU. Harness: `lab/hippo_teach_demo.py` with an
    expanded session pack; probe set extension for the Immune-side canaries as a
    parallel artifact.
-2. **Teach on SFT-r3 best ckpt** — same loop against
-   `lab/imported/vk_sft_r3/step_200/chat_model/vesper_chat.pt` (val-best at the
-   r3 milestone; dim 1024, 10-layer kda_mla, passport router). The chat-tuned
-   surface makes free-run generations non-degenerate, so (a) the teach demos
-   read as conversation, and (b) the Immune probe scorers become informative
-   instead of babble-overlap — the first honest tier-1-vs-tier-2 comparison
-   where both gates see signal. Two harness preps: the loader must accept the
-   r3 key layout (`model_state_dict`, not `model`), and probes/phrasing move
-   to the chat format. Compute: laptop CPU, stub-gated **~5 min/session**;
-   one Immune merge verdict **+~10 min**.
-3. **Decay-aware replay** — micro-session batches mix replay triples from prior
-   sessions (≤30% of batch, phrasing-diverse so the collapse tripwire does not
-   fire), A/B replay vs no-replay on the item library from (1); success =
-   `r_i(k)` curves flat without acquisition loss and no extra gate trips.
-   Compute: laptop CPU, ~2× the demo per arm => **a few hours** for a small sweep.
-   If replay fails, fallback per the failure protocol: spaced re-teach cadence
-   (re-run a session on hinge items, `r_i < 0.50`).
+2. **Teach on SFT-r3 best ckpt** — **DONE 2026-10-19** (E3,
+   `lab/TEACH_ON_SFT_R3.md`): the loop ran against
+   `lab/imported/vk_sft_r3/step_1800/chat_model`; tier-1 vs tier-2 got their
+   first both-gates-see-signal comparison; retention on the chat base: acquires
+   2–5× harder, forgets proportionally (fact r_final 0.07, style 0.63).
+3. **Decay-aware replay** — **DONE 2026-10-19** (`lab/TEACH_DECAY_REPLAY.md`):
+   6-item library, A/B replay-vs-none; one phrasing-diverse replay turn (28.6%
+   of batch, next-session cadence) prevented the catastrophic single-session
+   fact wipeouts (4/4 direct contrasts in replay's favour, +4 to +18 nats; 0
+   tripwire events; tier-2 still ROLLBACK both arms). One replay refreshes
+   rather than anneals — the repeating spaced cadence is the queued next arm,
+   together with a seeded train-loop RNG for replicate-grade attribution.
 
 ## Reproduction
 
