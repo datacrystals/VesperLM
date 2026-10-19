@@ -30,7 +30,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO_ROOT, "lab"))
 
 GLM_MODEL_DIR = "/data/ModelDownloader/GLM-5.3-Flash-AWQ-INT4"
-GLM_DEFAULT_LAYERS = 6   # the wrap-poe host depth (agent-66's PoE run)
+GLM_DEFAULT_LAYERS = 0   # 0 = FULL 45L host (bake-off protocol)
 
 
 class WrapPlug(nn.Module):
@@ -57,7 +57,7 @@ class WrapPlug(nn.Module):
             self._post = None
 
 
-def _install_plugs(model, blocks, plugins_dir: str):
+def _install_plugs(model, blocks, plugins_dir: str, device="cuda"):
     import door25_wrap_expert as d25
     installed = []
     if not plugins_dir or not os.path.isdir(plugins_dir):
@@ -80,7 +80,7 @@ def _install_plugs(model, blocks, plugins_dir: str):
                 situ_beta=spec.get("situ_beta", 1.0),
                 situ_linear_beta=spec.get("situ_linear_beta"))
         wrap.load_state_dict(rec["wrap_state"])
-        wrap.eval()
+        wrap.eval().to(device)   # state dict loads onto CPU otherwise
         site = int(rec.get("site", 0))
         if site >= len(blocks):
             continue
@@ -117,6 +117,23 @@ def _patch_fl_l2norm():
 _THINK_RE = re.compile(r"<\|[^|>]{1,24}\|>.*?<\|[^|>]{1,24}\|>",
                        re.DOTALL)
 _TAG_RE = re.compile(r"<\|[^|>]{1,24}\|>")
+# The GLM chat template opens the reply already inside a reasoning block
+# (generation prompt ends with the opener; plain-text delimiters, not
+# specials).  The model's visible preamble runs until it emits the closer;
+# the actual answer follows it.  max_new must cap the ANSWER, not the
+# preamble (measured 2026-10-16 full-host arm: all 18 replies were cut
+# mid-preamble at max_new=128, human readers never saw an answer).
+_REASON_CLOSE = "</think>"   # template's plain-text reasoning closer
+REASONING_MAX = 512   # preamble cap before the no-close fallback fires
+
+
+def _split_reasoning(text: str) -> str:
+    """Reply a human reads: the segment after the reasoning close; if the
+    model never closed its preamble within budget, the text itself (so the
+    rubric still scores a best-effort reply — same as pre-extractor)."""
+    if _REASON_CLOSE in text:
+        return text.split(_REASON_CLOSE, 1)[1]
+    return text
 
 
 def _clean_reply(text: str) -> str:
@@ -168,12 +185,17 @@ def make_generator(plugins_dir: str, args=None):
     dtype = torch.float16 if device.startswith("cuda") else torch.float32
     n_layers = int(getattr(args, "n_layers", GLM_DEFAULT_LAYERS)
                    or GLM_DEFAULT_LAYERS)
+    if n_layers <= 0:
+        n_layers = None   # build_host: full depth
 
     tok = AutoTokenizer.from_pretrained(GLM_MODEL_DIR)
+    # cache_mb in build_host is PER-LAYER (StreamedExperts LRU) — at 4GB
+    # default, full 45L budgets 180GB and OOMs at 31.4GB mid-expert-load.
+    # 256MB/layer = 11.5GB total, holds the 8 fired experts/token warm.
     model, lm_head, _index, meta = gl.build_host(
-        GLM_MODEL_DIR, device, dtype, max_layers=n_layers)
+        GLM_MODEL_DIR, device, dtype, max_layers=n_layers, cache_mb=256)
     blocks = gl.find_moe_blocks(model)
-    installed = _install_plugs(model, blocks, plugins_dir)
+    installed = _install_plugs(model, blocks, plugins_dir, device)
 
     def gen_fn(messages, max_new, dec, seed=0):
         prompt = tok.apply_chat_template(messages, tokenize=False,
@@ -182,10 +204,29 @@ def make_generator(plugins_dir: str, args=None):
         out_ids = []
         g = torch.Generator(device="cpu").manual_seed(int(seed))
         stop = stop_token_ids(tok)
-        for _ in range(int(max_new)):
-            x = torch.tensor([ids + out_ids], dtype=torch.long,
-                             device=device)
-            lg = gl.host_logits(model, lm_head, x)[0, -1].float().cpu()
+        # incremental KV decode — full re-forward per step is O(n^2) on this
+        # host (45L streamed experts: every prefix token re-fires its experts)
+        past = None
+        first = True
+        # answer-extractor: the reply opens inside a reasoning block; only
+        # tokens after the closer count toward max_new.  The closer can ride
+        # a token boundary, so watch a short decoded suffix.
+        reasoning_max = int(dec.get("reasoning_max", REASONING_MAX))
+        answering = False
+        n_answer = 0
+        for _ in range(reasoning_max + int(max_new)):
+            if first:
+                x = torch.tensor([ids], dtype=torch.long, device=device)
+                first = False
+            else:
+                x = torch.tensor([[out_ids[-1]]], dtype=torch.long,
+                                 device=device)
+            with torch.no_grad():
+                out = model(input_ids=x, past_key_values=past, use_cache=True)
+            past = out.past_key_values
+            hs = out.last_hidden_state if hasattr(out, "last_hidden_state") \
+                else out[0]
+            lg = lm_head(hs)[0, -1].float().cpu()
             pen = float(dec.get("rep_penalty", 1.0))
             if pen > 1.0:
                 for t in set(ids + out_ids):
@@ -206,7 +247,19 @@ def make_generator(plugins_dir: str, args=None):
             if nxt in stop:
                 break
             out_ids.append(nxt)
-        return _clean_reply(tok.decode(out_ids, skip_special_tokens=True))
+            if not answering:
+                if _REASON_CLOSE in tok.decode(out_ids[-8:],
+                                               skip_special_tokens=False):
+                    answering = True
+                elif len(out_ids) >= reasoning_max:
+                    break   # no-close fallback: return the preamble as-is
+                continue
+            n_answer += 1
+            if n_answer >= int(max_new):
+                break
+        text = _split_reasoning(tok.decode(out_ids,
+                                           skip_special_tokens=True))
+        return _clean_reply(text)
 
     gen_fn.installed = [n for n, _s, _p in installed]
     gen_fn.host = {"layers": n_layers, "sparse": len(blocks),

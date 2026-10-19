@@ -682,9 +682,12 @@ def fit_one_plug(model, tok, device, args, blk, bank, tag, host_expert,
 
     # GRAB: host-native SwiGLU core verbatim
     ex = blk.experts[host_expert]
-    w_gu = torch.cat([ex.gate_proj.weight.float(),
-                      ex.up_proj.weight.float()], dim=0).cpu()
-    w_down = ex.down_proj.weight.float().cpu()
+    if hasattr(ex, "native_core"):
+        w_gu, w_down = ex.native_core()
+    else:
+        w_gu = torch.cat([ex.gate_proj.weight.float(),
+                          ex.up_proj.weight.float()], dim=0).cpu()
+        w_down = ex.down_proj.weight.float().cpu()
     wrap = d25.WrappedForeignExpert(d_model, 64, w_gu, w_down,
                                     seed=args.seed, act="swiglu")
 
@@ -1001,9 +1004,12 @@ def install_plug_set(model, blocks, banks, plugins_dir, device) -> list:
             continue
         rec = torch.load(p, map_location="cpu", weights_only=False)
         ex = blk.experts[int(rec.get("host", {}).get("expert", 0))]
-        w_gu = torch.cat([ex.gate_proj.weight.float(),
-                          ex.up_proj.weight.float()], dim=0).cpu()
-        w_down = ex.down_proj.weight.float().cpu()
+        if hasattr(ex, "native_core"):
+            w_gu, w_down = ex.native_core()
+        else:
+            w_gu = torch.cat([ex.gate_proj.weight.float(),
+                              ex.up_proj.weight.float()], dim=0).cpu()
+            w_down = ex.down_proj.weight.float().cpu()
         wrap = d25.WrappedForeignExpert(bank.d_model, 64, w_gu, w_down,
                                         seed=0, act="swiglu")
         wrap.load_state_dict(rec["wrap"])

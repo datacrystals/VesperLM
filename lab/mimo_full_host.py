@@ -123,11 +123,14 @@ def _dequant_gpu(store, root: str, device: str) -> torch.Tensor:
     wz = zp_p.to(torch.int64)
     for k in range(8):
         z[k::8, :] = ((wz >> (4 * k)) & 0xF).to(torch.int8) - 8
-    qf = q.float()
     zf = z.float().repeat_interleave(g, dim=1)
     sf = scale.float().repeat_interleave(g, dim=1)
-    del packed, w, q, z, zp_p
-    return ((qf - zf) * sf).to(torch.float16)
+    del packed, w, z, zp_p
+    qf = q.float()
+    del q
+    qf.sub_(zf).mul_(sf)
+    del zf, sf
+    return qf.to(torch.float16)
 
 
 class ExpertCache:
@@ -172,7 +175,7 @@ class ExpertCache:
 # Full host build
 # ---------------------------------------------------------------------------
 
-def build_full_host(model_dir: str, device: str, cache_gb: float = 10.0,
+def build_full_host(model_dir: str, device: str, cache_gb: float = 18.0,
                     out: dict | None = None):
     """48L MiMo on `device` with disk-backed lazy experts.  Returns
     (model, tok, cache)."""
@@ -216,6 +219,12 @@ def build_full_host(model_dir: str, device: str, cache_gb: float = 10.0,
             continue
         real[name] = store.get(name).to(torch.float16)
         n_real += 1
+    # tie lm_head to embed (config _tied_weights_keys) — saves 1.16GiB and
+    # the per-token working set (376 experts x 50MB = 18.8GiB) needs every
+    # byte: cache < one token's expert set causes LRU thrash (measured 0
+    # cache hits / 3008 loads over 8 tokens)
+    if "lm_head.weight" in real and "model.embed_tokens.weight" in real:
+        real["lm_head.weight"] = real["model.embed_tokens.weight"]
     # meta params: assign via load_state_dict(assign=True) semantics
     for name, tensor in real.items():
         parts = name.split(".")
@@ -292,7 +301,7 @@ LazyExpertMLP._dummy_marker = nn.Identity()
 def make_generator(plugins_dir: str, args=None):
     device = getattr(args, "device", None) or (
         "cuda" if torch.cuda.is_available() else "cpu")
-    cache_gb = float(getattr(args, "cache_gb", 10.0) or 10.0)
+    cache_gb = float(getattr(args, "cache_gb", 18.0) or 18.0)
     out: dict = {}
     model, tok, cache = build_full_host(MODEL_DIR, device, cache_gb, out)
     blocks = mh.find_mimo_moe_blocks(model)
