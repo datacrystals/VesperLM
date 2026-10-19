@@ -18,6 +18,35 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-19 — e1-3080-fit-probe — `470m_k` t3 recipe on the 10 GB 3080: micro-batch 2 does NOT fit at 8k context even with FUSED_CE + bnb 8-bit AdamW (mb1 is the only working point; steady 9.1 k tok/s → ~5 days per t3 arm → lane rejected)
+- Evidence: `lab/E1_3080_PROBE.md` + box logs `3080+P40 box:~/e1_probe/logs/probeA2_mb2_8k.log`
+  (mb2×acc64 @seq8192: dummy pre-alloc pass OK, step 0 OK, OOM at step-1
+  backward — 7.50 GiB torch-allocated, 9.53 GiB total demand on a 9.64 GiB
+  card, `expandable_segments` on); `probeA3_mb1_8k.log` (mb1 fits: 5.7 GiB
+  torch-allocated steady, 8.9 GiB card high-water, 9,121 tok/s, Val 10.9180
+  at step 11, no NaN); `probeA_mb2_8k.log` (earlier mb2 OOM inside fla FLCE
+  backward, 9.19 GiB peak). A co-resident job claiming ~1 GiB on the 3080
+  also killed a running mb1 probe (`probeA1`) — mb1 has ~0.7 GiB headroom,
+  so the card must be exclusive.
+- Root cause: resident core (fp32 weights 2.24 + fp32 grads 2.24 + bnb
+  8-bit states 1.13 GiB) leaves <4 GiB for 8k-context activations / FLCE
+  backward chunks / flash-attn workspaces; mb2 roughly doubles the
+  activation side and crosses the line. Note the trainer's `use_muon`
+  default builds Muon+torch-AdamW *over* the bnb optimizer — the
+  `VESPER_USE_MUON=0` env gate (added in this probe) is required for the
+  bnb-only spec; the optimizer class was verified in the log before
+  trusting throughput.
+- What it rules out: the 10 GB 3080 as the venue for a full 3.77 B-token
+  t3 arm (~5 days/arm at the measured 9.1 k tok/s even on an exclusive
+  card; box rules are short-tests-only; co-tenancy kills mb1 jobs).
+  Env note for the trainerbox: fla 0.6.0 (user-site) requires triton ≥3.2
+  (`CachedAutotuner has no attribute reset_to_zero` on triton 3.1) AND
+  torch 2.5.1's Inductor is broken on triton 3.2 — venv fixed to torch
+  2.7.1+cu126 / triton 3.3.1 + flash-attn 2.8.3 wheel.
+- Next tried: none on-box — MI300X lane remains the cheapest honest venue
+  (matrix anchor 18–21 h/arm). The verified mb1 capsule stays available for
+  short 3080 canaries.
+
 ## 2026-10-16 — sft-r3-final-eval — trainer's end-of-run save never fires: the final ~200 steps of the 2000-step SFT r3 run exist only as console CE prints, not as a checkpoint
 - Evidence: `lab/logs/sft_vk_r3_train.log` (run completes rc=0 after step
   01990/2000 with no step-2000 eval/save); `SFT/01_sft_train.py:1015`

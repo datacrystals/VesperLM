@@ -136,6 +136,20 @@ def train():
     if os.environ.get("VESPER_NUM_EXPERTS"):
         current_cfg["num_experts"] = int(os.environ["VESPER_NUM_EXPERTS"])
 
+    # Fit-probe knobs (measurement runs; unset = identical to the recipe).
+    # VESPER_USE_MUON=0 disables the Muon+AdamW split below, leaving the
+    # single bnb 8-bit AdamW / torch AdamW built just above as the live
+    # optimizer for ALL parameters.
+    if os.environ.get("VESPER_USE_MUON", "").lower() in ("0", "false"):
+        current_cfg["use_muon"] = False
+        print("[env] VESPER_USE_MUON=0 — Muon split OFF (single AdamW-class optimizer)")
+    # VESPER_SEQ_LEN_START pins the seq-ramp start; setting it to max_seq_len
+    # locks context at 8192 for steady-state throughput/fit measurements.
+    if os.environ.get("VESPER_SEQ_LEN_START"):
+        current_cfg["seq_len_start"] = int(os.environ["VESPER_SEQ_LEN_START"])
+        print(f"[env] VESPER_SEQ_LEN_START={current_cfg['seq_len_start']} "
+              f"(measurement override of the seq ramp)")
+
     # Data-pipeline routing flag (default OFF — see module docstring)
     route_nonphase = (os.environ.get("VESPER_ROUTE_NONPHASE", "").lower()
                       in ("1", "true", "yes")
