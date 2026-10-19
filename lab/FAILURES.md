@@ -2232,3 +2232,53 @@ decode on the truncated host. Full-host feasibility is a separate question
   full arm. Teach phase S1..S6 had already re-confirmed CADENCE-IDENT
   (max |margin Δ| = 0.0), so no numbers were lost beyond the discarded
   partial attempt.
+
+## 2026-10-19 — bake-off v2 droplet (MI300X) — MiMo full-host soup persists; v2 tie fix ineffective
+
+Gate arm a (mimo noplug control) produced token soup on MI300X with the
+committed v2 host (lm_head tie + cache-18 default + in-place GPU dequant) —
+same failure signature as the v1 tiebug arm on MI50 (multi-language UI/code
+token salad, seed-deterministic).  Arms a/b stopped at the gate; GLM arm ran
+(full result in the v2 bake-off report).
+
+Diagnosis on the droplet (logit-lens + per-sublayer hooks + direct weight A/B,
+noplug full 48L host):
+- lm_head tie = numerically a no-op: checkpoint `lm_head.weight` values are
+  identical to `model.embed_tokens.weight` (norm/std equal to 5 decimal
+  places) even though `tie_word_embeddings=false`; v1-vs-v2 identical soup was
+  therefore never the head.
+- Top-8 next-token logits after a plain prefill are garbage at full depth;
+  truncating to 40 layers still garbage; incremental-decode and reforward
+  (-use_cache) give byte-identical greedy strings — decode path exonerated.
+- Every materialized tensor at the failing layers (attn qkv/o, router weight
+  + bias, norms, sink bias) cos≥0.9999 vs checkpoint; host INT4 dequant ==
+  compressed-tensors canonical `pack-quantized` semantics (pack_quantized
+  unpack_from_int32 + (q-zp)*s verified line-by-line); lazy-expert GPU dequant
+  == proven CPU dequant (cos 0.9985+ on fp16-vs-fp32 rounding).
+- Break pattern: MoE output norms explode at L10/L11/L16 (10–70x neighbours),
+  L41 mlp injects ~2329 into a 2291-norm residual (stream collapses to 311),
+  L46/L47 reinflate; attention outputs stay small everywhere; hidden norm
+  plateaus at ~2230 from L16.  Reference (fresh dequant + stock gate math)
+  reproduces the same explosions given the same hidden input — the trunk
+  content itself is wrong by L10, not any single module.
+- fp16 AND bf16 trunk builds fail identically (same token classes) — dtype
+  fallback exhausted (the one allowed fallback).
+- Control: vLLM serving of the same weights answers the canonical probe
+  correctly — weights and quantization are good; the lab full-host trunk
+  diverges at content level with every per-module formula verified.  Cause
+  unresolved at handoff (suspects: vendor-model/transformers-5.19 interaction
+  that passes arg-renaming yet changes semantics, or fused-qkv/sink
+  recomposition detail); trunk bisect deferred, arm budget spent.
+
+Process notes:
+- pip resolved `compressed-tensors` by REPLACING torch 2.9.1+rocm6.4 with a
+  CUDA build in the run venv; every new process then failed ROCm init
+  ("Found no NVIDIA driver") until force-reinstall --no-deps of the ROCm
+  wheel.  Diagnostic packages on ROCm boxes: install with --no-deps or pin
+  torch explicitly first.
+- DO-compat ufw ships `limit 22/tcp` (6 NEW/30s per IP) — parallel rsync
+  fan-out trips it; whitelist source IPs ahead of the rule for data-plane
+  hosts.
+- A droplet reboot loses the cloud-init self-destruct timer (oneshot); the
+  laptop-side 5-min watchdog + name-TTL remain the enforcement — manual
+  destroy-verified is still the required closing ritual.
