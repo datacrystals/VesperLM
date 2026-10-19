@@ -298,9 +298,19 @@ def feed_batches(tok, home: str, seq: int, bs: int, max_tokens: int):
     return vk.to_batches(ids, 1, seq, bs)
 
 
+def feed_batch_path(rel: str) -> str:
+    path = rel if os.path.isabs(rel) else os.path.join(REPO_ROOT, rel)
+    if not os.path.exists(path):
+        alt = rel.replace("/data/tliao", "/home/tliao", 1)
+        if os.path.exists(alt):
+            return alt
+    return path
+
+
 def base_batches(tok, seq: int, bs: int, max_tokens: int):
     kind, rel = BASE_FEED
-    ids = np.fromfile(rel, dtype=np.uint16).astype(np.int64)[:max_tokens]
+    ids = np.fromfile(feed_batch_path(rel), dtype=np.uint16).astype(
+        np.int64)[:max_tokens]
     return vk.to_batches(ids.tolist(), 0, seq, bs)
 
 

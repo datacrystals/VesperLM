@@ -1272,7 +1272,9 @@ frozen as the standard. Do NOT improvise alternatives without a falsifier:
                500k adds nothing — saturating, not log-linear)
     4. DELIVER additive lambda (fitted, grid incl. below 0.25) —
                softmax-mass stacking is strictly worse (door6/door10)
-    5. ROUTE   registry row (256B) + mex recal owner_mass 0.85, reject_w 10
+    5. ROUTE   registry row (256B) + mex recal owner_mass 0.85 (memory
+               plugs; spec-plug rows run BAR_OWNER_SPEC 0.35 — measured
+               best at rung-1 bank density, R2 2026-10-19), reject_w 10
 
 Killed branches (evidence on file, do not retry without new ideas):
 - feature translators (d1.5, door9): ~0.5 alignment ceiling
@@ -1976,9 +1978,21 @@ GLM-5.3-class ~50-200M), so k and expert-size are the two dials.
 1. per-graft home-quality drops below the solo bar (composition failure)
 2. pairwise/cross-fire harm > 0.02 after rejection (crowding failure)
 3. router saturation: p_home collapse / registry recal stops converging
+   (2026-10-19 R2 erratum — the p_home >= 0.5 reading as recorded by growth
+   is metric-miscalibrated: it is the per-row fit-time share against the
+   8-row stock bank, a stationary ~0.14 that CANNOT reach 0.5 on this
+   router (tie-top ceiling 0.31 per-row / 0.11-0.14 assembled) and is
+   invariant to bank size. The criterion as of R2 is: median home-token
+   membership >= 0.5 (row score > k-th stock — the gate's actual decision)
+   AND ceiling-relative p_home >= 0.5 of the tie-top envelope
+   (p_base_max <= 0.01 on the reject side). Evidence:
+   lab/PHOME_CALIBRATION.md.)
 4. "doesn't make sense with this base": routing entropy / coverage shows the
    spine cannot address the bank -> UPGRADE SPINE (3B Vesper rung) + router
    recal (registry rescale), then resume the ladder at the failed rung.
+   (R2 note: the n<=128 p_home history is NOT #4 evidence — assembled
+   routing stayed flat-to-rising 32->64->128; do not let the old metric
+   trigger this.)
 
 ### 11.3 Discipline
 - Each rung: wrap (§10.7 recipe, FEED >=200k) -> balanced per-home lambda ->

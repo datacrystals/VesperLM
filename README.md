@@ -216,8 +216,13 @@ rows measured **3/4** (n=32, 64, 128; 250 halted):
 
 **Verdict: growth-250 halted (2026-10-16)** — stop growing on the 325M-spine
 router. n=128 is the first size to break home quality (writing Δ+0.0239 past
-the 0.02 bar); p_home is chronically False (median 0.1464, 83/83 rows
-collapsed below 0.5 — False at every size since n=32). Plugin fits continue
+the 0.02 bar); ~~p_home is chronically False (median 0.1464, 83/83 rows
+collapsed below 0.5 — False at every size since n=32)~~ *(revised 2026-10-19
+by R2, `lab/PHOME_CALIBRATION.md`: the p_home reading is a metric artifact —
+per-row fit-time share against the 8-row stock bank, ceiling ~0.14, bank-size
+invariant; assembled routing measured healthy and flat-to-rising 32→64→128;
+the writing Δ break stands).*
+Plugin fits continue
 to 250/250 (205/250 at halt); the next growth attempt waits on a
 bigger-capacity spine router (the GLM-Flash/MiMo-Flash bake-off line).
 Watcher/fit scripts now live on `/data` (not `/tmp`) on the compute box and

@@ -32,7 +32,34 @@ README §3.7.
 
 Key facts: n=128 is the **first size to break home quality**; p_home is
 **chronically collapsed at every size from n=32** (median ~0.14, never
-passes 0.5). Pairwise harm and base tax never broke.
+passes 0.5). Pairwise harm and base tax never broke. **(Updated 2026-10-19
+by the R2 probe below: the p_home collapse is a metric artifact, not a
+routing state — see §3 note and `lab/PHOME_CALIBRATION.md`.)**
+
+### R2 p_home calibration probe (2026-10-19, laptop RTX 3070, clean)
+
+Queue item §3 #2 executed and CLOSED: `lab/PHOME_CALIBRATION.md`,
+`lab/phome_calibration.py`, evidence `lab/results/phome_calibration.json`
+(local). Reproduction on the synced 128-row registry: per-row p_home median
+0.1363 vs box 0.136 (±0.001/row), masked CE ±0.003/home, writing break
++0.0233 vs +0.0239. Grid {owner_mass 0.35–1.4 × s320 arm × gains 1/2/4,
+11 cells × 128 rows, no re-fitting} + assembled-bank pass + CE side-effects:
+**verdict = metric miscalibration, neither calibration-wins nor §11
+capacity.** p_home ≥ 0.5 is unreachable-by-construction on this bank
+(tie-top-stock ceiling 0.306 per-row-world / 0.108–0.141 assembled; the bar
+sits ~2–3 nats below the router's own beat-the-2nd-stock firing rule);
+assembled routing is healthy through n=128 (home-firing median 0.330→0.360
+→0.374 at 32/64/128 — flat-to-rising); every calibration knob that lifts
+p_home buys it in base share and breaks the delivery bars (owner0.85 "doc
+recipe": worst home +0.057, base +0.036; gain4/s320 worst +0.16–+0.25).
+Also measured: recipe text says owner_mass 0.85 but rung-1 fits ran 0.35
+(BAR_OWNER_SPEC); growth_128's p_home bucket saw only 83/128 rows
+(glob-dedup artifact). Ladder consequences: replace the §11.2 #3 tripwire
+with membership ≥ 0.5 + ceiling-relative p_home (p_base_max ≤ 0.01),
+keep owner 0.35 rows, and the real past-128 watch items are membership
+median and the writing-home Δ — the spine upgrade is NOT justified on
+p_home grounds (§11.2 #4 remains parked; the bake-off pick only gates the
+quality ladder, not a capacity rescue).
 
 ## 2. Deliberately NOT done (and why)
 
@@ -62,11 +89,17 @@ GLM-Flash vs MiMo-Flash arms already built). After the pick, in cost order:
 1. **(~0.1 GPU-hr) Socket sanity on the picked spine** — D0-class
    registry/graft parity (port both arms' parity results to one chosen
    spine). Confirms the router block adaptation before any bank work.
-2. **(~0.5–1 GPU-hr) p_home calibration probe on the existing 250-row
-   registry** — registry rescale + owner_mass sweep on the current spine.
-   Decisive split: if p_home recovers, the chronic collapse was calibration;
-   if not, it's capacity — which justifies the spine upgrade the ladder
-   already prescribes. Cheapest high-information experiment in the queue.
+2. ~~**( ~0.5–1 GPU-hr) p_home calibration probe**~~ **DONE 2026-10-19
+   (R2, laptop 3070 ~1.5 GPU-hr incl. CE pass)** — verdict: metric
+   miscalibration, neither calibration nor §11 capacity; see §1 note and
+   `lab/PHOME_CALIBRATION.md`. Consequences now baked into the queue: (a)
+   §11.2 #3 needs replacing (membership ≥ 0.5 + ceiling-relative p_home)
+   before the next growth run can even measure itself; (b) the spine
+   upgrade is no longer justified by router saturation — the bake-off pick
+   stays a QUALITY axis (conversational feel), the writing-home Δ+0.023
+   (λ-balance / crowding) is the only live break; (c) growth resume should
+   log membership + ceiling stats from here on (zero extra cost, cached
+   taps).
 3. **(~2–4 GPU-hr) Growth n=32/64/128 on the picked spine** — resume the
    ladder at the last failed rung (§11.2 #4). Writing-home Δ (+0.0239 at
    n=128) is the canary; all four bars re-measured at each doubling.
