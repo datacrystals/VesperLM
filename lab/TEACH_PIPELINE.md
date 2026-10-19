@@ -186,6 +186,27 @@ sessions erases an un-rehearsed item.
    wipeouts (12–14 nats) are untouched. Tier-2 still ROLLBACK (agg
    0.3156→0.0801), verdict unchanged by cadence as expected. Next arms:
    denser cycle (every-2-sessions), wipeout-triggered re-teach.
+5. **Reactive (trigger-based) consolidation — memory-manager prototype** —
+   **DONE 2026-10-19** (`lab/TEACH_TRIGGER_REPAIR.md`), harness
+   `lab/teach_trigger_repair.py` extends the cadence harness: teach phase
+   bit-identical to cadence (in-run CADENCE-IDENT check, max |Δ| = 0.0),
+   then 6 later sessions where a probe-after-every-session trigger
+   (r_i(k) < 0.50, the *hinge* boundary) queues phrasing-diverse re-teaches
+   into the next batch (one per session, lowest-r first, 28.6% share cap).
+   Verdict: **reactive repair works per contact; the static scheduler
+   under-serves the backlog.** vs cadence: dead slots eliminated (0/6 vs
+   2/6, worst r_final 0.17), mean r_final 0.581 vs 0.445, held-count ties
+   4/6; 6 served events, 5/6 positive repair (mean +0.445, max +1.252);
+   near-dead items rehabilitable (metric_units −0.14 → 0.69 on two
+   contacts), strict r ≤ 0.06 rehabilitation untested — the first-tripped
+   item (tea_tin) starved in queue for 6 sessions (9 trips vs 6 slots).
+   Bracketing from snapshots: threshold is also a service-rate throttle
+   (@0.25 capacity-matched and would have served tea_tin; @0.75 deepens the
+   backlog) ⇒ a threshold gate is not a scheduler; **age-weighted priority
+   is the required next component before this becomes the live
+   memory-manager loop** (adoptable prototype pending that fix). Poison
+   caught, incumbent intact, zero fallbacks; tier-2 ROLLBACK (0.3156 →
+   0.0740) as expected.
 
 ## Reproduction
 
