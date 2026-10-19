@@ -75,7 +75,14 @@ import telemetry
 
 ACTIVE_CONFIG_NAME = os.environ.get("VESPER_CONFIG", "470m")
 
-LINEAR_CHECKPOINT_DIR = f"vesper_linear_checkpoints_{ACTIVE_CONFIG_NAME}"
+# Run tag for paired/multi-arm experiments: isolates the checkpoint dir per
+# arm so arms never resume from each other (unset = historical dir name).
+VESPER_RUN_TAG = os.environ.get("VESPER_RUN_TAG", "")
+LINEAR_CHECKPOINT_DIR = (f"vesper_linear_checkpoints_{ACTIVE_CONFIG_NAME}"
+                         f"{'_' + VESPER_RUN_TAG if VESPER_RUN_TAG else ''}")
+
+# Checkpoint cadence override (unset = historical 500-step cadence).
+SAVE_INTERVAL = int(os.environ.get("VESPER_SAVE_INTERVAL", 500))
 MODEL_SNAPSHOT_NAME = "vesper_linear_model.py"
 
 # Optional bf16 autocast for the dense parts (MI300X/RTX-class GPUs).
@@ -186,7 +193,8 @@ def train():
     warmup_steps = current_cfg.get("warmup_steps", 1000)
     total_steps = int(os.environ.get("VESPER_TOTAL_STEPS",
                                      current_cfg.get("total_steps", 30000)))
-    eval_interval = current_cfg.get("eval_interval", 500)
+    eval_interval = int(os.environ.get("VESPER_EVAL_INTERVAL",
+                                       current_cfg.get("eval_interval", 500)))
     val_eval_steps = current_cfg.get("val_eval_steps", 50)
     aux_weight = current_cfg.get("aux_weight", 0.01)
     beta1 = current_cfg.get("beta1", 0.9)
@@ -397,7 +405,10 @@ def train():
             'model_config': model_config,
             'model': model.module.state_dict() if is_distributed else model.state_dict(),
             'muon_state': optimizers['muon'].state_dict() if optimizers else None,
-            'adamw_state': optimizers['adamw'].state_dict() if optimizers else optimizer.state_dict(),
+            'adamw_state': (optimizers['adamw'].state_dict() if optimizers else None),
+            # The bnb-only path (VESPER_USE_MUON=0, optimizers is None) resumes
+            # via checkpoint['optimizer'] — it must be written or resume KeyErrors.
+            'optimizer': (optimizer.state_dict() if optimizers is None else None),
             'step': step,
             'train_loss_history': train_loss_history,
             'val_loss_history': val_loss_history,
@@ -645,7 +656,7 @@ def train():
                     print(f"Prompt: {pr}\nOutput: {gen}\n" + "-" * 30)
 
                 ckpt = _build_checkpoint(step)
-                if step % 500 == 0 or step == total_steps - 1:
+                if step % SAVE_INTERVAL == 0 or step == total_steps - 1:
                     _write_checkpoint(ckpt, step)
 
                 if val_loss < best_val_loss:
@@ -694,7 +705,7 @@ def train():
                     plt.savefig(os.path.join(checkpoint_dir, "loss_curve.png"), dpi=150)
                     plt.close()
 
-                if step % 500 == 0 or step == total_steps - 1:
+                if step % SAVE_INTERVAL == 0 or step == total_steps - 1:
                     print(f">>> Saved checkpoint to: {checkpoint_dir}/step_{step}")
                 print(f"    Total tokens trained: {total_tokens_trained:,}\n")
 
