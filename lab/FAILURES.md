@@ -18,6 +18,23 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-16 — sft-r3-final-eval — trainer's end-of-run save never fires: the final ~200 steps of the 2000-step SFT r3 run exist only as console CE prints, not as a checkpoint
+- Evidence: `lab/logs/sft_vk_r3_train.log` (run completes rc=0 after step
+  01990/2000 with no step-2000 eval/save); `SFT/01_sft_train.py:1015`
+  (eval/save only inside the loop at `step % eval_interval == 0`, loop
+  tops out at step 1999). Last checkpointed state = `step_1800` / `step_best`
+  (val 1.5666); ckpt dirs stop at `lab/imported/vk_sft_r3/step_1800`.
+- Root cause: no post-loop save path in the trainer; the schedule length
+  (2000) is a multiple of the eval interval (200), so the missing final
+  save is silent.
+- What it rules out: nothing about the model — artifact-availability gap
+  only. Final chat selection is from the step_1800 grid (which is also
+  val-best, so the loss is bounded).
+- Next tried: none needed this round — `step_1800` (= `step_best`) is the
+  val-best and best-chat ckpt, so no fallback quality was lost. Fix queued:
+  add an unconditional post-loop save+eval to `01_sft_train.py` before the
+  next SFT round.
+
 ## 2026-10-16 — hippo-immune-gate-microsession-veto — the real Immune canary gate does NOT make the stub's promote/rollback calls at LoRA micro-session scale: it ROLLBACKs every teach session the stub promotes (drift ≥ 0.20 on every 24-step candidate) and "catches" the poison only because it rejects everything (1/4 decision agreement)
 - Evidence: `lab/logs/hippo_teach_demo_immune_gate_clean.log` +
   `lab/logs/hippo_teach_demo_immune_results.json` (gate =

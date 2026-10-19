@@ -73,20 +73,59 @@ host a second model copy for a side-loaded eval). Same prompts, same
 
 ## Results
 
-**Milestone: step 200 / 2000 (2026-10-16), run in progress** (~19s/step on
-the RTX 3070 Laptop, ≈0.06 steps/s; eval every 200 steps). Everything below
-is the first checkpoint — the round is not finished; re-score at later
-checkpoints, and treat val-best / best-chat as the selection points.
+**FINAL: run complete 2026-10-16 (rc=0; log
+`lab/logs/sft_vk_r3_train.log`).** Eval points every 200 steps
+(transcripts `lab/imported/vk_sft_r3/_evals/eval_chat_step{200..1800}.json`).
 
-**Loss.** Train CE (per-10-step, noisy as in r2): 1.92@0 → 2.04@10 →
-1.90@20 → … → 1.67–1.84@100–200 (window ≈1.75). Val CE (30 batches):
-**1.6417 @ 200 — NEW BEST, `step_best` = step 200.** Val CE is *not*
-comparable to r2's numbers (different val set: r3 mix vs r2
-oasst/openhermes mix); the cross-round instrument is the 12-prompt harness.
+⚠ **Trainer gap, recorded:** eval/save fires only inside the loop at
+`step % 200 == 0` (`SFT/01_sft_train.py:1015`), and the loop tops out at
+step 1999 — so the final eval/save at step 2000 never ran and the trainer
+exits with **no end-of-run save**. The last checkpointed state is
+**step 1800** (which is also `step_best`: val 1.5666); steps ~1801–1999 of
+training exist only as console CE prints. No step_2000 artifact exists to
+evaluate — final selection is from the step_1800 grid.
 
-**12-prompt conversational harness** (`SFT/eval_chat.py` instrument,
-T=0.7 / top-p 0.9 / max-new 180 / rep-pen 1.1 — the r2 verdict decode),
-full transcripts: `lab/imported/vk_sft_r3/_evals/eval_chat_step200.json`.
+**Train CE** (per-step entries; window mean / median over each 200-step
+block): 1.80/1.79 (1-200) → 1.70/1.70 (201-400) → 1.66/1.65 (401-600) →
+1.54/1.64 (601-800) → 1.60/1.61 (801-1000) → 1.57/1.59 (1001-1200) →
+1.58/1.59 (1201-1400) → 1.45/1.53 (1401-1600) → 1.52/1.53 (1601-1800).
+Slow monotone drift 1.80 → ≈1.5, same noisy texture as r2. Two transient
+collapse events — steps 711–723 and 1436–1447, CE drops to 0.1–0.6 for a
+dozen consecutive steps then recovers on its own — look like short runs of
+near-zero-CE sequences from the small synthetic bins (persona/direct), not
+instability (loss, val, and outputs are unaffected on either side).
+
+**Val CE** (30 batches, noisy and non-monotonic): 1.6417@200 → 1.6325@400 →
+1.8228@600 → 1.6910@800 → 1.6482@1000 → 1.7398@1200 → 1.6640@1400 →
+1.6864@1600 → **1.5666@1800 — best, `step_best` = step 1800.** Val CE is
+*not* comparable to r2's numbers (different val set); the cross-round
+instrument is the 12-prompt harness.
+
+**Final rubric curve** — all points scored from the live-model harness runs
+(`SFT/eval_chat.py` instrument, T=0.7 / top-p 0.9 / max-new 180 / rep-pen
+1.1, the r2 verdict decode, so scores compare). Strict usable = PASS-only
+bar, same rubric as the r2 6/12 verdict; loop/echo/empty/formula-debris
+audits from full transcripts:
+
+| ckpt | strict usable | hard-loop | formula-debris | echo / empty | failing family |
+|------|---------------|-----------|----------------|--------------|----------------|
+| 200  | 2/12 | 0 | 0 | 0 / 0 | factuality 2, task 2, salad 0 |
+| 400  | 3/12 | 1 (space-fact digit runaway) | 0 | 0 / 0 | factuality, task (translate) |
+| 600  | 4/12 | 0 | 0 | 0 / 0 | factuality (France, space, arith) |
+| 800  | 2/12 | 1 (ocean-poem line loop) | 0 | 0 / 0 | factuality, thin answers |
+| 1000 | 3/12 | 0 | 0 | 0 / 0 | task (arith, translate), thin |
+| 1200 | 3/12 | 1 (ocean-poem line loop) | 0 | 0 / 0 | factuality (Bourges!), task |
+| 1400 | 5/12 | 0 | 0 | 0 / 0 | factuality (space, arith), task (translate) |
+| 1600 | 2/12 | 1 (ocean-poem litany loop) | 0 | 0 / 0 | factuality, garble |
+| **1800** | **5/12** | **0** | **0** | **0 / 0** | arith form-wrong, space-fact vague, translate refused |
+| r2 best (600) | 6/12 | 2 | 3 | 0 / 0 | salad/drift + loops |
+
+Reply lengths (chars, median/min·max of 12): 337/14·875 @200 → 354 @400 →
+360 @600 → 478 @800 → 302 @1000 → 268 @1200 → 567 @1400 → 400 @1600 →
+426/31·859 @1800. No empty replies and no prompt echoes at any checkpoint.
+
+Per-prompt verdicts at the first milestone (step 200) for reference; the
+curve above re-scores the same 12 at every eval point:
 
 | # | prompt | r3 @ step 200 | r2 (best, step 600) |
 |---|--------|---------------|---------------------|
@@ -103,36 +142,59 @@ full transcripts: `lab/imported/vk_sft_r3/_evals/eval_chat_step200.json`.
 | 11 | translate to French | FAIL (task ignored) | FAIL |
 | 12 | why do we dream | **PASS** (coherent on-topic) | PASS |
 
-**Loop/quality audit (12 prompts):** hard-loop **0/12** (r2: 2/12),
-prompt-echo 0/12 (r2: 0/12), empty 0/12 (r2: 0/12), formula-debris
-**0/12** (r2: 3/12). All 12 replies are fluent, stopping prose.
-Reply-length stats at step 200: median ~340 chars, min 14, max 875
-(r2's failure set included empty replies and runaway loops; neither
-appears here). Full transcripts live in the eval JSON above.
+**Loop/quality audit at step 200:** hard-loop **0/12** (r2: 2/12),
+prompt-echo 0/12, empty 0/12, formula-debris **0/12** (r2: 3/12). All 12
+replies are fluent, stopping prose. Full transcripts live in the eval JSON
+above.
 
 
-## Verdict vs r2
+## Final verdict vs r2 (full-training answer)
 
-**Strict usable count at this milestone: 2/12 vs r2's 6/12** (PASS-only
-bar) — r3 is *not* yet ahead on the r2 scale, and this is only 200/2000
-steps (r2's 6/12 was its val-best at step 600 of 2000). But the failure
-class has changed, which is what the r3 mix was built for:
+**Question: does the r3 zero-salad/anti-drift fix hold at full training?
+YES for the failure mode, NO for the headline count.**
 
-- **Salad/drift is gone as a mode.** r2's headline failure (corpus-drift
-  into formula debris on knowledge prompts, 3/12) produces **0/12** here;
-  hard loops 2/12 → **0/12**. All 12 replies read as conversation.
-- **The residual family is task-following + factuality:** wrong facts in
-  fluent prose (2/12), task ignored (2/12), thin-but-clean answers (the
-  PARTIAL pile). Arithmetic is wrong but in *answer form* (the GSM8K bin's
-  exact target; r2 hard-looped instead).
-- r3 already fixes two prompts r2 failed outright (photosynthesis, black
-  hole's loop) and loses two r2 passes to factuality (France, space).
+- **Formula-debris / corpus-drift: fixed, and it stayed fixed.** 0/12 at
+  every one of the 9 checkpoints (r2: 3/12 at its best, worse at others).
+  108 scored replies and not one salad episode.
+- **Hard loops: fixed at the final state, but NOT structurally gone** —
+  r2's 2/12 baseline drops to **0/12 at step 1800**, yet 4 transient loop
+  episodes appear mid-curve (step 400 digit-runaway on the space fact;
+  ocean-poem line loops at 800/1200/1600). The poem prompt is the residual
+  loop trigger; it is gone at the val-best end state but was not trained
+  out as a class.
+- **The strict usable count never beats r2: peak 5/12 (@1400 and @1800)
+  vs r2's 6/12.** r3 traded r2's catastrophic failures (loops, debris,
+  empties) for fluent, wrong-or-thin answers: the residual family all
+  round is **factuality** (confident wrong facts in clean prose — e.g.
+  "Bourges" as France's capital @1200, fabricated space facts) and
+  **task-following** (translate-to-French failed at all 9 checkpoints;
+  arithmetic wrong at all 9 but always in clean answer form — r2's
+  arithmetic hard-loop is gone, the GSM8K bin's form target landed, the
+  math itself didn't).
+- **Quality floor is way up, ceiling is not.** Worst checkpoint (2/12)
+  has zero catastrophic replies; r2's failures were unusable, r3's are
+  mediocre. For a chat demo this is the better model to show; for the
+  6/12-style "fully usable" bar, the next lever is factuality/task data,
+  not anti-drift data.
 
-Best-chat checkpoint so far: `lab/imported/vk_sft_r3/step_200/chat_model`
-(= `step_best` at this milestone). Judgement to be re-taken at later
-checkpoints as val falls — the quality lever the r3 mix targets
-(task-following, arithmetic form, persona voice) is trained by the small
-bins (gsm8k/persona/direct), which need more than 200 steps to show.
+**Chosen chat model: `lab/imported/vk_sft_r3/step_1800/chat_model`**
+(= `step_best`, val CE 1.5666, the run's best). It ties step_1400 on the
+strict 5/12 but wins the tiebreak on every secondary metric: lowest val
+loss of the run, 0 hard-loops (1400 also 0, but 1800's passes include the
+two factuality-heavy wins — Paris direct, black-hole core correct), and it
+is the final trained state. r2's `chat_model` is retired as the demo
+default: 5/12-with-no-catastrophes beats 6/12-with-loops for live use.
+
+**Sample generations from step_1800** (model output only, same decode as
+above; transcripts `_evals/eval_chat_step1800.json`):
+
+1. "What is the capital of France?" → "The capital of France is Paris."
+2. "Can you explain what a black hole is in simple terms?" → "A black hole
+   is a region of space where gravity is so strong that nothing, not even
+   light, can escape from it." (continues cleanly; later embellishments
+   drift into fact errors, the PARTIAL pattern)
+3. "Hello! How are you today?" → "I'm glad I could help. What's new with
+   you?"
 
 
 ## r2 baseline (fixed instrument, T=0.7 / top-p 0.9 / max-new 180)
