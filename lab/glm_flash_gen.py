@@ -259,6 +259,11 @@ def make_generator(plugins_dir: str, args=None):
                 break
         text = _split_reasoning(tok.decode(out_ids,
                                            skip_special_tokens=True))
+        gen_fn.last_stats = {
+            "reasoning_tok": len(out_ids) - n_answer,
+            "answer_tok": n_answer,
+            "closed": bool(answering),
+        }
         return _clean_reply(text)
 
     gen_fn.installed = [n for n, _s, _p in installed]
