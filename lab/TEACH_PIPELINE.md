@@ -233,6 +233,38 @@ sessions erases an un-rehearsed item.
    near-dead-band rehabilitation stands from the trigger arm). Poison
    caught, incumbent intact, zero tripwires; tier-2 ROLLBACK
    (0.3156 → 0.0787) as expected, fifth reading of the two-tier split.
+7. **Scheduler v2 — age from first trip + deficit floor** — **DONE
+   2026-10-19** (`lab/TEACH_AGED_SCHED_V2.md`), harness
+   `lab/teach_aged_sched_v2.py` (calibrations bit-identical twice and
+   bit-matching the v1/trigger/cadence seed-7 calibration; teach phase
+   CADENCE-IDENT max |Δ| = 0.0; v2 S7 additionally bit-identical to the
+   trigger arm's S7). Formula: priority = (k − first_trip_i) + max(0,
+   thresh − r_i(k)), first_trip sticky across service (re-trips keep
+   their seniority), eligibility floor deficit > 0 (self-recovered items
+   cannot consume slots). Verdict: **explicitly NEGATIVE — none of the
+   four success criteria met.** The v1 §5.1/5.2 mechanics both held
+   (re-trips got contact latency 1 when queued with life; the floor
+   blocked fav_show/math_words from consuming slots on age alone), but
+   greet_rule queued after S7, eligible at all 5 probes (r to −0.49, the
+   run's largest live deficit) and was never served — first-trip
+   starvation REINTRODUCED by the chronic-seniority hog: tea_tin's three
+   serves netted +0.274 r without ever crossing threshold, so it
+   re-queued with maximum age every probe and ate 3/6 slots, 1:1 against
+   greet_rule's and pet_dog's missing serves. Horizon 2/6 ≥ 0.50, 2 dead
+   (pet_dog −0.32, greet_rule −0.11), mean 0.280 vs the trigger bar
+   4/6 / 0 / 0.581; queue-wait {1:4, 2:1, 5:1}; re-trip starvation at
+   horizon: none (2 unserved re-trips waited ≤1 probe, horizon-edge).
+   Secondary reads: dead-ban counterfactual reorders 2/5 probes and cuts
+   both ways (would have blocked the run's best serve, metric_units
+   −0.115 → +0.897) — not adopted; serve cap 1 was never the binding
+   constraint (eligibility was). 12/12 promotes, 0 tripwires, poison
+   caught, incumbent intact, no fallback, no crash; tier-2 ROLLBACK
+   (0.3156 → 0.1073), sixth reading. **The scheduler is still not done;
+   age-as-principal is not the fix.** Next arms (one knob each): per-item
+   serve budget / served-item cool-down or no-progress eviction (breaks
+   the hog), or deficit-dominant priority with age as tie-breaker; the
+   trigger arm's lowest-r-first remains the strongest measured scheduler
+   and its defect is capacity, not fairness.
 
 ## Reproduction
 
