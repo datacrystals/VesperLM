@@ -277,6 +277,40 @@ sessions erases an un-rehearsed item.
    scheduler. E1's functional pass is satisfied by the existing scheduler;
    no new drive wiring recommended. Multi-drive layer stays cut back per
    SUBSYSTEMS.md §5.
+9. **Scheduler v3 — deficit-dominant priority + per-item serve budget
+   (no-progress eviction)** — **DONE 2026-10-19**
+   (`lab/TEACH_AGED_SCHED_V3.md`), harness `lab/teach_aged_sched_v3.py`
+   (calibrations bit-identical twice and bit-matching all four prior
+   harnesses' seed-7 calibration; teach phase CADENCE-IDENT max |Δ| = 0.0;
+   S7–S9 bit-track v2 run-for-run). Formula: serve order = (live deficit
+   max(0, 0.50 − r) desc [dominant], age-from-first-trip desc [tie-break
+   only], library order); eligibility unchanged (deficit floor + not
+   evicted); SERVE_BUDGET 2 serves per unheld episode (a serve with
+   Δr ≤ +0.10 counts no-progress; budget-2 eviction justified by v2's
+   tea_tin episode yields hitting noise at serve 3); re-admission only
+   after an unaided held probe — never fired, policy-blocked 2 tea_tin
+   re-trips. Verdict: **explicitly NEGATIVE — third negative scheduler
+   arm; best of the aged line, still short of the bar on all three
+   criteria.** The hog died (max serve share 2/6 vs v2's 3/6; tea_tin
+   evicted once at live r 0.022; greet_rule — v2's 5/5-eligible starvation
+   case — served at its first head-eligible probe with +0.638 repair) but
+   deficit-dominant serving grew the mirror-image defect:
+   **shallow-deficit starvation** — fav_show (never the live max deficit;
+   peaked #2 at 0.517) waited 4 probes eligible, self-recovered, crashed
+   un-served to −0.22, and metric_units' first trip stretched to latency
+   6 with a negative repair (−0.203, its fourth straight negative v1 draw
+   across four arms). Horizon 2/6 ≥ 0.50, 1 dead, mean 0.416 vs trigger
+   bar 4/6 / 0 / 0.581 (v2: 2/6 / 2 / 0.280); waits {1:3, 2:1, 3:1, 6:1};
+   repair mean +0.384 (second to trigger). 12/12 promotes, 0 tripwires,
+   poison caught, incumbent intact, no fallback, no crash; tier-2 ROLLBACK
+   (0.3156 → 0.0475, drift 1.000 fail), seventh reading. **The ordering
+   rule is not where the remaining loss lives**: what landed v3's mean was
+   serve content on the right items, not the queue order. Next surfaces by
+   evidence weight: (a) repair-content layer (pin/skip the known-bad
+   metric_units × v1 item-variant pair, 0-for-4 across arms); (b)
+   shallow-deficit fairness override (force a serve after N eligible
+   probes); (c) an S13+ equilibration horizon-discipline arm (the
+   freeze-mid-oscillation caveat is now measured three times).
 
 ## Reproduction
 
