@@ -208,6 +208,9 @@ tracks *active* parameters, as expected.
   pairs ≤ first 4096, growth evals ≤ first 1536 — so feed tokens past
   200,192 are a provable held-out wedge per home (250k-token files). Any
   "held-out" claim without this arithmetic is not held out.
+- **CE batch-shape drift** (2026-10-19, R8): the same window measured bs1
+  vs grouped-bs6 reads ~+0.0009 CE apart (fp16 accumulation order, not a
+  bug); compare cells only within one grouping and say which.
 - **Reboot-surviving watchdogs** (from the silent-stall episode): the 470M
   pretrain's watchdog must live in crontab/systemd — `/tmp` scripts die on
   reboots. Companion traps: `trap cleanup INT TERM` without `exit` makes

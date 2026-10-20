@@ -138,6 +138,24 @@ proven-valuable; the win home is the base's own domain (base-over-fit
 hypothesis). Named next electron: per-home λ re-fit on held-out tails
 under the budget (~1 GPU-hr); failing wins there, retire rung-1's claim
 to neutral modular assembly and let the bake-off line carry the value.
+
+### R8 λ-refit on held-out tails — the last rung-1 electron (2026-10-19, laptop)
+
+`lab/LAMBDA_REFIT_HELDOUT.md`, `lab/lambda_refit_heldout.py`, evidence
+`lab/results/lambda_refit_heldout.json` (local). 32 cells (8 homes × λ
+{0.25, 0.75, 1.0, 1.5}, q0.75 renorm, W1 tails verbatim) + same-harness
+grouped refs (ungrouped↔grouped drift +0.0009 measured, refs re-based).
+**Zero band wins (32/32 sub-band); only above-band perturbation is web
+λ1.5 +0.0037 in the tax direction.** chat-win significance killed as a
+bank claim (split halves −0.0016/−0.0070 — lumpy/regime-dependent, mean
+replicates). **Verdict: λ-NEUTRAL — final. RUNG-1 closes here: the
+250-row vk-scale modular assembly is proven neutral-safe-not-valuable;
+the rung-2 gate is CLOSED for cause (no value channel at this base
+scale), and the dream-carrier = the spine line (bake-off pick carries
+the quality endgame; on a bigger spine, grafts would have headroom to
+fill).** Surviving claim: modular-MoE assembly + corrected metering +
+delivery budget at 250 rows is safe, non-degrading, measured — real
+infrastructure, explicitly not a value result.
 Side-effect: the growth harm protocol's ablation was state-wiped for a
 week (all prior harm columns = noise; FAILURES.md); corrected 24-pair harm:
 worst **+0.0012** default / **+0.0011** at the recipe cell — §11.2 #2 PASS,
