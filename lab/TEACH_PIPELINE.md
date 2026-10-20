@@ -375,9 +375,19 @@ sessions erases an un-rehearsed item.
     architecture (oldest open read; run on the winner); (b) intra-class
     refinement — triangulate which style-item pair interferes inside the
     style bank (3-item bank lost the class-mean) before considering
-    finer-grained banks; (c) adoption gate before any of it sticks:
-    replicate BANK once at a second seed — the win was declared on one
-    draw.
+    finer-grained banks; (c) **seed-2 replication adoption gate — IN RUN
+    2026-10-20** (`lab/TEACH_BANKED_ADAPTERS_SEED2.md`; harness
+    `lab/teach_banked_adapters.py` VERBATIM, only `--seed 43`, everything
+    else frozen). Entry: calibration pair bit-identical under seed 43
+    (creates the seed-2 fixture: baseline +1.7177737951278687 →
+    post-teach +13.562385082244873 vs seed-7's +4.4509382247924805 —
+    seeds move gains, trajectories still deterministic), baselines
+    bit-match committed series anchors (seed-independent probes).
+    Criteria declared before arming: pass = BANK held > CTRL held AND
+    BANK dead < CTRL dead AND style-bank residual local (BANK style mean
+    ≤ ~0.5) AND fact-decay sign flips again (CTRL <0 → BANK ≥ ~0); any
+    contradiction = replication fail (n=2) with item 13 = "wider seed
+    replication / design failure of banks".
 
 ## Reproduction
 
