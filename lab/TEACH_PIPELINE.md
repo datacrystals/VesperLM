@@ -401,16 +401,42 @@ sessions erases an un-rehearsed item.
     probes survived) and 12th (BANK-43 fact bank → 0.1038, protected
     0.011). 12/12 promotes ×2 arms, 0 tripwires, poison per store
     intact, no fallback.
-13. **Queued next — wider seed replication + mechanism
-    re-instrumentation** (named by the 12(c) fork, which pre-wrote
-    "wider seed replication / design failure of banks"; the measured
-    split keeps the first half: the axis paid twice, so the design isn't
-    falsified, but NO adoption until the mechanism replicates). ≥2 more
-    seed draws (1042-family) on both arms with per-bank cross-class /
-    intra-class drift instrumented per session from the probe snapshots
-    (decay story read directly, not inferred from class means).
-    Items 12(a) and 12(b) stay queued at lower priority — more arms on
-    an un-replicated mechanism compound inference error, not evidence.
+13. **Wider seed replication (1042-family) + mechanism
+    instrumentation** — **DONE 2026-10-20, VERDICT: DEFER per the
+    pre-declared n=3 rule-set** (`lab/TEACH_BANKED_ADAPTERS_SEED1042.md`;
+    harness verbatim for CTRL; BANK adds the committed same-script
+    `--foreign-probes` flag: foreign-bank margins at every shield-phase
+    probe → JSON `foreign_margins` + per-probe `isolation_per_probe`).
+    Entry: seed-1042 fixture created (calib ×2 bit-identical, baseline
+    +1.7177737951278687 anchor, post-teach +13.200785398483276); anchors
+    bit-match in both arms. Results: CTRL-1042 4/6 / 1 dead (fav_show
+    0.035) / 0.580; BANK-1042 3/6 / 1 dead (fav_show 0.014) / 0.545.
+    Declared rule accounting: direction axis 2/3 held (s3 MISS: 3<4) +
+    2/3 dead (s3 tie=miss by rule) vs required 3/3; fact-flip regulator
+    1/3 (s3 −1.357 → −0.457 same-sign again) vs required ≥2/3;
+    style-local 2/3 (passes: 0.35 / 0.56✗ / 0.44). Verdict: **DEFER —
+    weakly positive at axis level, mechanism-unproven at n=3**; held
+    deltas +1/+1/−1 sit under the sweep's own noise floor (teach gains
+    move 3× by seed), pet_dog motif softened at s3 (held in BANK 3/3
+    draws; s3 CTRL never buried it). Instrumentation read: cross-class
+    gap opens exactly where the class interference is (tea_tin r_own ≈
+    2× r_off all phase; pet_dog parity collapses post-S9) but the
+    within-run quantitative layer does not rescue the regulators.
+    Tier-2: 13th ROLLBACK (CTRL-1042 → 0.1733) and 14th (BANK-1042 fact
+    bank → 0.0870, protected 0.028); 12/12 promotes ×2, 0 tripwires,
+    poison per store intact, no fallback.
+14. **Queued next — the "SPLIT" attribution arm** (named by the n=3
+    defer rule): same class-split batches as BANK (two per-session
+    consolidate calls, class-filtered exactly like BANK) into ONE shared
+    adapter — separates segregated-adapter-stores vs class-split
+    consolidation granularity, the two things BANK bundles in every
+    existing data point. Pre-declared predictions: SPLIT ≈ BANK → the
+    win was batch-splitting (consolidation granularity), not
+    segregation; SPLIT ≈ CTRL → adapter store was the cause; anything
+    between → shared contribution. One arm ~2.5 h wall, all knobs/batches
+    pinned by the series. Items 12(a) (equilibration on BANK) and 12(b)
+    (style triangulation) stay queued below 14 — 12(b)'s question
+    presumes the intra-class story that just failed to replicate at n=3.
 
 ## Reproduction
 
