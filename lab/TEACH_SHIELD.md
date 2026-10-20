@@ -1,7 +1,9 @@
 # TEACH_SHIELD — shield-everything-every-session (the scheduling-question killer)
 
-**STATUS: COMPLETE — explicitly NEGATIVE.** The pre-named verdict line
-holds: **"architecture-straw-limit, schedules dead, adaptive capacity
+**STATUS: COMPLETE — explicitly NEGATIVE** (run 2026-10-19, finalized
+2026-10-20 from `lab/teach_shield_out/teach_shield.json`; the PARTIAL doc
+committed mid-run at d601351 is fully replaced). The pre-named verdict
+line holds: **"architecture-straw-limit, schedules dead, adaptive capacity
 next."** The strongest possible service policy at this capacity shape —
 everything alive, every session, no queue to game — still misses the
 trigger bar on all three criteria (2/6 held vs 4/6, 1 dead vs 0, mean
