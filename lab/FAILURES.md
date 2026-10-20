@@ -2420,3 +2420,39 @@ Process notes:
   dequant semantics, rope, sinks, expert row order, fused-qkv layout,
   decode-path caching.  Process lesson: statistical identity (norm/std)
   is not tensor identity; compare values when a tie is claimed.
+
+## 2026-10-20 — mimo-plug-smoke — fitted persona plugs soup the FAITHFUL full host via always-on membership (gate threshold mis-scaled, not the head, not the wraps' existence)
+
+- Evidence: lab/MIMO_PLUG_SMOKE.md + box logs `plug_smoke_matrix.log`,
+  `plug_diag2.log`, `plug_rates.log`; committed harnesses
+  `lab/mimo_plug_smoke.py` (matrix), `lab/mimo_plug_diag.py` (isolation),
+  `lab/mimo_plug_rates.py` (separation).  Noplug control PASSES
+  (trains/math coherent); every solo plug arm (λ per record, 1.0
+  measured) flips the same host to salad with the L16 plateau collapsing
+  10–200×.
+- Isolation: passport gate route-identical (topk agreement 1.0000); gate
+  installed with wrap OFF (MixMerge mode=off) decodes the faithful text
+  class; additive mode soups.  Damage = the injection path.
+- Mechanism: MimoPassportGate membership = plug_raw_bank_score >
+  8th-best stock raw score.  On this host kth_raw ≈ −0.7 while the
+  fitted rows score 3.9–5.2 raw on ALL probe classes (on/off separation
+  exists: home 5.1–5.2 vs math 3.9), so membership = 1.0000 always → the
+  wrap's foreign-expert bias lands on every token at λ=1.0 → stream
+  re-attracts into soup.
+- Root cause class: membership operating point vs row_recal calibration
+  (rows were recal'ed on the 2-layer slice under softmax-p_new targets:
+  p_new_base 0.0115 at fit; on the full host softmax p_new is 0.44–0.65 —
+  the raw-kth comparator lives in a different universe from both).  NOT a
+  fit-content failure at this level of evidence; NOT the lm_head change
+  (wraps/rows are MoE-layer geometry, 47 layers upstream of the head).
+- What it rules out: plug-loading/contract bugs (records load clean, λ and
+  geometry as specified), head-carryforward issues, gate numerics.
+- Next (one shot, per lane rule — calibrate once, not loop): redo the
+  membership calibration on the faithful full host: either (a) retune the
+  comparator margin (e.g. plug_raw > max-stock-raw + tuned margin) against
+  a declared on/off suite, or (b) rerun row_recal on the full host with
+  the same p_new targets, then re-run lab/mimo_plug_smoke.py.  If the
+  recalibrated pack still can't pass solo coherence + home keyword, the
+  wraps are fit-to-retrain on the full host (slice-fit is the remaining
+  suspect geometry: fit-time block-0 hidden distribution was measured on
+  the 2-layer slice).
