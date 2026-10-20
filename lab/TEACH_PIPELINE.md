@@ -343,45 +343,35 @@ sessions erases an un-rehearsed item.
     the first time) — still ROLLBACK (drift 1.000 fail), eighth reading.
     12/12 promotes, 0 tripwires (20-triple batches cold at top_frac
     0.05–0.07), poison caught, incumbent intact, no fallback, no crash.
-11. **Queued next — adaptive capacity: class-segregated adapter banks
-    (fact bank / style bank) with a serving-layer class selector, against
-    a one-shared-LoRA control** — named from the shield trace: the only
-    measured lever left is interference isolation (style loss concentrated
-    under identical service — style r_final mean 0.286 vs fact 0.704;
-    S7 mass-damage inside one fully-shielded batch is batch-internal and
-    not schedulable); a raw capacity knob (rank/steps) does not address
-    item-on-item interference and is not the pick. **Hooks ready:**
-    checkpoint `lab/imported/vk_sft_r3/step_1800/chat_model` (same as the
-    whole series); library unchanged (its 3F/3S split IS the two banks);
-    training knobs frozen (rank 8, alpha 16, lr 2e-3, kl 0.05, 24 steps,
-    seed 7) — **the scaled field is the adapter store alone**: per-class
-    banks `<workdir>/adapters/alice/fact/delta.pt` +
-    `<workdir>/adapters/alice/style/delta.pt` (Hippocampus adapter paths
-    are per-(user,id)-ish already — bank = new key in the same tree, no
-    consolidate change); every session consolidates per bank on the
-    SAME session log filtered to its class (bank_f: filler approvals +
-    fact-item turns; bank_s: filler approvals + style-item turns — filler
-    is class-neutral generic chat, kept in both as the control
-    interference environment, documented); serving/probe layer selects the
-    OWNING class bank per item (cross-bank apply-off = the run's control
-    for leakage, logged margin-side). Deltas stop crossing classes by
-    construction: fact items can no longer damage style items at the
-    weight level, only at inference-time composition none exists.
-    **Control arm (internal A/B, decay-replay discipline):** CTRL = the
-    same script with bank=shared (identical batches, identical seed — its
-    teach phase is the series' standard one, so CTRL doubles as the
-    cross-check row against the committed trigger/cadence numbers where
-    the batch shapes coincide); BANK vs CTRL is the read, with the
-    trigger bar (4/6 held, 0 dead, mean ≥ 0.581) reported alongside as
-    the series reference. **Compute:** laptop CPU only, fp32 — tier-2
-    Immune never leaves CPU (I7); GPU not needed. **Wall estimate:** ~2×
-    the shield arm (two consolidate calls per session) ≈ 8 h on the tired
-    box — schedule overnight. Determinism discipline unchanged (bit-x2
-    calibration before arming; CADENCE-IDENT applies to CTRL only, BANK
-    declares its own baseline family from S1). One fallback max;
-    tripwires/poison/tier-2 unchanged. Carried forward regardless of
-    #11's shape: repair-content rule pin/skip the metric_units × v1 pair
-    (0-for-5), and the S13+ equilibration horizon-discipline arm.
+11. **Adaptive capacity: class-segregated adapter banks (fact/style)
+    with serving-layer class selector vs one-shared-LoRA CTRL** — **IN
+    RUN 2026-10-20** (`lab/TEACH_BANKED_ADAPTERS.md` marked IN RUN;
+    harness `lab/teach_banked_adapters.py`, both arms overnight).
+    Library amended formally: metric_units REMOVED (×v1 pair 0-for-5
+    across five arms, no positive counter-example — item unsalvageable as
+    a probe), S4 style slot refilled by **ordinal_words** (write ordinals
+    as words; digit↔word contrast in the measured-good math_words
+    family). Hooks as staged: per-class stores
+    `adapters/alice/{fact,style}/delta.pt`; knobs frozen (rank 8, alpha
+    16, lr 2e-3, kl 0.05, 24 steps, seed 7); shield later-phase verbatim
+    in both arms (scheduling dead); per-bank consolidate on
+    class-filtered batches (filler shared into both banks as control
+    interference); serving layer applies the owning bank per class;
+    horizon isolation read r_own vs r_off; virgin-bank contamination
+    fixed by construction (seed_fresh_branch re-seeds A and zeroes B
+    before a bank's first consolidate). Determinism: entry calibration
+    (BANK-mode fav_show = series S1 batch verbatim) bit-identical twice
+    AND bit-matching the committed series S1 margins (+1.7177737951278687
+    → +4.4509382247924805); CTRL carried-item baselines + S1..S3
+    CADENCE-IDENT subset asserted in-run vs committed cadence.
+    Success criteria declared: BANK beats CTRL on held AND on dead AND
+    ties-or-beats the trigger bar (4/6 held, 0 dead) → "architecture
+    wins"; any miss → honest negative with mechanism. CTRL → BANK chained
+    overnight; verdict lands in follow-up commit.
+12. **Queued next (post-#11 carries)**: S13+ equilibration
+    horizon-discipline arm (the freeze-mid-oscillation caveat is measured
+    three times) regardless of #11's shape; ordinal_words gets its ±
+    position among the series' style items read off this arm.
 
 ## Reproduction
 
