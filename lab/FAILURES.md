@@ -2558,3 +2558,34 @@ Process notes:
 - Lesson recorded: for full-host adapter fits, never START from a
   soup-era adapter state; identity restart is the only sane origin;
   recipe lrs must be scaled when the objective spans the full trunk.
+
+## 2026-10-20 — mimo-persona-dose (win-margin objective, mem_trains, 150 item-steps) — margin objective achieved (+1.6 nats win-over-bad) at the cost of the whole stream: at-rest parity delta +5.9974, all probes blank; dose+margin as specified is NEGATIVE
+
+- Evidence: `~/mimo_flash/logs/dose_mem_trains.log`; lab/MIMO_PERSONA_DOSE.md.
+  Protocol: identity restart / lr 3e-4 / clip 1.0 / λ 0.5 / PACK=2
+  padded T=128 through the full 48L host (backward-safe; the
+  non-multiple-of-128 >128 padded/chunked T hole found in a probe
+  series this cycle — T=129..255 padded-chunk backward crashes on
+  gfx906; 256-aligned passes).  Checkpoint recompute flakiness on
+  gfx906 atomic topk-tie flips handled by forward-rebuild retry
+  (prior naive re-backward retry crashed at gi 38 as "backward through
+  the graph a second time" — recorded mechanics in lab/mimo_persona_dose.py
+  comments).
+- Trajectory: margins flip positive by item ~16, global CE inflates to
+  ~16 mid-run (items 30-80), compresses to ~9 with margin ≥ +1.5;
+  training is numerically stable (0 unrecovered errors, 0 NaN at these
+  temps) — the failure ISN'T optimization health, it IS the objective:
+  with supervision only on win-vs-bad answer tails, the wrap converts
+  margin into global continuation corruption (injection CE on a cold
+  window 3.05 -> 9.04; greedy decodes of all probe classes = blank).
+- What it rules out: the "soup-is-a-gate-problem" hypothesis (this fit
+  avoided the gate entirely — forced injection still collapsed); the
+  reading that more dose of the SAME objective fixes expression.
+  Standing cumulative picture: gate/route clean (multiple cycles);
+  delivery coherence achievable (mild objective) but voiceless; margin
+  objective voices nothing either but at stream collapse.  The wrap
+  delivery point is the tightrope.
+- Next (one shot, named in doc): margin objective + answer-tail
+  negative coverage in out_pen + lr 3e-5; fallback alternative on the
+  table: multi-point delivery / serving-layer persona switches, review
+  if the next shot also collapses.
