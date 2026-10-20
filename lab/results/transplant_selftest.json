@@ -1,0 +1,223 @@
+{
+ "format": "vesper-transplant-selftest-results-v1",
+ "date": "2026-10-20",
+ "box": "sys-4029gp-trt gpu0 (MI50, mr_gpu_claims)",
+ "mimo": {
+  "host": "lab/mimo_full_host.py (faithful, f69737a)",
+  "control_class": [
+   "coherent",
+   "coherent"
+  ],
+  "control_l10_mlp_tok0": [
+   74.1271,
+   74.3946
+  ],
+  "ref_l10_mlp_tok0_committed": 74.13,
+  "arms": {
+   "L12toL44": {
+    "tie_max_abs_diff": 0.0,
+    "class": [
+     "coherent",
+     "coherent"
+    ],
+    "mosaic_frac": [
+     0.0,
+     0.0
+    ],
+    "nan_logits_total": [
+     0,
+     0
+    ],
+    "prefill_mlp_norm_ratio_vs_control": [
+     {
+      "L10": 1.0,
+      "L16": 1.0,
+      "L40": 1.0,
+      "L41": 1.0,
+      "L47": 0.4546
+     },
+     {
+      "L10": 1.0,
+      "L16": 1.0,
+      "L40": 1.0,
+      "L41": 1.0,
+      "L47": 0.5288
+     }
+    ]
+   },
+   "L4toL32": {
+    "tie_max_abs_diff": 0.0,
+    "class": [
+     "coherent",
+     "coherent"
+    ],
+    "mosaic_frac": [
+     0.0171,
+     0.0
+    ],
+    "nan_logits_total": [
+     0,
+     152576
+    ],
+    "prefill_mlp_norm_ratio_vs_control": [
+     {
+      "L10": 1.0,
+      "L16": 1.0,
+      "L40": 0.9955,
+      "L41": 1.0035,
+      "L47": 0.9876
+     },
+     {
+      "L10": 1.0,
+      "L16": 1.0,
+      "L40": 0.9776,
+      "L41": 1.0034,
+      "L47": 0.9833
+     }
+    ]
+   },
+   "both": {
+    "tie_max_abs_diff": 0.0,
+    "class": [
+     "coherent",
+     "coherent"
+    ],
+    "mosaic_frac": [
+     0.0056,
+     0.0
+    ],
+    "nan_logits_total": [
+     0,
+     0
+    ],
+    "prefill_mlp_norm_ratio_vs_control": [
+     {
+      "L10": 1.0,
+      "L16": 1.0,
+      "L40": 0.9956,
+      "L41": 1.0035,
+      "L47": 0.449
+     },
+     {
+      "L10": 1.0,
+      "L16": 1.0,
+      "L40": 0.9776,
+      "L41": 1.0034,
+      "L47": 0.5164
+     }
+    ]
+   }
+  },
+  "control_nan_note": "prompt 1 greedy hits exactly one fully non-finite logit row (152576 = vocab) in the CONTROL itself; arm-invariant host event, not transplant-caused",
+  "wall_s": 1443.6
+ },
+ "vk": {
+  "host": "/data/tliao/vk_final/chat_model (rung-1 vk passport spine, 10x8E top-2)",
+  "control_base_ce": 4.144148,
+  "control_class": [
+   "coherent",
+   "coherent",
+   "coherent"
+  ],
+  "arms": {
+   "vk1to8": {
+    "tie_identical_object": true,
+    "base_ce_delta_vs_control": 0.383216,
+    "class": [
+     "loop",
+     "coherent",
+     "coherent"
+    ],
+    "nan": [
+     {
+      "logits": 0,
+      "norms": 0
+     },
+     [
+      0,
+      0,
+      0
+     ]
+    ],
+    "block_norm_ratio_vs_control": {
+     "0": 1.0,
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0,
+     "4": 1.0,
+     "5": 1.0,
+     "6": 1.0,
+     "7": 1.0,
+     "8": 0.6434,
+     "9": 1.0037
+    }
+   },
+   "vk0to9": {
+    "tie_identical_object": true,
+    "base_ce_delta_vs_control": 1.437042,
+    "class": [
+     "loop",
+     "loop",
+     "coherent"
+    ],
+    "nan": [
+     {
+      "logits": 0,
+      "norms": 0
+     },
+     [
+      0,
+      0,
+      0
+     ]
+    ],
+    "block_norm_ratio_vs_control": {
+     "0": 1.0,
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0,
+     "4": 1.0,
+     "5": 1.0,
+     "6": 1.0,
+     "7": 1.0,
+     "8": 1.0,
+     "9": 0.2698
+    }
+   },
+   "vkboth": {
+    "tie_identical_object": true,
+    "base_ce_delta_vs_control": 1.94484,
+    "class": [
+     "loop",
+     "loop",
+     "loop"
+    ],
+    "nan": [
+     {
+      "logits": 0,
+      "norms": 0
+     },
+     [
+      0,
+      0,
+      0
+     ]
+    ],
+    "block_norm_ratio_vs_control": {
+     "0": 1.0,
+     "1": 1.0,
+     "2": 1.0,
+     "3": 1.0,
+     "4": 1.0,
+     "5": 1.0,
+     "6": 1.0,
+     "7": 1.0,
+     "8": 0.6434,
+     "9": 0.2242
+    }
+   }
+  },
+  "wall_s": 89.2
+ },
+ "verdict": "mechanism-alive"
+}
