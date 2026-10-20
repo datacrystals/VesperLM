@@ -2543,3 +2543,18 @@ Process notes:
 - Next (one shot): full-host wrap refit through the faithful 48L host
   (delivery in the objective), then this cycle's offline suite/sweep
   tooling re-verifies (`mimo_decode_recal.py post`).
+
+## 2026-10-20 — mimo-wrap-refit attempt 1 (recipe-lr from slice state) — full-host fp16 adapter training DIVERGES at step ~20 (CE 17.6 -> NaN); amended protocol (identity restart + lr 3e-4 + clip 1.0) converges
+
+- Evidence: `~/mimo_flash/logs/refit_trains.log` (divergence) vs
+  `refit_trains2.log` (amended run) + lab/MIMO_WRAP_REFIT.md.
+- What went wrong: loading the slice-fitted adapter state (nonzero
+  host_out, soup-magnet) and stepping at lm-head-era lr 3e-3 through
+  the full 48L fp16 trunk; the fit blew past fp16 range by step ~22.
+- What the amended protocol changed (all declared before the rerun):
+  identity-at-birth restart (wrap is exactly noplug at step 0), lr 3e-4,
+  grad-clip 1.0; training is then stable (no spike, no NaN over 30
+  steps; NEG out_pen loss 0 at every read).
+- Lesson recorded: for full-host adapter fits, never START from a
+  soup-era adapter state; identity restart is the only sane origin;
+  recipe lrs must be scaled when the objective spans the full trunk.
