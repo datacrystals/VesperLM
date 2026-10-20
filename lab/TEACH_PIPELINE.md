@@ -311,6 +311,35 @@ sessions erases an un-rehearsed item.
    shallow-deficit fairness override (force a serve after N eligible
    probes); (c) an S13+ equilibration horizon-discipline arm (the
    freeze-mid-oscillation caveat is now measured three times).
+10. **Shield arm — shield-everything-every-session (scheduling-question
+    killer)** — **IN RUN, PARTIAL committed 2026-10-19**
+    (`lab/TEACH_SHIELD.md`, marked PARTIAL; harness `lab/teach_shield.py`):
+    after four negative/failed scheduler rules (trigger queue survives as
+    the bar; aged v1/v2/v3 all negative; v3's read: serve content
+    dominated order), the queue is deleted entirely — every alive item
+    (r ≥ 0.10 at the last probe, dead buried per measured doctrine,
+    re-entry on unaided recovery) gets exactly ONE approve-only shield
+    triple (pool correction phrasing) in every scheduler-phase session;
+    n_filler = max(5, ceil(alive/0.30) − alive), share ≤ 30% (alive 6 →
+    20-triple batch, 30.0%); no priorities, no queues, no thresholds, no
+    eviction (hog/starvation impossible by construction). Determinism:
+    calibrations bit-identical twice, bit-match all five prior harnesses;
+    teach phase CADENCE-IDENT max |Δ| = 0.0. At commit: teach phase done
+    bit-identical, probe-after-S6 alive 6/6 (zero burials), S7 20-triple
+    shield batch in training; horizon vs the trigger bar (≥ 4/6 held,
+    0 dead, mean ≥ 0.581), base-class interference cost read, 1/6-poverty
+    case, poison + tier-2 all pending the run's completion (process left
+    running; verdict fills from `lab/teach_shield_out/teach_shield.json`
+    in a follow-up commit). Named outcomes: bar met → scheduler OBSOLETE,
+    the answer is the slice constant; short → "architecture-straw-limit,
+    schedules dead, adaptive capacity next" with the follow-up
+    (multi-adapter banks / class-segregated adapters vs capacity knob)
+    named from the measured trace.
+11. **Queued next (from shield, pending its read)**: adaptive capacity —
+    class-segregated adapters / multi-adapter banks vs a capacity knob —
+    exact pick named when the shield horizon lands; S13+ equilibration
+    horizon-discipline arm and the metric_units × v1 repair-content flag
+    carry forward from item 9 regardless.
 
 ## Reproduction
 
