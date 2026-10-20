@@ -2363,7 +2363,7 @@ Process notes:
   `fin=length` with content EMPTY at `reasoning_effort` low/top-level/max on
   short-context turns (server-side parser split also gave empty content with
   `reasoning_tokens` counting the hidden thinking); at `high` the same prompt
-  emitted `…</think>-terminated` content within budget. The raw think text is
+  emitted the think-terminator-marked content, followed by a real reply, within budget. The raw think text is
   numbered meta-analysis ("1. **Identify the user's question:** …").
 - Root cause: the model always enters a thinking block; the budget it spends
   inside is prompt- and effort-dependent and IS the arm's honest behavior at
