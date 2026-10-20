@@ -1,0 +1,234 @@
+{
+ "judge": "TJ-1-rung1-tails",
+ "host": "470m",
+ "arm": "baseline",
+ "bands": {
+  "parity_band": 0.003,
+  "skill_delta": 0.01,
+  "battery": "10/10 PASS"
+ },
+ "provenance": {
+  "fit_json": "/home/tliao/rung1/results/fit.json",
+  "n_rows_fit": 45,
+  "fit_steps_min": 782,
+  "fit_steps_max": 782,
+  "fit_tokens_consumed": 200192,
+  "other_contacts_tokens": {
+   "row_recal_pairs_max": 4096,
+   "r4_r8_eval_windows_max": 1536
+  },
+  "tail_slice": [
+   204800,
+   208896
+  ],
+  "safety_margin_tokens": 4608,
+  "feed_lens_ids": {
+   "code": 250000,
+   "math": 250000,
+   "science": 250000,
+   "web": 250000,
+   "chat": 250000
+  },
+  "status": "HELDOUT-PROVEN"
+ },
+ "declared_donor_domains": [],
+ "window_index": [
+  {
+   "window": "hacking:tail",
+   "home": "hacking",
+   "family": "A",
+   "md5_first_batch": "0e26f8ac"
+  },
+  {
+   "window": "cybersec:tail",
+   "home": "cybersec",
+   "family": "A",
+   "md5_first_batch": "9cf4c3ea"
+  },
+  {
+   "window": "writing:tail",
+   "home": "writing",
+   "family": "A",
+   "md5_first_batch": "87f60139"
+  },
+  {
+   "window": "code:tail",
+   "home": "code",
+   "family": "A",
+   "md5_first_batch": "6553e095"
+  },
+  {
+   "window": "code:d0",
+   "home": "code",
+   "family": "B",
+   "md5_first_batch": "2a7be382"
+  },
+  {
+   "window": "math:tail",
+   "home": "math",
+   "family": "A",
+   "md5_first_batch": "b90a07e0"
+  },
+  {
+   "window": "math:d0",
+   "home": "math",
+   "family": "B",
+   "md5_first_batch": "08900761"
+  },
+  {
+   "window": "science:tail",
+   "home": "science",
+   "family": "A",
+   "md5_first_batch": "d3644f1b"
+  },
+  {
+   "window": "science:d0",
+   "home": "science",
+   "family": "B",
+   "md5_first_batch": "83be153f"
+  },
+  {
+   "window": "web:tail",
+   "home": "web",
+   "family": "A",
+   "md5_first_batch": "16ac02b8"
+  },
+  {
+   "window": "web:d0",
+   "home": "web",
+   "family": "B",
+   "md5_first_batch": "8baceae7"
+  },
+  {
+   "window": "chat:tail",
+   "home": "chat",
+   "family": "A",
+   "md5_first_batch": "274c3389"
+  },
+  {
+   "window": "chat:d0",
+   "home": "chat",
+   "family": "B",
+   "md5_first_batch": "448ef295"
+  }
+ ],
+ "determinism_fixture": {
+  "window": "hacking:tail",
+  "ce_run1": 3.586182,
+  "ce_run2": 3.586182,
+  "repeat_delta": 0.0,
+  "pass": true
+ },
+ "battery": {
+  "verdicts": {
+   "q00": "PASS",
+   "q01": "PASS",
+   "q02": "PASS",
+   "q03": "PASS",
+   "q04": "PASS",
+   "q05": "PASS",
+   "q06": "PASS",
+   "q07": "PASS",
+   "q08": "PASS",
+   "q09": "PASS"
+  },
+  "n_pass": 10,
+  "n_total": 10,
+  "ok": true
+ },
+ "windows": {
+  "hacking:tail": {
+   "ce": 3.58618,
+   "n_ids": 216733,
+   "n_tokens_measured": 16,
+   "md5_first_batch": "0e26f8ac",
+   "wall_s": 15.9
+  },
+  "cybersec:tail": {
+   "ce": 3.09159,
+   "n_ids": 219754,
+   "n_tokens_measured": 16,
+   "md5_first_batch": "9cf4c3ea",
+   "wall_s": 15.3
+  },
+  "writing:tail": {
+   "ce": 3.54839,
+   "n_ids": 209067,
+   "n_tokens_measured": 16,
+   "md5_first_batch": "87f60139",
+   "wall_s": 16.9
+  },
+  "code:tail": {
+   "ce": 2.21553,
+   "n_ids": 250000,
+   "n_tokens_measured": 16,
+   "md5_first_batch": "6553e095",
+   "wall_s": 19.1
+  },
+  "code:d0": {
+   "ce": 2.768,
+   "n_ids": 817,
+   "n_tokens_measured": 3,
+   "md5_first_batch": "2a7be382",
+   "wall_s": 4.0
+  },
+  "math:tail": {
+   "ce": 3.94917,
+   "n_ids": 250000,
+   "n_tokens_measured": 16,
+   "md5_first_batch": "b90a07e0",
+   "wall_s": 15.8
+  },
+  "math:d0": {
+   "ce": 2.78662,
+   "n_ids": 699,
+   "n_tokens_measured": 2,
+   "md5_first_batch": "08900761",
+   "wall_s": 2.1
+  },
+  "science:tail": {
+   "ce": 3.3909,
+   "n_ids": 250000,
+   "n_tokens_measured": 16,
+   "md5_first_batch": "d3644f1b",
+   "wall_s": 16.1
+  },
+  "science:d0": {
+   "ce": 3.68902,
+   "n_ids": 595,
+   "n_tokens_measured": 2,
+   "md5_first_batch": "83be153f",
+   "wall_s": 1.2
+  },
+  "web:tail": {
+   "ce": 3.93167,
+   "n_ids": 250000,
+   "n_tokens_measured": 16,
+   "md5_first_batch": "16ac02b8",
+   "wall_s": 9.9
+  },
+  "web:d0": {
+   "ce": 4.05394,
+   "n_ids": 624,
+   "n_tokens_measured": 2,
+   "md5_first_batch": "8baceae7",
+   "wall_s": 1.2
+  },
+  "chat:tail": {
+   "ce": 2.56465,
+   "n_ids": 250000,
+   "n_tokens_measured": 16,
+   "md5_first_batch": "274c3389",
+   "wall_s": 9.9
+  },
+  "chat:d0": {
+   "ce": 3.34284,
+   "n_ids": 448,
+   "n_tokens_measured": 1,
+   "md5_first_batch": "448ef295",
+   "wall_s": 0.6
+  }
+ },
+ "verdict": "UNDETECTED",
+ "parity_breach_window": null
+}
