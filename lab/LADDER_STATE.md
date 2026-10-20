@@ -170,7 +170,8 @@ function needs more is unmeasured — the queue's next gate, see §3 #4).
   alignment; exact token-paired supervision (Door-9) still only 0.47,
   W-init doesn't beat random. Listed in §10.7 killed branches. Evidence:
   `lab/door9_embedding_w.py`, `lab/graft_d15_translator.py`,
-  `lab/FAILURES.md`.
+  `lab/FAILURES.md`. Full forensic account (exact tried surface, score
+  tables, failure-class ranking, untried list): `lab/TRANSPLANT_AUTOPSY.md`.
 - **growth-250 as of R5 is measured and PASSING under the corrected judge
   + the R5 delivery budget** (`lab/GROWTH_250.md`, `lab/REJECT_RECAL.md`).
   The 2026-10-16 halt (history) was triggered by #1 and the old #3; R2/R3
