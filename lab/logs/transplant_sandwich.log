@@ -1,0 +1,17 @@
+[load] host  = /home/tliao/VesperLM/lab/imported/vk_sft_r3/step_1800/chat_model
+[value-embed] VESPER_VALUE_EMBED=1: token-id value tables added to attention values on first/last layers: layer 0 (kda, width=1024), layer 9 (kda, width=1024)
+[load] donor = /home/tliao/VesperLM/lab/imported/sft_470m/step_150/chat_model
+[lib] 90 calibration pairs, 3 held-out flat probes
+[capture] 3202 tokens x2 models in 77s
+[route] host slot 6 (share 0.394) <- donor slot 3 (donor-side share 0.466); host shares [0.1758, 0.2314, 0.3136, 0.1971, 0.1971, 0.2117, 0.3941, 0.2792]
+[pool] mismatch stats {'mean': 1.0066237202255075, 'p50': 1.0062780380249023, 'p90': 1.023712158203125} | train 1281 hold 320 tokens
+[facts] donor-class set = ['teach/pet_dog', 'teach/metric_units', 'probe_t/tea_tin'] margins [('teach/pet_dog', -1.5524), ('teach/metric_units', -0.3011), ('probe_t/tea_tin', -0.1119)]
+[eval/bare] flat={'flat_0': 3.950516, 'flat_1': 3.870742, 'flat_2': 5.036147} facts=5.034904 route_flat=0.403 route_facts=0.340
+[eval/naive] flat={'flat_0': 4.402851, 'flat_1': 4.526016, 'flat_2': 5.535597} facts=5.163005 route_flat=0.403 route_facts=0.340
+[train/A] 500 steps in 33s; hist [(0, 960.6252, -18.9067), (50, 27.2503, 0.4353), (100, 18.2577, 0.6217), (150, 16.4702, 0.6587), (200, 14.7169, 0.695), (250, 13.3329, 0.7237), (300, 12.3514, 0.744), (350, 11.6557, 0.7585), (400, 10.9576, 0.7729), (450, 10.3779, 0.7849), (500, 9.958, 0.7936)]; hold={'mse': 10.3357, 'r2': 0.781, 'rho': 0.8106}
+[eval/armA] flat={'flat_0': 4.054639, 'flat_1': 3.798056, 'flat_2': 4.977063} facts=5.129002 route_flat=0.403 route_facts=0.340
+[train/F] 500 steps in 16s; hist [(0, 960.6252, -18.9067), (50, 37.3888, 0.2252), (100, 24.2792, 0.4969), (150, 18.8541, 0.6093), (200, 15.6258, 0.6762), (250, 13.451, 0.7213), (300, 11.865, 0.7541), (350, 10.6758, 0.7788), (400, 9.7328, 0.7983), (450, 9.0084, 0.8133), (500, 8.3299, 0.8274)]; hold={'mse': 15.8354, 'r2': 0.6644, 'rho': 1.0141}
+[eval/armF] flat={'flat_0': 4.063433, 'flat_1': 3.776095, 'flat_2': 4.913979} facts=5.153421 route_flat=0.403 route_facts=0.340
+VERDICT ARM-A | bars A(parity)=FAIL (max d_flat +0.1041)  B(liveness)=FAIL (d_facts +0.0941, route 0.340) -> FAIL — TYPE-2 parity-broken
+VERDICT ARM-F (OUT-only fallback) | A=FAIL (max d_flat +0.1129)  B=PASS (d_facts +0.1185)
+results json: /home/tliao/VesperLM/lab/TRANSPLANT_SANDWICH_OUT/results.json

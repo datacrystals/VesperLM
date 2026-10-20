@@ -18,6 +18,50 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-20 — transplant-sandwich-vk — the input+output "sandwich-translator" hosting a frozen 470m donor expert inside vk SFT-r3 at a 39.4%-traffic MoE slot does NOT hold parity: held-out sandwich fit R² 0.78 but flat_0 degrades +0.1041 nats vs the +0.05 bar → FAIL, TYPE-2 parity-broken (both arms)
+- Evidence: `lab/TRANSPLANT_SANDWICH.md` + numbers-only
+  `lab/TRANSPLANT_SANDWICH_OUT/results.json` + log
+  `lab/logs/transplant_sandwich.log` (arm A = both sandwiches trained, lr
+  1e-3, 500 steps, seed 7; arm F = the pre-declared single fallback, W_in
+  frozen identity / W_out only, seed 8). Setup: donor
+  `lab/imported/sft_470m/step_150/chat_model` expert 3 @L4 (donor-side share
+  0.466) wrapped W_in/W_out 1024×1024 into host
+  `lab/imported/vk_sft_r3/step_1800/chat_model` slot 6 @L4 (host share
+  0.394), router frozen, calibration = 90-pair teach library, 3202 tokens,
+  host↔donor ffn-input mismatch 1−cos ≈ 1.0066 mean (orthogonal at equal
+  shape), 1281/320 mismatch-window train/hold tokens. Training: train MSE
+  960.6 → 9.96, held-out R² 0.781, ρ 0.811 (arm A) / R² 0.664, ρ 1.014
+  (arm F). CE deltas vs host-bare: arm A flat +0.1041 / −0.0726 / −0.0591,
+  donor-class facts +0.0941 (route 0.340); arm F flat +0.1129 / −0.0946 /
+  −0.1222, facts +0.1185. Bars: A fails on both arms (flat_0 +0.1041 /
+  +0.1129 > +0.05); B fails on arm A (+0.0941 < +0.10), passes on arm F
+  — and F's shape (live donor response, no parity) is the exact combination
+  pre-declared as NOT feasibility.
+- Root cause: an R² ≈ 0.78 held-out functional mimicry of the host's active
+  expert leaves ~22% residual variance; at a slot carrying 39.4% of routed
+  traffic at layer 4, that residual is large enough to move whole-model CE
+  by ~0.1 nats on the worst flat probe. Not a routing failure (0.34–0.40
+  organic share through the slot everywhere), not mimic-collapse (ρ 0.81),
+  not absent donor response (arm F passes Bar B). The naive identity-sandwich
+  reference confirms the slot's influence is mild at this model (literal
+  transplant only +0.45…+0.66 nats flat, not catastrophic), so damage and
+  the eval noise floor (~±0.06–0.1 nats at 3 probes × ~40 scored tokens)
+  are the same order — parity at ±0.05 was the hardest bar, and it bound.
+- What it rules out: the input+output sandwich-translator with mismatch-
+  window calibration at a HIGH-traffic slot in the vk↔470m pair at the
+  declared bar (the architecture is not disproven as a shape — translation
+  itself succeeded at R² 0.78 vs the D1.5 ~0.47 cross-family ceiling — but
+  the feasible-installation claim is falsified at this site/bar). Also now
+  measured for the record: vk↔470m manifolds are orthogonal at equal shape
+  (mismatch ≈ 1.01), and slot-influence at vk scale is the hundredths-of-
+  nats regime, not the Door-9-scale catastrophic one.
+- Next tried: arm F (the one pre-declared fallback, OUT-only) — fails Bar A
+  too (+0.1129); branch stopped with this stated negative, no loop. Queued
+  for a future arm (not run): a lower-traffic transplant slot (parity is
+  far easier at a 5% slot than at 39.4%) with the parity bar recalibrated
+  against the measured probe noise floor BEFORE the arm, or a longer-window
+  sandwich fit targeting R² ≥ 0.95.
+
 ## 2026-10-20 — feature-bank-corridor-scan — on vk/470m sibling families the D1.5/Door-9 0.90 full-rank transplant bar does NOT clear either (best held ridge cos 0.6828); what survives is a rank-16 CCA corridor (held canonical 0.83-0.98) calibrated for the door-4 "transplant as service" branch, not a dense boundary map
 - Evidence: `lab/results/feature_bank_cca.json` + design doc
   `lab/TRANSPLANT_FEATURE_BANK.md` §6 (harness `lab/feature_bank_cca.py`,
