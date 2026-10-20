@@ -107,6 +107,22 @@ cells pass all bars**; ∞ reproduces R4 bit-matched (guard).
 q=0.75 renorm** (smallest passing intervention: writing +0.0002, math
 +0.0041, base −0.0012; q0.25 = maximal-safety variant, harm +0.0004).
 **growth-250 verdict: HOLD → PASS under the corrected judge + R5 recipe.**
+
+### R6 specialty-dosage gate (2026-10-19, same laptop, ~1.7 GPU-hr)
+
+`lab/SPECIALTY_BUDGET_GATE.md`, `lab/specialty_budget_gate.py`, evidence
+`lab/results/specialty_budget_gate.json` (local). CE channel (carried
+R4/R5, all delivery levels): no home window beats stock-masked by a clear
+margin anywhere (best −0.0035). Generative battery (stock/default/q0.75;
+q0.50 + 4 talks scope-cut, documented): 18/18 completed verdicts PASS —
+uniformly non-discriminative. **VERDICT: CE-ONLY** — the rung-1 assembly
+is neutrality-certified at every delivery strength; neither muted nor
+unmuted delivery wins anything on laptop-visible channels (consistent
+with Door-10's "neutrality, not generalization" certification).
+**Rung-2 gate: CLOSED pending the value-positive probe** (Door-2.5-style
+held-out donor-domain quality at bank scale, ~1 GPU-hr — named next
+lever). Official rung-1/2 recipe line (carried): rank-64 / FEED ≥200k /
+λ 0.5 / per-token budget q=0.75 renorm / owner 0.35 + corrected judge.
 Side-effect: the growth harm protocol's ablation was state-wiped for a
 week (all prior harm columns = noise; FAILURES.md); corrected 24-pair harm:
 worst **+0.0012** default / **+0.0011** at the recipe cell — §11.2 #2 PASS,
@@ -163,12 +179,11 @@ MiMo-Flash arms already built). In cost order:
    crowd is the tax; per-token budget q=0.75 renorm clears all bars
    (`lab/REJECT_RECAL.md`). Rung-1 corrected recipe line now carries the
    budget on the DELIVER step.
-4. **(~0.5–1 GPU-hr, laptop) Specialty-dosage gate under the budget** —
-   the R5 recipe is CE-neutral by construction; before rung 2 claims
-   delivery value at 250, measure whether the budgeted delivery still
-   produces specialty signal (solo-recovery-style check under q=0.75 renorm
-   vs default vs λ-off). This replaces the old "re-measure 250" step: the
-   budgeted 250 is already measured (all homes + base + harm).
+4. ~~**Specialty-dosage gate under the budget**~~ **DONE 2026-10-19
+   (R6) — verdict CE-ONLY.** Rung-2 stays closed pending the named lever:
+   a value-positive probe where stock is demonstrably weak (Door-2.5
+   s6_quality at bank scale, held-out donor-domain per family,
+   ~1 GPU-hr laptop). See `lab/SPECIALTY_BUDGET_GATE.md`.
 5. **(~1–2 GPU-days) Rung-2 kickoff**: manifest/donor-carryover design for
    ~500 cores (≈16B target per §11.1), k=top-8. Prep is CPU-only and can
    start before #4 finishes. The bake-off spine pick, when it lands, enters

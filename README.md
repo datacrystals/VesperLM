@@ -195,6 +195,13 @@ tracks *active* parameters, as expected.
   noise for a week (laptop floor |ΔCE| = 0.000000, box ±0.0008); repaired
   protocol in `lab/reject_recal.py` / `lab/bank_rung1.py`. Same class as the
   `pgrep -f` self-match trap: the flag you set is not the flag that runs.
+- **Sequential-decode economics for big banks on small cards** (2026-10-19,
+  R6): greedy generation through the 250-core bank restages cores per token
+  (~5–8 s/tok on the laptop) — CE windows are batched and cheap, generation
+  is not; budget battery sizes accordingly. Generation through the staged
+  wraps also needs `torch.inference_mode()`: autograd through a 250-core
+  token step exhausts an 8GB card (br1's `greedy_gen` predates the big
+  bank).
 - **Reboot-surviving watchdogs** (from the silent-stall episode): the 470M
   pretrain's watchdog must live in crontab/systemd — `/tmp` scripts die on
   reboots. Companion traps: `trap cleanup INT TERM` without `exit` makes
