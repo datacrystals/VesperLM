@@ -188,6 +188,13 @@ tracks *active* parameters, as expected.
   oracle). Companion trap: growth's p_home bucket reads fit records via
   glob-dedup that drops restart lanes (`{"skipped": true}` rewrites hide
   `row_recal`) — it saw only 83/128 rows at n=128.
+- **State-wipe trap in run-state installers** (2026-10-19, R5): mutating
+  per-run flags (`pm.active[...] = False`) BEFORE `run_in_state(..., "both")`
+  is silently wiped by its `set_mix_active("both")` — apply run-time state
+  inside the run lambda. The growth pairwise-harm protocol measured harness
+  noise for a week (laptop floor |ΔCE| = 0.000000, box ±0.0008); repaired
+  protocol in `lab/reject_recal.py` / `lab/bank_rung1.py`. Same class as the
+  `pgrep -f` self-match trap: the flag you set is not the flag that runs.
 - **Reboot-surviving watchdogs** (from the silent-stall episode): the 470M
   pretrain's watchdog must live in crontab/systemd — `/tmp` scripts die on
   reboots. Companion traps: `trap cleanup INT TERM` without `exit` makes
@@ -222,7 +229,7 @@ rows measured **4/4** (n=250 measured on the laptop 2026-10-19, R4):
 | 32 | PASS | PASS | PASS | FAIL (median 0.136) | p_home only |
 | 64 | PASS (worst Δ+0.009) | PASS (0.0007) | PASS (Δ+0.0027) | FAIL (median 0.1428, 38/38 collapsed) | p_home only |
 | 128 | **FAIL** (writing Δ+0.0239) | PASS (0.0008) | PASS (0.0056) | FAIL (median 0.1464, 83/83 collapsed) | **home_quality + p_home** |
-| 250 | **FAIL** (writing +0.0262, math +0.0331) | PASS (~0.0000, 24 pairs) | PASS (+0.0079) | n/a — metric replaced 2026-10-19 | **home_quality only (R4 read)** |
+| 250 | FAIL→**PASS w/ R5 budget** (W +0.0262, M +0.0331 unbudgeted; ≤+0.0041 @ q0.75 renorm) | PASS (worst +0.0012, R5-corrected*) | PASS (+0.0079 unbudgeted; −0.0012 @ q0.75) | n/a — metric replaced 2026-10-19 | **growth-250 = PASS under corrected judge + R5 recipe** |
 
 **Re-read 2026-10-19 (R2→R3→R4, `lab/PHOME_CALIBRATION.md`,
 `lab/PHOME_REJUDGE.md`, `lab/GROWTH_250.md`):** the p_home collapse column is
@@ -237,7 +244,17 @@ space**: home-quality breaks at writing (+0.0233→+0.0262) and math (new at
 base tax stays up at +0.0079. The writing-plug λ sweep is flat ±0.001 (λ is
 not the lever); the next lever class is per-home quota / reject-side recal.
 §11.2 #4 spine upgrade stays **parked** — the bake-off spine pick is a
-quality-axis decision, not a capacity rescue. Historical note: the
+quality-axis decision, not a capacity rescue. The **R5 delivery-budget
+lever (`lab/REJECT_RECAL.md`, 2026-10-19)** then fixed the remaining
+home_quality breaks: the tax is a dense foreign k3 sibling cross-fire
+(mean ~7 rows firing/token; glm/mimo ≈ 0; own-home rows ≈ 0; no dominant
+individual row) and a per-token delivery-mass budget (q = 0.75, renorm)
+brings writing/math/base to +0.0002/+0.0041/−0.0012 — growth-250 = **PASS
+under the corrected judge + R5 recipe** (corrected rung-1 carry:
+DELIVER additive λ 0.5 through per-token budget 0.75 renorm). *Pre-R5
+pairwise-harm columns (this table + `LADDER_STATE.md` §1) were ablation-less
+harness noise — the active flags were wiped by the run-state install before
+every j-off forward; corrected worst +0.0012 at 250, 24 pairs. Historical note: the
 2026-10-16 growth-250 halt was taken on the miscalibrated #3 reading; it was
 rescinded by the R2 erratum and measured (laptop, ~0.35 GPU-hr) on
 2026-10-19.

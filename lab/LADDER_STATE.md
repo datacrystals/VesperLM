@@ -28,7 +28,7 @@ README §3.7.
 | 32 | PASS | PASS (worst 0.0011) | PASS (Δ+0.0009) | **FAIL** (median 0.136, 26/26 collapsed) | §11.2 #3 |
 | 64 | PASS (worst Δ+0.009) | PASS (0.0007) | PASS (Δ+0.0027) | **FAIL** (median 0.1428, 38/38) | §11.2 #3 |
 | 128 | **FAIL** (writing Δ+0.0239 — first break) | PASS (0.0008) | PASS (Δ+0.0056) | **FAIL** (median 0.1464, 83/83) | §11.2 #1 + #3 |
-| 250 | **FAIL** (writing +0.0262, math +0.0331) | PASS (~0.0000, 24 pr) | PASS (+0.0079) | n/a (metric replaced R2) | §11.2 #1 — measured 2026-10-19 (R4, laptop) |
+| 250 | **FAIL** (writing +0.0262, math +0.0331) | PASS (worst +0.0012, R5-corrected; ~0.0000 was ablation-less noise) | PASS (+0.0079) | n/a (metric replaced R2) | §11.2 #1; home_quality fixed by R5 recipe → PASS |
 
 Key facts: n=128 is the **first size to break home quality**; p_home is
 **chronically collapsed at every size from n=32** (median ~0.14, never
@@ -92,6 +92,28 @@ triggered).** Resume recipe line: owner 0.35 + identical wrap/fit protocol,
 corrected watch items (membership trend, ceilrel band, p_base_max, per-home
 delivery tax — writing+math canaries) every doubling.
 
+### R5 delivery-budget lever — 250 HOLD resolved (2026-10-19, same laptop)
+
+`lab/REJECT_RECAL.md`, `lab/reject_recal.py`, evidence
+`lab/results/reject_recal.json` (local). Mechanism: the home_quality tax is
+a dense **foreign k3 sibling cross-fire crowd** (mean 7.16/6.29/4.50 rows
+firing per token on writing/math/base; wedges: k3 pays +0.0266/+0.0341 of
+the +0.0262/+0.0331 taxes, glm/mimo ≈ 0 — R4's glm/mimo attribution was
+measured WRONG; own-home rows ≈ 0 or negative; no dominant individual row,
+top-20 per-row dosage max +0.0004). Lever: per-token delivery-mass budget,
+8 cells {quota 0.25/0.5/0.75/∞} × {renorm/exclude} — **6/6 finite-quota
+cells pass all bars**; ∞ reproduces R4 bit-matched (guard).
+**Corrected rung-1 recipe: DELIVER additive λ 0.5 THROUGH per-token budget
+q=0.75 renorm** (smallest passing intervention: writing +0.0002, math
++0.0041, base −0.0012; q0.25 = maximal-safety variant, harm +0.0004).
+**growth-250 verdict: HOLD → PASS under the corrected judge + R5 recipe.**
+Side-effect: the growth harm protocol's ablation was state-wiped for a
+week (all prior harm columns = noise; FAILURES.md); corrected 24-pair harm:
+worst **+0.0012** default / **+0.0011** at the recipe cell — §11.2 #2 PASS,
+first honest measure. Open: specialty dosage under the budget (muted
+delivery ~21% of nominal crowd mass gains CE-neutrality; whether specialty
+function needs more is unmeasured — the queue's next gate, see §3 #4).
+
 ## 2. Deliberately NOT done (and why)
 
 - **Door-9 / D1.5 feature translators: dead, do not retry without a new
@@ -100,12 +122,13 @@ delivery tax — writing+math canaries) every doubling.
   W-init doesn't beat random. Listed in §10.7 killed branches. Evidence:
   `lab/door9_embedding_w.py`, `lab/graft_d15_translator.py`,
   `lab/FAILURES.md`.
-- **growth-250 as of R4 is measured, not halted** (`lab/GROWTH_250.md`).
-  The 2026-10-16 halt (below, history) was triggered by #1 and the old #3;
-  R2/R3 showed #3 was a metric artifact. What remains deliberately NOT done:
-  **growth past 250 (rung 2)** — held until the delivery-crowding break at
-  250 (math Δ+0.0331, writing Δ+0.0262) is fixed by the per-home
-  quota/reject-side-recal lever and 250 re-measures clean. The bigger-spine
+- **growth-250 as of R5 is measured and PASSING under the corrected judge
+  + the R5 delivery budget** (`lab/GROWTH_250.md`, `lab/REJECT_RECAL.md`).
+  The 2026-10-16 halt (history) was triggered by #1 and the old #3; R2/R3
+  showed #3 was a metric artifact. What remains deliberately NOT done:
+  **growth past 250 (rung 2)** — gated on the specialty-dosage gate (does
+  the budgeted delivery still carry specialty signal, §3 #4), not on any
+  measured bar. The bigger-spine
   pick (GLM-5.3-Flash vs MiMo-V2.6-Flash bake-off — user's conversation-feel
   metric) stays a quality-axis decision, NOT a capacity rescue.
 - **fit_resume.sh: finished, not running.** It exited cleanly 2026-10-16
@@ -135,15 +158,17 @@ MiMo-Flash arms already built). In cost order:
    (λ-balance / crowding) is the only live break; (c) growth resume should
    log membership + ceiling stats from here on (zero extra cost, cached
    taps).
-3. **(~1–2 GPU-hr) Delivery-crowding lever at n=250 (laptop)** — per-home
-   reject-side recal / quota re-balance on the crowded homes (writing, math)
-   using the R4 protocol. This replaces the old "growth on the picked spine"
-   step: R4 measured n=32…250 on the CURRENT 325M spine (same laptop, all
-   bars), so the ladder's binding frontier is the per-home delivery tax, not
-   the spine. Success = math + writing Δ ≤ 0.02 with base_tax ≤ 0.05 and
-   membership ≥ 0.35 held.
-4. **(~0.5 GPU-hr) Re-measure 250 after the lever** (laptop, R4 script with
-   new rows). Only then does rung 2 unlock.
+3. ~~**(~1–2 GPU-hr) Delivery-crowding lever at n=250 (laptop)**~~ **DONE
+   2026-10-19 (R5, ~1.1 GPU-hr)** — lever FOUND: dense foreign k3 cross-fire
+   crowd is the tax; per-token budget q=0.75 renorm clears all bars
+   (`lab/REJECT_RECAL.md`). Rung-1 corrected recipe line now carries the
+   budget on the DELIVER step.
+4. **(~0.5–1 GPU-hr, laptop) Specialty-dosage gate under the budget** —
+   the R5 recipe is CE-neutral by construction; before rung 2 claims
+   delivery value at 250, measure whether the budgeted delivery still
+   produces specialty signal (solo-recovery-style check under q=0.75 renorm
+   vs default vs λ-off). This replaces the old "re-measure 250" step: the
+   budgeted 250 is already measured (all homes + base + harm).
 5. **(~1–2 GPU-days) Rung-2 kickoff**: manifest/donor-carryover design for
    ~500 cores (≈16B target per §11.1), k=top-8. Prep is CPU-only and can
    start before #4 finishes. The bake-off spine pick, when it lands, enters

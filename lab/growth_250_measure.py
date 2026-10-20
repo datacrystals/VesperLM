@@ -372,15 +372,19 @@ def phase_ce(args, out):
             continue
         all_ce = ce_on(b, "both")
         cid_j = plugs[j][2]["id"]
-        for blk, _sf in handles:
-            pm = getattr(blk, "_plugin_merge", None)
-            if pm is not None and cid_j in pm.tags:
-                pm.active[pm.tags.index(cid_j)] = False
-        off_ce = ce_on(b, "both")
-        for blk, _sf in handles:
-            pm = getattr(blk, "_plugin_merge", None)
-            if pm is not None and cid_j in pm.tags:
-                pm.active[pm.tags.index(cid_j)] = True
+        # ablation must be applied INSIDE the run lambda (set_mix_active in
+        # run_in_state wipes toggles set outside — the growth harm bug,
+        # corrected in R5; the +0.0000 column this file wrote 2026-10-19 was
+        # ablation-less noise)
+        def ce_off(tag=cid_j):
+            for blk, _sf in handles:
+                pm = getattr(blk, "_plugin_merge", None)
+                if pm is not None and tag in pm.tags:
+                    pm.active[pm.tags.index(tag)] = False
+            return d1.ce_in_state(model, blocks, b, args.device,
+                                  None, None, "off")
+        off_ce = g0.run_in_state(model, blocks, vk.FAM, gates, handles,
+                                 "both", ce_off)
         harms.append({"i": plugs[i][2]["id"], "j": cid_j,
                       "harm": round(all_ce - off_ce, 4)})
         print(f"[ce] harm {plugs[i][2]['id']} x {cid_j}: "

@@ -593,17 +593,22 @@ def _growth_measure(args, out, part_p, man, model, tok, blocks, banks_reg):
         if not b:
             continue
         all_ce = ce_state(model, blocks, b, args.device, gates, handles, "both")
-        # j off
-        for blk, _sf in handles:
-            pm = getattr(blk, "_plugin_merge", None)
-            if pm is not None and plugs[j][2]["id"] in pm.tags:
-                k = pm.tags.index(plugs[j][2]["id"])
-                pm.active[k] = False
-        off_ce = ce_state(model, blocks, b, args.device, gates, handles, "both")
-        for blk, _sf in handles:
-            pm = getattr(blk, "_plugin_merge", None)
-            if pm is not None and plugs[j][2]["id"] in pm.tags:
-                pm.active[pm.tags.index(plugs[j][2]["id"])] = True
+        # j off — the active flag must be set INSIDE the run lambda:
+        # g0.run_in_state -> set_mix_active("both") resets pm.active, so a
+        # toggle written outside ce_state never reaches the forward (the
+        # pre-2026-10-19 growth harm columns measured harness noise, not
+        # ablation — corrected by the R5 run, lab/FAILURES.md).
+        tag_j = plugs[j][2]["id"]
+
+        def off_inner(tag_j=tag_j):
+            for blk, _sf in handles:
+                pm = getattr(blk, "_plugin_merge", None)
+                if pm is not None and tag_j in pm.tags:
+                    pm.active[pm.tags.index(tag_j)] = False
+            return d1.ce_in_state(model, blocks, b, args.device,
+                                  None, None, "off")
+        off_ce = g0.run_in_state(model, blocks, vk.FAM, gates, handles,
+                                 "both", off_inner)
         harms.append({"i": plugs[i][2]["id"], "j": plugs[j][2]["id"],
                       "harm": round(all_ce - off_ce, 4)})
     if harms:

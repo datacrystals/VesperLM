@@ -28,7 +28,7 @@ and n=128 (0.530); treat as band-noise, re-pin suggestion below.
 | bar | result | verdict |
 |---|---|---|
 | 1 home_quality (≤ 0.02) | writing Δ **+0.0262**, math Δ **+0.0331** (others −0.001 … +0.015) | **FAIL — 2 homes** |
-| 2 pairwise_harm (≤ 0.02) | 24/24 sampled pairs ~+0.0000 worst | PASS |
+| 2 pairwise_harm (≤ 0.02) | ~+0.0000 as-measured — later shown ablation-less noise (R5); **corrected: worst +0.0012, 24 pairs (R5 repaired protocol)** | PASS (R5) |
 | 3 saturation (corrected) | ceilrel 0.494, membership 0.378 rising | borderline (band) |
 | 4 base_tax (≤ 0.05) | +0.0079 | PASS |
 
@@ -37,7 +37,7 @@ the 128→250 rows added the glm/mimo families), writing +0.0233 → +0.0262,
 hacking +0.009 → +0.0131, code +0.0126 → +0.0148, base +0.0039 → +0.0079.
 The tax grows in **delivery space** while routing stats stay flat — this is
 the first measured crowding signal of the ladder, and it is NOT pairwise
-(harm 0.0000) and NOT router saturation (membership rising).
+(harm +0.0012 worst, R5-corrected — the +0.0000 this file first reported was ablation-less noise, see lab/FAILURES.md 2026-10-19) and NOT router saturation (membership rising).
 
 ## Writing-home λ-balance watch (measured dead)
 

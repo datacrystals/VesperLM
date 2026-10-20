@@ -2282,3 +2282,31 @@ Process notes:
 - A droplet reboot loses the cloud-init self-destruct timer (oneshot); the
   laptop-side 5-min watchdog + name-TTL remain the enforcement — manual
   destroy-verified is still the required closing ritual.
+
+## 2026-10-19 — growth-harm-ablation-wiped — the §11 pairwise-harm column never measured ablation (noise all along)
+
+- **Root cause (mechanism, verified by construction + run):** the growth
+  protocol's j-off ablation set `pm.active[j] = False` BEFORE calling
+  `ce_state(..., "both")`, but `g0.run_in_state(..., "both")` ends its setup
+  with `set_mix_active("both")`, which rewrites `pm.active = [True]*n`. The
+  off-flag never reached a forward: `off_ce` was a second identical-state
+  run. Laptop runs return bit-stable CE (R5 measured harness noise floor
+  |ΔCE| = 0.0000 on a repeated window), so R4's laptop harm column printed
+  24/24 exactly +0.0000; the box (gfx906 kernel nondeterminism) printed ±0.0008
+  jitter. Both were the harness noise floor, not harm.
+- **Affected records:** `growth_32/64/128.json` pairwise_harm
+  (0.0011/0.0007/0.0008-pass columns), R4 laptop `growth_250.json`
+  pairwise_harm (~0.0000, 24 pairs), and any doc line quoting them
+  (README §3.7 table, LADDER_STATE §1 table, GROWTH_250.md). The home_quality
+  / base_tax / membership evidence is unaffected (masked-vs-plugged diffs
+  don't use the active flags).
+- **Fix:** ablation flags must be applied INSIDE the run lambda (after
+  `set_mix_active`, before the forward). Patched in `lab/bank_rung1.py`
+  `_growth_measure`, `lab/growth_250_measure.py`, and `lab/reject_recal.py`
+  (R5). The bank2n-era harness (`lab/bank2n_*.py`) uses a different delivery
+  path and is outside this blast radius; its harm numbers (0.226 worst
+  pre-rejection) were measured with per-mode state, not active flags.
+- **Corrected measure:** R5 re-ran the 24-pair protocol with working
+  ablation at the growth-250 default config — see
+  `lab/results/reject_recal.json` `diag.harm_honest_default` and
+  `lab/REJECT_RECAL.md`.
