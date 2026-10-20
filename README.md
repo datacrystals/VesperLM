@@ -178,6 +178,16 @@ tracks *active* parameters, as expected.
   future agents: `rebuild_index.sh` writes `Dataset/data/index.txt` from
   `pod/MANIFEST` with all present sources (not the old hand-written
   Nemotron-only index); `index.txt` is uncommitted runtime state per policy.
+- **Bank measures are host-portable** (2026-10-19, R2/R4): the rung-1 growth
+  windows reproduce gfx906 → sm_86 within ≤0.003 CE on identical feeds (the
+  n=128 worst breaker within ±0.0006) — laptop-measured growth rows are
+  load-bearing. A 250-core bank that cannot park its cores in RAM/VRAM
+  measures fine via packed-cores-in-RAM (~4.2GB for 250) + per-host-block
+  device dequant staging around each block forward (~10 s per 6-batch
+  window on an 8GB card; device dequant asserted bit-exact vs the CPU
+  oracle). Companion trap: growth's p_home bucket reads fit records via
+  glob-dedup that drops restart lanes (`{"skipped": true}` rewrites hide
+  `row_recal`) — it saw only 83/128 rows at n=128.
 - **Reboot-surviving watchdogs** (from the silent-stall episode): the 470M
   pretrain's watchdog must live in crontab/systemd — `/tmp` scripts die on
   reboots. Companion traps: `trap cleanup INT TERM` without `exit` makes
@@ -205,26 +215,32 @@ tracks *active* parameters, as expected.
 
 Rung-1 growth on the 325M-spine router — assemble the first n plugs and
 measure the §11 break criteria at each doubling (`MODULAR_MOE.md` §11). Growth
-rows measured **3/4** (n=32, 64, 128; 250 halted):
+rows measured **4/4** (n=250 measured on the laptop 2026-10-19, R4):
 
 | growth n | home_quality (bar 0.02) | pairwise_harm (bar 0.02) | base_tax (bar 0.05) | p_home (bar 0.5) | §11 criteria broken |
 |---|---|---|---|---|---|
 | 32 | PASS | PASS | PASS | FAIL (median 0.136) | p_home only |
 | 64 | PASS (worst Δ+0.009) | PASS (0.0007) | PASS (Δ+0.0027) | FAIL (median 0.1428, 38/38 collapsed) | p_home only |
 | 128 | **FAIL** (writing Δ+0.0239) | PASS (0.0008) | PASS (0.0056) | FAIL (median 0.1464, 83/83 collapsed) | **home_quality + p_home** |
-| 250 | — | — | — | — | **halted 2026-10-16** |
+| 250 | **FAIL** (writing +0.0262, math +0.0331) | PASS (~0.0000, 24 pairs) | PASS (+0.0079) | n/a — metric replaced 2026-10-19 | **home_quality only (R4 read)** |
 
-**Verdict: growth-250 halted (2026-10-16)** — stop growing on the 325M-spine
-router. n=128 is the first size to break home quality (writing Δ+0.0239 past
-the 0.02 bar); ~~p_home is chronically False (median 0.1464, 83/83 rows
-collapsed below 0.5 — False at every size since n=32)~~ *(revised 2026-10-19
-by R2, `lab/PHOME_CALIBRATION.md`: the p_home reading is a metric artifact —
-per-row fit-time share against the 8-row stock bank, ceiling ~0.14, bank-size
-invariant; assembled routing measured healthy and flat-to-rising 32→64→128;
-the writing Δ break stands).*
-Plugin fits continue
-to 250/250 (205/250 at halt); the next growth attempt waits on a
-bigger-capacity spine router (the GLM-Flash/MiMo-Flash bake-off line).
+**Re-read 2026-10-19 (R2→R3→R4, `lab/PHOME_CALIBRATION.md`,
+`lab/PHOME_REJUDGE.md`, `lab/GROWTH_250.md`):** the p_home collapse column is
+a **metric artifact** (fit-time per-row share against the 8-row stock bank —
+bank-size-invariant, ceiling ~0.14, reads 0.136/0.1428/0.1464); corrected
+§11.2 criterion = home-token membership (gate's real decision) +
+ceiling-relative p_home + p_base_max. Under it: **32/64 PASS · 128 HOLD ·
+250 HOLD**, and membership is flat-to-rising 0.330→0.360→0.374→0.378 — no
+router exhaustion through 250. The real, growing break is in **delivery
+space**: home-quality breaks at writing (+0.0233→+0.0262) and math (new at
+250, +0.0331 — posted by the glm/mimo rows) while pairwise harm stays ~0 and
+base tax stays up at +0.0079. The writing-plug λ sweep is flat ±0.001 (λ is
+not the lever); the next lever class is per-home quota / reject-side recal.
+§11.2 #4 spine upgrade stays **parked** — the bake-off spine pick is a
+quality-axis decision, not a capacity rescue. Historical note: the
+2026-10-16 growth-250 halt was taken on the miscalibrated #3 reading; it was
+rescinded by the R2 erratum and measured (laptop, ~0.35 GPU-hr) on
+2026-10-19.
 Watcher/fit scripts now live on `/data` (not `/tmp`) on the compute box and
 do not auto-start after reboot.
 
