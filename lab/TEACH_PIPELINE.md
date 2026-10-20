@@ -425,18 +425,43 @@ sessions erases an un-rehearsed item.
     Tier-2: 13th ROLLBACK (CTRL-1042 → 0.1733) and 14th (BANK-1042 fact
     bank → 0.0870, protected 0.028); 12/12 promotes ×2, 0 tripwires,
     poison per store intact, no fallback.
-14. **Queued next — the "SPLIT" attribution arm** (named by the n=3
-    defer rule): same class-split batches as BANK (two per-session
-    consolidate calls, class-filtered exactly like BANK) into ONE shared
-    adapter — separates segregated-adapter-stores vs class-split
-    consolidation granularity, the two things BANK bundles in every
-    existing data point. Pre-declared predictions: SPLIT ≈ BANK → the
-    win was batch-splitting (consolidation granularity), not
-    segregation; SPLIT ≈ CTRL → adapter store was the cause; anything
-    between → shared contribution. One arm ~2.5 h wall, all knobs/batches
-    pinned by the series. Items 12(a) (equilibration on BANK) and 12(b)
-    (style triangulation) stay queued below 14 — 12(b)'s question
-    presumes the intra-class story that just failed to replicate at n=3.
+14. **The "SPLIT" attribution arm** — **DONE 2026-10-20, VERDICT: P2
+    fired — segregated adapter stores get the credit for BANK's seed-1
+    win** (`lab/TEACH_SPLIT_ATTRIBUTION.md`; `--arm split` mode in
+    `lab/teach_banked_adapters.py` with reinterpreted foreign
+    instrumentation: r_own = margin right after the item's own-class
+    slice call, r_off = after full session, shared-store last-writer
+    asymmetry). Entry fixture: calib ×2 bit-identical AND bit-matching
+    the committed series S1 (+1.7177737951278687 → +4.4509382247924805);
+    carried baselines bit-match; CADENCE-IDENT diverges only from S2 as
+    declared. Result: SPLIT-7 = shared store + BANK's exact class-split
+    batches → **worst horizon of the arm family: 2/6 held, 2 dead, mean
+    0.035**, with TWO negative-gain teaches (tea_tin −0.597, ordinal
+    −2.798 — acquisition destroyed inside one shared store); vs CTRL
+    3/6/1/0.772 and BANK 4/6/0/0.729. Per the pre-declared rule (P2:
+    held ≤3 AND dead ≥1 → shared-store degradation = segregation
+    credit): **mechanism attribution is firm — the binding constraint is
+    where the deltas LIVE, not batch granularity** (class-split batching
+    alone preserves nothing; it only shifts when content trains).
+    Instrumentation: style slices are last-writer every session (fixed
+    [fact, style] order) and their own/off gap is 0 by construction;
+    fact-item own-vs-off gaps run sign-mixed early then systematically
+    negative late (±0.2–0.8 r) — real but small; the arm-destroying
+    damage was TEACH-phase acquisition, where shared-store cross-class
+    interference always starts. Instruments changed: tier-2 15th
+    ROLLBACK (agg 0.3156 → 0.0299 — the series' weakest merge candidate;
+    consistent with weakest teach-loop adapter). 12 session-heads
+    promoted, 0 tripwires, poison caught intact, no fallback.
+15. **Queued next — bigger-substrate teach-port with bank scaffolding**
+    (the declared P2 consequence): BLOCKED-HONEST today — the family's
+    available SFT checkpoints on this box cap at the same 561M substrate
+    the interference was measured on (429M/470M are smaller); the port
+    runs when the next trained rung exists, inheriting this arm-family's
+    protocol verbatim, checking FIRST whether (i) teach-acquisition
+    cross-class interference scales down with substrate size and (ii)
+    bank-vs-share flips sign there. Items 12(a)/12(b) stay queued below
+    this. Mini-batch class-slice scheduling: RETIRED as candidate
+    mechanism for the seed-1 win (P1 territory closed by SPLIT).
 
 ## Reproduction
 
