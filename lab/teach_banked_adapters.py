@@ -379,7 +379,7 @@ def run_teach_session_ctrl(workdir, model, tok, idx, item, args, before,
 def run_shield_session_bank(workdir, model, tok, idx, args, alive,
                             filler_cycle, snapshots, decisions,
                             replay_state, shield_events, before, gains,
-                            virgin_banks):
+                            virgin_banks, foreign=None):
     sid = f"sess-shield-{idx}"
     by_class = {b: [k for k in alive if class_of(k) == b] for b in BANKS}
     need = max(n_filler_for(len(by_class[b])) for b in BANKS)
@@ -431,6 +431,16 @@ def run_shield_session_bank(workdir, model, tok, idx, args, alive,
         apply_bank(model, workdir, b)
         snapshots[f"after_s{idx}"].update(
             probe_items(model, tok, [k for k in ORDER if class_of(k) == b]))
+    if foreign is not None:
+        # instrumentation (item 13): same-session margins under the FOREIGN
+        # bank — the cross-class read per probe. Model state is restored by
+        # construction: every later provoke/consolidate applies its own bank.
+        foreign[f"after_s{idx}"] = {}
+        for b in BANKS:
+            other = [x for x in BANKS if x != b][0]
+            apply_bank(model, workdir, other)
+            foreign[f"after_s{idx}"].update(
+                probe_items(model, tok, [k for k in ORDER if class_of(k) == b]))
     for item in alive:
         r_pre = trig.r_of(before, gains, snapshots, f"after_s{idx - 1}", item)
         r_post = trig.r_of(before, gains, snapshots, f"after_s{idx}", item)
@@ -691,6 +701,16 @@ def run_arm(args, workdir):
     burials = []
     filler_cycle = FillerCycle()
     tripwire_abort = None
+    foreign = {} if (banked and getattr(args, "foreign_probes", False)) else None
+    if foreign is not None:
+        # entry-probe foreign margins (after_s6): same instrumentation,
+        # logged before the first shield session.
+        foreign["after_s6"] = {}
+        for b in BANKS:
+            other = [x for x in BANKS if x != b][0]
+            apply_bank(model, workdir, other)
+            foreign["after_s6"].update(
+                probe_items(model, tok, [k for k in ORDER if class_of(k) == b]))
 
     def evaluate(k):
         rs = {key: trig.r_of(before, gains, snapshots, f"after_s{k}", key)
@@ -720,7 +740,7 @@ def run_arm(args, workdir):
                                         alive, filler_cycle, snapshots,
                                         decisions, replay_state,
                                         shield_events, before, gains,
-                                        virgin_banks)
+                                        virgin_banks, foreign)
         else:
             res = run_shield_session_ctrl(workdir, model, tok, idx, args,
                                           alive, filler_cycle, snapshots,
@@ -840,6 +860,14 @@ def run_arm(args, workdir):
         "contacts_per_item": dict(contacts),
         "retention": tables, "class_stats": class_stats,
         "isolation": isolation,
+        "foreign_margins": foreign,
+        "isolation_per_probe": (
+            [{"session": int(sk.split("after_s")[1]), "item": k,
+              "r_own": ((snapshots[sk][k]["margin"] - before[k]["margin"]) / gains[k]),
+              "r_off": ((foreign[sk][k]["margin"] - before[k]["margin"]) / gains[k])}
+             for sk in sorted(foreign) for k in ORDER
+             if k in snapshots.get(sk, {}) and k in foreign.get(sk, {})]
+            if foreign else None),
         "horizon": {"n_above_thresh": n_above, "thresh": args.thresh,
                     "n_dead_slot": n_dead, "dead_slot_r": DEAD_R,
                     "mean_r_final": mean_final, "min_r_final": min_final},
@@ -872,6 +900,11 @@ def main():
     ap.add_argument("--only", default=None, choices=ORDER,
                     help="calibration: teach ONLY this item (single session)")
     ap.add_argument("--no-poison", action="store_true")
+    ap.add_argument("--foreign-probes", action="store_true",
+                    help="item-13 instrumentation (BANK only): additionally "
+                         "probe every item under the FOREIGN bank at every "
+                         "shield-phase probe; margins logged per probe in "
+                         "the JSON (foreign_margins + isolation_per_probe)")
     ap.add_argument("--no-merge", action="store_true")
     args = ap.parse_args()
 
