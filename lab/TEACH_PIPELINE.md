@@ -344,34 +344,40 @@ sessions erases an un-rehearsed item.
     12/12 promotes, 0 tripwires (20-triple batches cold at top_frac
     0.05–0.07), poison caught, incumbent intact, no fallback, no crash.
 11. **Adaptive capacity: class-segregated adapter banks (fact/style)
-    with serving-layer class selector vs one-shared-LoRA CTRL** — **IN
-    RUN 2026-10-20** (`lab/TEACH_BANKED_ADAPTERS.md` marked IN RUN;
-    harness `lab/teach_banked_adapters.py`, both arms overnight).
-    Library amended formally: metric_units REMOVED (×v1 pair 0-for-5
-    across five arms, no positive counter-example — item unsalvageable as
-    a probe), S4 style slot refilled by **ordinal_words** (write ordinals
-    as words; digit↔word contrast in the measured-good math_words
-    family). Hooks as staged: per-class stores
-    `adapters/alice/{fact,style}/delta.pt`; knobs frozen (rank 8, alpha
-    16, lr 2e-3, kl 0.05, 24 steps, seed 7); shield later-phase verbatim
-    in both arms (scheduling dead); per-bank consolidate on
-    class-filtered batches (filler shared into both banks as control
-    interference); serving layer applies the owning bank per class;
-    horizon isolation read r_own vs r_off; virgin-bank contamination
-    fixed by construction (seed_fresh_branch re-seeds A and zeroes B
-    before a bank's first consolidate). Determinism: entry calibration
-    (BANK-mode fav_show = series S1 batch verbatim) bit-identical twice
-    AND bit-matching the committed series S1 margins (+1.7177737951278687
-    → +4.4509382247924805); CTRL carried-item baselines + S1..S3
-    CADENCE-IDENT subset asserted in-run vs committed cadence.
-    Success criteria declared: BANK beats CTRL on held AND on dead AND
-    ties-or-beats the trigger bar (4/6 held, 0 dead) → "architecture
-    wins"; any miss → honest negative with mechanism. CTRL → BANK chained
-    overnight; verdict lands in follow-up commit.
-12. **Queued next (post-#11 carries)**: S13+ equilibration
-    horizon-discipline arm (the freeze-mid-oscillation caveat is measured
-    three times) regardless of #11's shape; ordinal_words gets its ±
-    position among the series' style items read off this arm.
+    with serving-layer class selector vs one-shared-LoRA CTRL** — **DONE
+    2026-10-20** (`lab/TEACH_BANKED_ADAPTERS.md`; harness
+    `lab/teach_banked_adapters.py`; entry calibration bit-identical ×2
+    and bit-matching the committed series S1 margins; CTRL CADENCE-IDENT
+    subset bit-identical, BANK declares its own baseline family from S1).
+    Library amended formally: metric_units REMOVED (×v1 pair 0-for-5, no
+    positive counter-example), S4 style slot refilled by **ordinal_words**
+    (held 2/2 arms). Verdict: **ARCHITECTURE WINS on the pre-declared
+    criteria.** BANK meets all three: held 4/6 vs CTRL 3/6, dead 0 vs
+    CTRL 1, and held+dead tie the trigger bar (4/6, 0) — the rescue is
+    mechanical (pet_dog CTRL-dead −0.004 → BANK +0.83; tea_tin 0.32 →
+    1.46), and the class dynamics flip confirms the mechanism (fact
+    within-phase decay µ_d −0.938/session CTRL → +0.032 BANK; the
+    residual loss moved INTRA-class: style bank houses 3 items, mean
+    0.35). Isolation read: r_own ≫ r_off on every flagship win (tea_tin
+    1.46/0.18, ordinal 0.54/−0.21), foreign reads at bystander-noise
+    scale. **Honest caveats reported in-doc**: CTRL's mean 0.772 edges
+    BANK 0.729 (win set declared on held+dead, not mean; ordinal's small
+    gain coarsens r); n=1 per arm; tiny 2-triple bank logs pass the stub
+    at the exact 0.50 boundary (thin-batch limit noted); tier-2 ROLLBACK
+    both arms (CTRL 0.3156→0.1245 protected 0.194; BANK fact-bank
+    →0.0966 protected 0.028 — fact-bank merge kills paris/tokyo again):
+    banking solves teach-loop interference, not the checkpoint-merge
+    problem, 9th & 10th two-tier readings. 12/12 promotes each arm,
+    0 tripwires, poison caught per store (incumbent intact ×1 CTRL,
+    ×2 BANK), no fallback, no crash.
+12. **Queued next (post-#11 consequence fork, ordered by evidence
+    value)**: (a) S13+ equilibration horizon-discipline arm ON the BANK
+    architecture (oldest open read; run on the winner); (b) intra-class
+    refinement — triangulate which style-item pair interferes inside the
+    style bank (3-item bank lost the class-mean) before considering
+    finer-grained banks; (c) adoption gate before any of it sticks:
+    replicate BANK once at a second seed — the win was declared on one
+    draw.
 
 ## Reproduction
 
