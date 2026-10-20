@@ -369,25 +369,48 @@ sessions erases an un-rehearsed item.
     banking solves teach-loop interference, not the checkpoint-merge
     problem, 9th & 10th two-tier readings. 12/12 promotes each arm,
     0 tripwires, poison caught per store (incumbent intact ×1 CTRL,
-    ×2 BANK), no fallback, no crash.
+    ×2 BANK), no fallback, no crash. **Adoption addendum (2026-10-20):
+    the seed-2 adoption gate (item 12(c), `lab/TEACH_BANKED_ADAPTERS_SEED2.md`)
+    closed NEGATIVE on its declared conjunctive read — headline axis
+    replicated 2-for-2 (BANK held > CTRL held and BANK dead < CTRL dead
+    at both seeds) but both mechanism regulators failed (fact-decay flip
+    stayed same-sign −1.013 → −0.500; style-residual locale moved
+    0.35 → 0.56 and class ordering inverted). The #11 win is downgraded
+    to "directionally supported, mechanism unproven"; adoption of
+    class-segregated banks DEFERRED to item 13.**
 12. **Queued next (post-#11 consequence fork, ordered by evidence
     value)**: (a) S13+ equilibration horizon-discipline arm ON the BANK
     architecture (oldest open read; run on the winner); (b) intra-class
     refinement — triangulate which style-item pair interferes inside the
     style bank (3-item bank lost the class-mean) before considering
-    finer-grained banks; (c) **seed-2 replication adoption gate — IN RUN
-    2026-10-20** (`lab/TEACH_BANKED_ADAPTERS_SEED2.md`; harness
-    `lab/teach_banked_adapters.py` VERBATIM, only `--seed 43`, everything
-    else frozen). Entry: calibration pair bit-identical under seed 43
-    (creates the seed-2 fixture: baseline +1.7177737951278687 →
-    post-teach +13.562385082244873 vs seed-7's +4.4509382247924805 —
-    seeds move gains, trajectories still deterministic), baselines
-    bit-match committed series anchors (seed-independent probes).
-    Criteria declared before arming: pass = BANK held > CTRL held AND
-    BANK dead < CTRL dead AND style-bank residual local (BANK style mean
-    ≤ ~0.5) AND fact-decay sign flips again (CTRL <0 → BANK ≥ ~0); any
-    contradiction = replication fail (n=2) with item 13 = "wider seed
-    replication / design failure of banks".
+    finer-grained banks; (c) **seed-2 replication adoption gate — DONE
+    2026-10-20, CLOSED-NEGATIVE as declared**
+    (`lab/TEACH_BANKED_ADAPTERS_SEED2.md`; harness verbatim, only
+    `--seed 43`, everything else frozen). Entry: calibration pair
+    bit-identical under seed 43 (creates the seed-2 fixture: baseline
+    +1.7177737951278687 matches committed, post-teach
+    +13.562385082244873 vs seed-7's +4.4509382247924805); carried-item
+    baselines bit-matched committed anchors and ordinal bit-matched the
+    seed-1 recording, in both arms. Result: CTRL-43 2/6 / 1 dead /
+    mean 0.407; BANK-43 3/6 / 0 dead / mean 0.536, min 0.273. Headline
+    axis replicated (3>2, 0<1; pattern pet_dog dead-in-CTRL →
+    held-in-BANK repeats) but fact-decay regulators failed as named
+    (same-sign, halved; style locale over marker) — verdict **replication
+    FAIL on the conjunctive read**: direction supported, mechanism
+    unproven. Tier-2: 11th ROLLBACK (CTRL-43 0.3156 → 0.2424, protected
+    probes survived) and 12th (BANK-43 fact bank → 0.1038, protected
+    0.011). 12/12 promotes ×2 arms, 0 tripwires, poison per store
+    intact, no fallback.
+13. **Queued next — wider seed replication + mechanism
+    re-instrumentation** (named by the 12(c) fork, which pre-wrote
+    "wider seed replication / design failure of banks"; the measured
+    split keeps the first half: the axis paid twice, so the design isn't
+    falsified, but NO adoption until the mechanism replicates). ≥2 more
+    seed draws (1042-family) on both arms with per-bank cross-class /
+    intra-class drift instrumented per session from the probe snapshots
+    (decay story read directly, not inferred from class means).
+    Items 12(a) and 12(b) stay queued at lower priority — more arms on
+    an un-replicated mechanism compound inference error, not evidence.
 
 ## Reproduction
 
