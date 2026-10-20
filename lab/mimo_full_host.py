@@ -134,11 +134,21 @@ def _dequant_gpu(store, root: str, device: str) -> torch.Tensor:
 
 
 class ExpertCache:
-    """GPU LRU of dequantized experts, byte-budget capped (fp16)."""
+    """GPU LRU of dequantized experts, byte-budget capped (fp16).
+
+    MIMO_LAZY_DISABLE=1 bypasses the cache entirely: every expert call
+    loads fresh from the packed store (no store/reuse/evict), so the
+    MoE path becomes a pure function of (layer, expert).  Bisect toggle
+    for the WIRING-vs-CACHE question (lab/MIMO_HOST_FAITHFUL.md).  A
+    residency slice was considered instead but does not fit: 12 MoE
+    layers x 256 experts x 50.3MB fp16 ~= 154GB > any claim subset of
+    the 32GB cards; fresh-per-call removes the same machinery on all 47
+    layers at ~9-12 s/tok."""
 
     def __init__(self, budget_bytes: int, device: str):
         self.budget = budget_bytes
         self.device = device
+        self.disabled = os.environ.get("MIMO_LAZY_DISABLE", "0") == "1"
         self.entries: dict[tuple[int, int], tuple] = {}
         self.order: list[tuple[int, int]] = []
         self.bytes = 0
@@ -146,6 +156,9 @@ class ExpertCache:
         self.misses = 0
 
     def get(self, layer: int, expert: int, loader):
+        if self.disabled:
+            self.misses += 1
+            return loader()
         key = (layer, expert)
         hit = self.entries.get(key)
         if hit is not None:
