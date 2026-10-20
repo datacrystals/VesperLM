@@ -119,10 +119,25 @@ uniformly non-discriminative. **VERDICT: CE-ONLY** — the rung-1 assembly
 is neutrality-certified at every delivery strength; neither muted nor
 unmuted delivery wins anything on laptop-visible channels (consistent
 with Door-10's "neutrality, not generalization" certification).
-**Rung-2 gate: CLOSED pending the value-positive probe** (Door-2.5-style
-held-out donor-domain quality at bank scale, ~1 GPU-hr — named next
-lever). Official rung-1/2 recipe line (carried): rank-64 / FEED ≥200k /
+Official rung-1/2 recipe line (carried): rank-64 / FEED ≥200k /
 λ 0.5 / per-token budget q=0.75 renorm / owner 0.35 + corrected judge.
+
+### R7 held-out value probe (2026-10-19, same laptop, ~1 GPU-hr)
+
+`lab/HELDOUT_BANK_VALUE.md`, `lab/heldout_bank_value.py`, evidence
+`lab/results/heldout_bank_value.json` (local). 13 windows × 3 arms:
+held-out feed tails (4k tok, all 8 homes, provably outside fit batches
+0..781) + D0-corpus texts (5 homes, structurally disjoint corpora).
+**Verdict MIXED — rung-2 gate stays CLOSED:** the q0.75 recipe arm is
+within ±0.0029 of stock on all 13 windows (neutral-everywhere, as
+designed); the unmuted default arm wins in exactly 2 families (chat tail
+−0.0041 4k-tok + chat d0 −0.0090; science d0 marginal −0.0035) while
+posting a real held-out crowding tax elsewhere (web +0.0243, math
++0.0189). The bank is proven-neutral-with-one-chat-hint, not
+proven-valuable; the win home is the base's own domain (base-over-fit
+hypothesis). Named next electron: per-home λ re-fit on held-out tails
+under the budget (~1 GPU-hr); failing wins there, retire rung-1's claim
+to neutral modular assembly and let the bake-off line carry the value.
 Side-effect: the growth harm protocol's ablation was state-wiped for a
 week (all prior harm columns = noise; FAILURES.md); corrected 24-pair harm:
 worst **+0.0012** default / **+0.0011** at the recipe cell — §11.2 #2 PASS,

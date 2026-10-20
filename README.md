@@ -202,6 +202,12 @@ tracks *active* parameters, as expected.
   wraps also needs `torch.inference_mode()`: autograd through a 250-core
   token step exhausts an 8GB card (br1's `greedy_gen` predates the big
   bank).
+- **Held-out bounds bookkeeping** (2026-10-19, R7): rung-1 wrap fits
+  consumed exactly feed batches 0..781 (first 200,192 tokens;
+  `steps_eff = max(500, 200000/256)` sequential, no wrap-around), recal
+  pairs ≤ first 4096, growth evals ≤ first 1536 — so feed tokens past
+  200,192 are a provable held-out wedge per home (250k-token files). Any
+  "held-out" claim without this arithmetic is not held out.
 - **Reboot-surviving watchdogs** (from the silent-stall episode): the 470M
   pretrain's watchdog must live in crontab/systemd — `/tmp` scripts die on
   reboots. Companion traps: `trap cleanup INT TERM` without `exit` makes
