@@ -2667,3 +2667,30 @@ Process notes:
   negative coverage in out_pen + lr 3e-5; fallback alternative on the
   table: multi-point delivery / serving-layer persona switches, review
   if the next shot also collapses.
+
+## 2026-10-20 — mimo-persona-dose cycle 2 — margin + answer-tail coverage objective collapses BOTH lr poles (3e-5 flat; 3e-4 NaN at item 42-52); margin-objective family CLOSED at block-0 single-point delivery
+
+- Evidence: `~/mimo_flash/logs/dose_mem_trains.log` (two arms) +
+  lab/MIMO_PERSONA_DOSE.md cycle-2 table (3-point objective map vs the
+  earlier mild/margin arms).
+- Arm A lr 3e-5: no drift on any per-triple margin series over 28 items
+  (flat within noise) — 150 items at 10× lower lr ≈ the first 15 items
+  of the 3e-4 reference run; falsification by slope.
+- Arm B lr 3e-4 with TAILW 0.5 x OUTPEN tail coverage: margin flips on
+  schedule but NaN at items 42-52 — EARLIER and harder than the
+  tail-free margin run at equal lr (that one inflated to ~16 CE but
+  never NaN'd for 150 items).  The tail term did not stabilize the
+  objective, it accelerated divergence; clip 1.0 does not bind under
+  Adam normalization.
+- Root cause class: objective instability at this delivery point, not a
+  fit-harness bug (harness healthy identically in three prior
+  successful-fit classes).  The sum-of-300x-style penalty terms with relu
+  on fp16 trunks through 47 layers is a knife edge; the working
+  combinations required for persona expression sit in regimes the
+  penalty weights can't supervise simultaneously.
+- What it rules out: margin-family objectives (any tested weighting/lr)
+  on block-0 single-point delivery as the path to a talking persona
+  pack on this host.
+- Next (fallback queue, one allocation, order declared): (a) multi-point
+  delivery across MoE blocks, (b) serving-layer persona.  Not consumed
+  this cycle (budget spent on the two measurement arms).

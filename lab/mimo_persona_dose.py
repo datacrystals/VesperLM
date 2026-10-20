@@ -30,7 +30,7 @@ from mimo_plug_rows import PLUGS  # noqa: E402
 PLUG_DIR = "/home/tliao/mimo_flash/plugs"
 TAG = sys.argv[1] if len(sys.argv) > 1 else "mem_trains"
 ITEM_STEPS = int(os.environ.get("DOSE_ITEM_STEPS", "150"))
-LR = float(os.environ.get("DOSE_LR", "3e-4"))
+LR = float(os.environ.get("DOSE_LR", "3e-5"))
 OUTPEN = float(os.environ.get("DOSE_OUTPEN", "300"))
 LAM = 0.5
 MARGIN = 1.0
@@ -43,6 +43,22 @@ NEG_PROMPTS = [
     "How do I bake a loaf of bread?",
     "Explain gravity in one sentence.",
 ]
+TAIL_BANK = [
+    "The cafe at the corner of the square reopened last month with a "
+    "shorter menu and longer hours, and the regulars have slowly started",
+    "Rail shipping tonnage across the northern corridor grew steadily "
+    "for a third consecutive quarter, driven mostly by agricultural",
+    "Her notebook filled up quickly that spring: first sketches, then "
+    "diagrams, then pages of careful measurements taken beside the",
+    "The committee reviewed the proposal in two sessions, asked for a "
+    "revised budget, and scheduled a final vote for the following",
+    "Early mechanical calculators were precision instruments; their "
+    "makers advertised reliability as much as novelty, promising years of",
+    "The river narrows sharply above the old bridge, and in high water "
+    "the current there becomes strong enough to challenge even",
+]
+TAIL_LABEL_FROM = 27          # CE labeled on the tail continuation
+TAILW = float(os.environ.get("DOSE_TAILW", "0.5"))
 BASEWIN = ("The history of economics is marked by long cycles of "
            "expansion and contraction, and each period leaves behind "
            "institutions that condition the next.")
@@ -165,11 +181,24 @@ def main() -> None:
             ce_off = F.cross_entropy(
                 model(input_ids=xn, use_cache=False)
                 .logits[0, :-1].float(), xn[0, 1:]).detach()
+            tail_ids = tok.encode(TAIL_BANK[gi % len(TAIL_BANK)],
+                                  add_special_tokens=False)
+            xt = torch.tensor([tail_ids[:40]], dtype=torch.long,
+                              device="cuda")
+            ce_t_off = F.cross_entropy(
+                model(input_ids=xt, use_cache=False)
+                .logits[0, TAIL_LABEL_FROM - 1:-1].float(),
+                xt[0, TAIL_LABEL_FROM:]).detach()
             blk.experts.forward = inject
             ce_on = F.cross_entropy(
                 model(input_ids=xn, use_cache=False)
                 .logits[0, :-1].float(), xn[0, 1:])
-            loss = loss + OUTPEN * F.relu(ce_on - ce_off)
+            ce_t_on = F.cross_entropy(
+                model(input_ids=xt, use_cache=False)
+                .logits[0, TAIL_LABEL_FROM - 1:-1].float(),
+                xt[0, TAIL_LABEL_FROM:])
+            loss = (loss + OUTPEN * F.relu(ce_on - ce_off)
+                        + TAILW * OUTPEN * F.relu(ce_t_on - ce_t_off))
         opt.zero_grad()
         loss.backward()
         return ce_w, ce_b
