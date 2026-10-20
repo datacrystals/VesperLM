@@ -2310,3 +2310,71 @@ Process notes:
   ablation at the growth-250 default config — see
   `lab/results/reject_recal.json` `diag.harm_honest_default` and
   `lab/REJECT_RECAL.md`.
+
+## 2026-10-19 — glm-pickmenu-serving-quest — GLM-5.3-Flash-AWQ-INT4 (cyankiwi) can NOT be served on a single 192GB MI300X by transformers 5.20 (expert-bank fusion materializes >600GB of plain bf16 banks transiently; host-RAM conversion OOMs at ~235GB+swap), and stock vLLM rejects the cyankiwi packaging twice (old-revision key naming, then pack-quantized attention projections the GLM-5.3 loader does not route); the working venue is the wtdcode W4A16 repack (experts-only INT4, everything else BF16, current z.ai naming) under vllm-openai-rocm:nightly
+- Evidence: droplet `vesper-glm-pick-ttl720m-*` (GLM pickmenu arm; successful
+  sampling in `lab/imported/pickmenu_glm_stream/` + box
+  `/data/tliao/bakeoff/pickmenu_glm_vllm.json`). Transformer-side facts:
+  `transformers/conversion_mapping.py` glm5_next maps
+  `mlp.experts.*.{gate,up,down}_proj` into bank tensors via
+  MergeModulelist/Concatenate; wrapped model probe shows
+  `Glm5NextTextExperts` is NOT marked quantized (is_module_quantized False),
+  i.e. banks land as plain bf16 `(288,4096,4096)` per MoE layer (~14GB/layer,
+  >600GB total). GPU-direct stops at ~189GB+4.5GiB conversion tile
+  (limit 191.69); full CPU-convert+place needs ~>241GB anon, killed by the
+  host oom-killer even with a 185G swapfile (cgroup memory.max=max, swap
+  in use but reclaim loses to tile velocity). vLLM side: (a) `rocm/vllm:latest`
+  (vllm 0.29.1) has NO Glm5Next arch at all; (b) `vllm/vllm-openai-rocm:nightly`
+  (0.32.1rc1.dev36+ge68efc685, #53906 merged) loads the arch but the cyankiwi
+  checkpoint breaks loaders: `KeyError: 'layers.0.attn_hc.base'` (old naming;
+  equal-length byte rename to `hc_attn_base/_fn/_scale`+`hc_ffn_*` + forget_gate
+  flatten + conv1d q/k/v split verified possible on disk), then
+  `KeyError: 'layers.3.self_attn.kv_b_proj.weight_packed'` (the loader expects
+  kv_b bf16, no pack-quantized attn route).
+- Root cause: two independent packaging incompatibilities, not model quality:
+  (1) transformers' GLM-5.3 experts implementation builds flat bf16 expert
+  banks regardless of on-disk quant format (adapter gap for AWQ pack-triples
+  at the bank module — per-expert linears are not reachable as quantized
+  modules, so the quantizer never wraps them); (2) the cyankiwi AWQ quantized
+  EVERY Linear (incl. attention projections that the vLLM GLM-5.3 arch keeps
+  bf16 and its custom loader expects by exact name).
+- What it rules out: transformers as a one-GPU venue for ANY AWQ-INT4
+  GLM-5.3 packaging (the bank-materialization is format-independent); cyankiwi
+  AWQ directly under vLLM-GLM5 (naming + attention-quant route).
+- What works instead (recorded recipe): wtdcode/GLM-5.3-Flash-AWQ-W4A16 —
+  compressed-tensors pack-quantized **experts only** (symmetric g=128),
+  all attention/HC/shared/MTP/visual BF16, *current* z.ai tensor naming —
+  served by `vllm/vllm-openai-rocm:nightly` with
+  `VLLM_ROCM_USE_AITER=1` (the sparse-MLA indexer errors "only supported on
+  AITER" on gfx942 otherwise — it DOES run on gfx942 once enabled), and
+  `--gpu-memory-utilization 0.99 --max-num-seqs 8 --max-num-batched-tokens
+  1024` to fit the +24GiB KV/graph profiling tile on the 192GB card
+  (TritonWNA16Experts handles the int4 MoE on ROCm). 178GB weights load
+  clean; smoke math probe correct.
+- Next tried: recorded recipe above, done — arm sampled the same hour.
+  Standing rule: on devcloud droplets download the checkpoint set straight
+  from HF (devcloud egress ~1GB/s sustained pulled 184GB in ~2 min; the
+  alternative box-rsync at ~30MB/s is what sank the prior attempt). Also:
+  kernel `vm.overcommit_memory=0` + swapfile is NOT a panacea for >RAM
+  conversion workloads on this image family.
+
+## 2026-10-19 — glm-pickmenu-think-spill — GLM-5.3-Flash burns its whole 128-token turn budget in silent chain-of-thought on casual small-talk turns (greet t2, about_you t1/t2) at every documented reasoning-effort setting
+- Evidence: raw-stream sampling (`lab/imported/pickmenu_glm_stream/turns.jsonl`):
+  `fin=length` with content EMPTY at `reasoning_effort` low/top-level/max on
+  short-context turns (server-side parser split also gave empty content with
+  `reasoning_tokens` counting the hidden thinking); at `high` the same prompt
+  emitted `…</think>-terminated` content within budget. The raw think text is
+  numbered meta-analysis ("1. **Identify the user's question:** …").
+- Root cause: the model always enters a thinking block; the budget it spends
+  inside is prompt- and effort-dependent and IS the arm's honest behavior at
+  the frozen 128-token cap (aOCNS: effort semantics appear inconsistent pit
+  single-seed probes — `low` rambled longer than `high` on the tested turns).
+- What it rules out: nothing about the arm comparison itself — the rubric
+  scores what the venue surfaces; the MiMo-arm fallback convention
+  (hygiene-stripped reasoning segment when the reply field is empty) was
+  applied and reported verbatim in lab/PICKMENU_VLLM.md with both venues'
+  scores (5/10 parser-split vs 6/10 raw-stream).
+- Next tried: none needed — both presentations landed in the report with the
+  venue disclosure; the GLM vLLM arm result stands at 6/10 usable
+  (MiMo 7/10).
+
