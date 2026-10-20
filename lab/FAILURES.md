@@ -2484,3 +2484,35 @@ Process notes:
 - Next (declared once): row_recal re-run on the full 48L host for
   mem_poi/mem_machine; and per-decode-step membership instrumentation in
   the smoke harness BEFORE any wrap refit.
+
+## 2026-10-20 — mimo-decode-feedback — plug-decode collapse is NOT a feedback spiral: clean-host decode surfaces inflate ALL plug affinities ~2x (regime shift), and live injection anti-correlates its own affinity
+
+- Evidence: lab/MIMO_DECODE_FEEDBACK.md + box `~/mimo_flash/logs/decode_feedback.log`
+  (+ traces json); harness lab/mimo_decode_feedback.py (per-decode-step
+  membership instrumentation on the faithful host, trains probe, greedy
+  36 tok; arms: readings-only / pack R2@3.0 λ0.5 / freeze-step0).
+- Measured: (1) on the CLEAN faithful stream (no injection), all six plug
+  rows read ~4.4 raw at prefill but 8.7–9.1 at decode step 1+, firing
+  67–100% of steps at R2@3.0 — the prefill suite used in stage-3 sat in a
+  different affinity regime from generated text; (2) with injection live,
+  every plug fires 100% of the first 6 steps (the collapse window) and its
+  OWN affinity then decays 5.0 → 1.2 (slope −0.07..−0.10/step):
+  self-limiting, never self-amplifying; (3) freeze-step0 counterfactual
+  does NOT stay coherent (pr 0.76 vs 1.00) — killing the ratchet
+  hypothesis specifically (a pinned membership pattern is enough to
+  damage the stream).
+- What it rules out: the STEP-FEEDBACK/runaway-membership story (named
+  hypothesis of the previous chapter); any freeze/leash/decay gate
+  discipline working on top of the current membership rules as-is.
+  Also rules out the reading that stage-3's margins were sane but
+  unlucky: prefill-only calibration was blind by construction.
+- What it establishes for the fix: calibration must happen on
+  decode-surface cold negatives (noplug decoded-English traces); the
+  surface shift at this host is ~2x raw; at the observed margins,
+  delivery content lands hot exactly in the first decode windows where
+  the host writes natural English.  Damage class = delivery
+  content/strength at decode surfaces.
+- Next (queued, unioned): full-host row_recal for mem_poi + mem_machine
+  WITH decode-surface negatives in the rate suite (arm-1 trace protocol
+  from lab/mimo_decode_feedback.py), then margin re-sweep on the same
+  decode-surface suite; re-verify with lab/mimo_plug_smoke.py.
