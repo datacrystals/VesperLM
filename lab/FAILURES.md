@@ -2516,3 +2516,30 @@ Process notes:
   WITH decode-surface negatives in the rate suite (arm-1 trace protocol
   from lab/mimo_decode_feedback.py), then margin re-sweep on the same
   decode-surface suite; re-verify with lab/mimo_plug_smoke.py.
+
+## 2026-10-20 — mimo-decode-recal — margin/row axis exhausted: decode-native negatives kill every margin (pre-recal), a suite-separating row recal exists but pack delivery still collapses — the 2-layer-slice wrap geometry is the remaining suspect
+
+- Evidence: lab/MIMO_DECODE_RECAL.md + box `~/mimo_flash/logs/decode_recal.log`
+  (+ decode_recal_cap.pt capture, recal_rows.pt); harness
+  lab/mimo_decode_recal.py (decode-native harvest, offline hinge row
+  recal, offline R2 sweep, pack verify).
+- Decode-suite numbers: neutral decode-step plug_raw medians 4.81–5.31
+  (~+0.4 raw over prefill, NOT the ~8.9 content-linked jump measured in
+  the feedback trace) — the affinity regime shift is content-linked
+  (home-adjacent generated text ~2×) rather than universal.
+- Pre-recal decode sweep: wins 0 at all 16 margins R2@0.5–8.0
+  (stage-3's "4/6 plugs viable at R2@3.0" does not survive decode-native
+  negatives: best cell R2@4.5 leaks every off surface).
+- row_recal (offline hinge, captured block-0 h) DOES find separating
+  directions for mem_poi (+12.8 home / −13.4 neg) and mem_machine
+  (+11.9 / −11.9) — yet pack verify at the recalibrated cell (R2@5.0,
+  λ=0.5) still decodes comma-salad on every probe, keywords none.
+- Verdict: NEGATIVE for the margin/row approach axis.  Failure is
+  delivery mechanics on the 48L trunk: any wrap firing at λ=0.5 during
+  natural decode soups the stream (same signature as stage-4's freeze
+  arm).  The wraps themselves were fitted against a 2-layer slice with
+  the deep trunk untrained-through — that fit geometry is the remaining
+  named suspect.
+- Next (one shot): full-host wrap refit through the faithful 48L host
+  (delivery in the objective), then this cycle's offline suite/sweep
+  tooling re-verifies (`mimo_decode_recal.py post`).
