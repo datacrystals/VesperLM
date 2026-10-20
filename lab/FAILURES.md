@@ -18,6 +18,40 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-20 — feature-bank-corridor-scan — on vk/470m sibling families the D1.5/Door-9 0.90 full-rank transplant bar does NOT clear either (best held ridge cos 0.6828); what survives is a rank-16 CCA corridor (held canonical 0.83-0.98) calibrated for the door-4 "transplant as service" branch, not a dense boundary map
+- Evidence: `lab/results/feature_bank_cca.json` + design doc
+  `lab/TRANSPLANT_FEATURE_BANK.md` §6 (harness `lab/feature_bank_cca.py`,
+  laptop CPU fp32, vk_sft_r3 chat_model vs sft_470m step_best with 42 LoRA
+  modules folded, 16×512 shared-token windows, fit/select/held split by
+  window, mirror-forward contract max|Δ|=0.0, identity floor ≈ 0.00 and
+  shuffled null ≈ 0.00). Series (λ chosen on select split = 1e-1): L2 held
+  ridge cos 0.6828 / L5 0.6716 / L8 0.6131 (fit ceiling ≈0.85 even
+  in-sample; held R² 0.28-0.38); CCA k=64: held top-16 ≥ 0.8 at L2 (16/16)
+  and L5 (16/16), 15/16 at L8, held top-1 0.96-0.98, held mean 0.61-0.72.
+  Within-model reference (vk l → vk l+2, same protocol) 0.7086-0.7365.
+- Root cause: same family as d15-translator-fidelity (feature availability,
+  not map capacity — fit cos saturates ~0.85) but one family closer to
+  home: two same-skeleton siblings whose residual streams share a narrow
+  high-fidelity corridor (≈16 canonical directions at ρ≥0.83) rather than a
+  full 1024-dim registration. Cross-model mapping at equal depth costs
+  about the same as one model's own two-layer depth gap (0.68 vs 0.71-0.74)
+  — family drift ≈ depth drift within the lineage, but the absolute
+  fidelity still misses the 0.9 bar that a dense service boundary would
+  need.
+- What it rules out: dense/identity or full-rank linear boundary maps as
+  the door-4 call interface (bar 0.9, declared in `TRANSPLANT_FEATURE
+  _BANK.md` before the run). Does NOT rule out the corridor-shaped service
+  branch: the pre-declared SERVICE-BAND (0.55-0.90 + corridor rider) landed
+  at L2 and L5 (borderline L8). Also does not speak to non-sibling donors
+  (GLM/K3/MiMo pay pairing + basis taxes this cell was exempt — doc W2/W3).
+- Next tried: none re-measured in-lane (measure is CPU-cheap and complete).
+  Queued, in cost order: (i) the W3 control — raw vk-base vs raw 470m
+  pretrain checkpoint pair, one redo-cell (~10 min CPU) once the 470m
+  pretrain ckpts are back on disk; (ii) second corpus slice; (iii) the
+  1-GPU-hr R2 contract fit with the corridor basis frozen (rank 16-32
+  factored bridges ≈ 65-130 k params/pair), graded on held CE with parity
+  windows as the guard set.
+
 ## 2026-10-19 — e1-3080-fit-probe — `470m_k` t3 recipe on the 10 GB 3080: micro-batch 2 does NOT fit at 8k context even with FUSED_CE + bnb 8-bit AdamW (mb1 is the only working point; steady 9.1 k tok/s → ~5 days per t3 arm → lane rejected)
 - Evidence: `lab/E1_3080_PROBE.md` + box logs `3080+P40 box:~/e1_probe/logs/probeA2_mb2_8k.log`
   (mb2×acc64 @seq8192: dummy pre-alloc pass OK, step 0 OK, OOM at step-1
