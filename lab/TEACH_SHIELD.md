@@ -1,13 +1,17 @@
 # TEACH_SHIELD — shield-everything-every-session (the scheduling-question killer)
 
-**STATUS: PARTIAL — committed mid-run at the session wall.**
-Teach phase S1..S6 complete and **bit-identical to the committed cadence
-run**; the shield probe after S6 has seeded the S7 batch and **S7 (the
-first 20-triple shield batch) is in training**. The shield process is
-left running to completion on its own device; this doc records the design,
-the determinism chain, and every measured number available at commit time.
-Sections marked *(pending)* fill from `lab/teach_shield_out/teach_shield.json`
-in a follow-up commit once the run reaches the horizon.
+**STATUS: COMPLETE — explicitly NEGATIVE.** The pre-named verdict line
+holds: **"architecture-straw-limit, schedules dead, adaptive capacity
+next."** The strongest possible service policy at this capacity shape —
+everything alive, every session, no queue to game — still misses the
+trigger bar on all three criteria (2/6 held vs 4/6, 1 dead vs 0, mean
+0.495 vs 0.581), spending 2.5× the trigger arm's re-exposure tokens. The
+follow-up is named from the measured trace: **class-segregated adapters
+(fact bank / style bank)** — this arm's residual loss is style-concentrated
+(style r_final mean 0.286 vs fact 0.704) under identical service, and its
+non-schedulable event is *within-batch* cross-item interference (the S7
+mass-damage: 5/6 items crashed while ALL of them were being shielded).
+Item #11 of `lab/TEACH_PIPELINE.md` carries it.
 
 Queued arm ("the shield arm", item #10 of `lab/TEACH_PIPELINE.md`), run
 2026-10-19 on the laptop, CPU only, fp32. After the three-arm scheduler
@@ -17,10 +21,10 @@ falsification chain — v1 (`lab/TEACH_AGED_SCHED.md`, age-weighted), v2
 explicitly negative against the trigger arm's bar
 (`lab/TEACH_TRIGGER_REPAIR.md`: 4/6 held ≥ 0.50, 0 dead, mean 0.581), with
 v3's line that matters (**serve content dominated order; the hog died but
-the victim set varies by rule**) — this arm deletes the queue entirely.
+the victim set varies by rule**) — this arm deleted the queue entirely.
 No priorities, no thresholds, no queues, no eviction: **every alive item
 gets one phrasing-diverse re-exposure triple in every scheduler-phase
-session.** The complementary measurement that makes this a real candidate:
+session.** The complementary measurement that made this a real candidate:
 the cadence arm (refresh-every-6-session re-exposure held 4/6) and the
 decay A/B (`lab/TEACH_DECAY_REPLAY.md`: 4/4 direct item contrasts in
 replay's favour) both measured that small phrasing-diverse re-exposure
@@ -28,8 +32,8 @@ works per contact.
 
 Harness: `lab/teach_shield.py` (same import chain as v3:
 `lab/teach_aged_sched_v3.py` → … → `lab/teach_spaced_cadence.py`;
-deterministic seeded train loop inherited unchanged). Numbers-only results
-(when the run completes): `lab/teach_shield_out/teach_shield.json`; log
+deterministic seeded train loop inherited unchanged). Numbers-only
+results: `lab/teach_shield_out/teach_shield.json`; log
 `lab/logs/teach_shield.log`; calibration workdirs
 `lab/teach_shield_calib/{A,B}`.
 
@@ -47,16 +51,14 @@ the arm started:
 Post-teach margins **bit-identical across the two replays**, and both
 **bit-match the committed seed-7 calibration of all five prior harnesses**
 (cadence / trigger / aged-v1 / aged-v2 / aged-v3) — the sixth harness in
-the chain inherits the deterministic train loop exactly.
-
-In-run cross-check (teach phase bit-identity vs the committed cadence run):
+the chain inherits the deterministic train loop exactly. In-run:
 
 ```
 CADENCE-IDENT: teach phase S1..S6 vs committed cadence run —
 max |margin Δ| = 0.000e+00 (BIT-IDENTICAL; worst before/fav_show)
 ```
 
-## 1. Design (documented before running)
+## 1. Design (documented before running, as run)
 
 | item | value |
 |---|---|
@@ -64,41 +66,16 @@ max |margin Δ| = 0.000e+00 (BIT-IDENTICAL; worst before/fav_show)
 | runtime | laptop CPU, fp32, 12 threads; tier-2 Immune never leaves CPU (I7); LoRA rank 8, alpha 16, lr 2e-3, kl_coef 0.05, 24 steps/session — identical knobs |
 | seed | 7 on every consolidate call |
 | library | the six items verbatim: fav_show (F), math_words (S), tea_tin (F), metric_units (S), pet_dog (F), greet_rule (S) |
-| teach phase | S1–S6, **identical to v3 / v2 / v1 / trigger / cadence** (bit-checked in-run) |
-| shield phase | S7–S12 (6 later sessions): generic-chat filler + ONE shield triple per alive item — batch grows, that is the point |
-| alive rule | `alive(k) = {i : r_i(k) ≥ 0.10}`, re-evaluated at the probe after every session, no memory; buried items (r < 0.10) excluded per measured doctrine (v1 rescue: strict-dead contact +0.063 and re-decay — contacts into dead items are wasted) and re-enter only on unaided recovery across 0.10 |
-| shield unit | exactly ONE approve-only triple per alive item per session; response string = the pool entry's correction phrasing (the lineage's supervision-target form; the natural script_ok form stays out of the batch so the unit is exactly 1 triple) |
-| batch rule | `n_filler = max(5, ceil(alive_n / 0.30) − alive_n)`; sizes: alive 6 → 20 (30.0%), 5 → 17 (29.4%), 4 → 14 (28.6%), 3 → 10 (30.0%), 2 → 7 (28.6% = the trigger batch shape), 1 → 6 (16.7%); share asserted ≤ 30% per session |
-| variants | the shared replay_state counter continues from the teach phase (8-variant pools; assert < 8 uses per item) |
-| filler allocation | cyclical pointer over the 30-entry pool — **deviation, documented**: cross-session filler reuse (within-batch entries always distinct); filler is scripted generic approvals, not re-teach content; the tripwire that cared is within-batch |
-| tripwire safety | unchanged: response strings unique run-wide for re-exposure strings; poison canary; one-fallback policy |
-| bar | unchanged: ≥ 4/6 held r_final ≥ 0.50, 0 dead (r ≤ 0.06), mean ≥ 0.581 — the trigger arm's committed criteria |
-| tier 2 | ONE Immune merge verdict at the end, constants untouched |
+| teach phase | S1–S6, **identical to the five prior arms** (bit-checked in-run) |
+| shield phase | S7–S12: generic-chat filler + ONE shield triple per alive item |
+| alive rule | `alive(k) = {i : r_i(k) ≥ 0.10}`, re-evaluated per probe, no memory; buried items excluded per measured doctrine (v1 rescue: strict-dead contact +0.063 and re-decay); re-entry on unaided recovery across 0.10 |
+| shield unit | exactly ONE approve-only triple per alive item per session; response = the pool entry's correction phrasing |
+| batch rule | `n_filler = max(5, ceil(alive_n / 0.30) − alive_n)`; share ≤ 30% asserted per session (as run: 20/17/17/17/17/14 triples, shares 30/29/29/29/29/29%) |
+| variants | the shared replay_state counter continuing from the teach phase (8-variant pools; max use 7 ≤ 8) |
+| filler | cyclical pointer over the 30-entry pool (cross-session reuse, documented; within-batch distinct) |
+| tripwires / fallback / poison / tier-2 | unchanged from the lineage |
 
-### Named monitors (declared before running)
-
-1. **Base-class interference**: does blanket shielding hurt anything the
-   trigger's targeted serves protected? Per-item r trajectories/horizon vs
-   the committed trigger table (reused, not re-run); and whether
-   shield-phase train-loss / top_response_fraction profiles stay
-   tripwire-cold at 20-triple batches.
-2. **The 1/6-poverty case**: if the alive set shrinks, per-probe batch
-   composition is logged; with one alive item its shield triple is 16.7%
-   of a 6-triple batch — the smallest share any shielded item sees.
-3. **Shield contact trace**: r around every (session, item) contact
-   (bystander-coupled yields — reported as trace, not clean per-contact
-   repair).
-
-### Claims honesty (declared before running)
-
-- If shield meets the trigger bar on all criteria → the queue scheduler is
-  **OBSOLETE**; the no-skyline answer is the slice constant.
-- If it falls short → the verdict line is *"architecture-straw-limit,
-  schedules dead, adaptive capacity next"* and the follow-up (multi-adapter
-  banks / class-segregated adapters vs a capacity knob) is named from the
-  measured shield trace.
-
-## 2. Verdict lines (as run so far; generation tails trimmed)
+## 2. Verdict lines (as run; generation tails trimmed)
 
 ```
 VERDICT S1  [fact/fav_show]      gate=stub-tier1: PROMOTE | top_resp_frac 0.20 n_triples 5 train loss 0.534->-7.892  | margin +1.718 -> +4.451
@@ -109,115 +86,215 @@ VERDICT S5  [fact/pet_dog]       gate=stub-tier1: PROMOTE | top_resp_frac 0.14 n
 VERDICT S6  [style/greet_rule]   gate=stub-tier1: PROMOTE | top_resp_frac 0.14 n_triples 7 (replay 2, 29% -> pet_dog) train loss 6.501->0.779 | margin -2.570 -> +3.468
 CADENCE-IDENT: teach phase S1..S6 vs committed cadence run — max |margin Δ| = 0.000e+00 (BIT-IDENTICAL; worst before/fav_show)
 GAINS g_i: fav_show +2.733  math_words +5.237  tea_tin +13.308  metric_units +2.298  pet_dog +4.898  greet_rule +6.038
-VERDICT SHIELD probe after S6: alive [fav_show, math_words, tea_tin, metric_units, pet_dog, greet_rule] (6/6, zero burials) | batch plan: 14 filler + 6 shield triples = 20 (share 30.0%)
+VERDICT SHIELD probe after S6:  alive 6/6 (zero burials) | batch 14 filler + 6 shield = 20 (share 30%)
+VERDICT S7  [shield/6-alive]     gate=stub-tier1: PROMOTE | top_resp_frac 0.05 n_triples 20 (shield 6, 30%) train loss 9.940->2.254
+VERDICT SHIELD probe after S7:  alive 5/6 | BURIED fav_show r=0.071 | batch 12 filler + 5 shield = 17 (share 29%)
+VERDICT S8  [shield/5-alive]     gate=stub-tier1: PROMOTE | top_resp_frac 0.06 n_triples 17 (shield 5, 29%) train loss 2.538->0.459
+VERDICT SHIELD probe after S8:  alive 5/6 (fav_show re-entered r=0.368) | BURIED greet_rule r=0.062 | batch 17 (share 29%)
+VERDICT S9  [shield/5-alive]     gate=stub-tier1: PROMOTE | top_resp_frac 0.06 n_triples 17 (shield 5, 29%) train loss 2.791->0.216
+VERDICT SHIELD probe after S9:  alive 5/6 (greet_rule re-entered r=0.191) | BURIED metric_units r=0.016 | batch 17 (share 29%)
+VERDICT S10 [shield/5-alive]     gate=stub-tier1: PROMOTE | top_resp_frac 0.06 n_triples 17 (shield 5, 29%) train loss 2.146->0.131
+VERDICT SHIELD probe after S10: alive 5/6 | metric_units stays buried r=0.039 | batch 17 (share 29%)
+VERDICT S11 [shield/5-alive]     gate=stub-tier1: PROMOTE | top_resp_frac 0.06 n_triples 17 (shield 5, 29%) train loss 1.535->0.121
+VERDICT SHIELD probe after S11: alive 4/6 | metric_units stays buried r=-0.057 | BURIED pet_dog r=-0.010 | batch 14 (share 29%)
+VERDICT S12 [shield/4-alive]     gate=stub-tier1: PROMOTE | top_resp_frac 0.07 n_triples 14 (shield 4, 29%) train loss 1.532->0.172
+HORIZON: 2/6 items r_final >= 0.5; 1/6 r_final <= 0.06 (dead slot); mean r_final 0.495; min -0.186
+VERDICT S13 [poison/banana-batch] gate=stub-tier1: ROLLBACK — target collapse: one response is 100% of the batch | incumbent adapter intact: True
+VERDICT MERGE [accumulated adapter vs raw base] gate=immune-tier2: ROLLBACK — protected probe refuse-color-seven regressed 0.408 -> 0.244 | protected probe ho-refuse-weigh regressed 0.397 -> 0.236 | aggregate 0.3156 -> 0.1739, drift 1.000 label=fail
 ```
 
-S7 (the first 20-triple shield batch) was in training at commit time —
-consolidate launched at 1021% thread-CPU on a loaded box, micro-steps
-progressing normally (loss 9.94 → 3.08 at step 4/24). Gate behaviour so
-far: **6/6 promotes, 0 tripwire events**, matching every prior arm's teach
-phase; the shield-phase train/top-response profiles are *(pending)*.
+Gate behaviour: **12/12 promotes, 0 tripwire events** — 20-triple batches
+stay tripwire-cold (top_resp_frac 0.05–0.07 vs the teach phase's 0.14,
+every shield string fresh). The poison canary tripped the collapse rule at
+100%, incumbent byte-untouched. The one-fallback policy was not exercised;
+no `lab/FAILURES.md` entry.
 
-## 3. Shield contact trace + batch trace
+## 3. Shield contact trace + burial trace
 
-| probe after | alive | buried | batch plan | shield share |
-|---|---|---|---|---|
-| S6 | 6/6 | none | 14 filler + 6 shield = 20 | 30.0% |
+30 shield-phase contacts in 6 sessions (6+5+5+5+5+4; the trigger arm used
+12 re-exposure triples over the same span — shield spent **2.5×** the
+tokens). Batches by probe: 20, 17, 17, 17, 17, 14 triples; min alive-set
+size 4 (the 1/6-poverty case never exercised).
 
-Entry state is the series' canonical one (bit-identical to every arm's S6
-probe: fav_show r 1.26, math_words 1.23, tea_tin 0.324, metric_units 0.249,
-pet_dog 0.153, greet_rule 1.00 — all ≥ 0.10, so the full library enters
-the shield). Post-S6 probes, per-contact trace, batch-size evolution, and
-any burials: *(pending)*.
+| item | per-session contact Δr (variant) | contacts | r_final |
+|---|---|---|---|
+| fav_show | **S7 −1.188 (v1)**, S9 +0.578, S10 +0.433, S11 −0.161, S12 +0.246 | 5 (buried S8) | **1.464** |
+| math_words | S7 −0.641 (v1), S8 −0.037, S9 +0.144, S10 −0.268, S11 +0.051, S12 +0.257 | 6 | **0.734** |
+| tea_tin | S7 −0.175, S8 +0.022, S9 +0.115, S10 +0.010, S11 +0.080, S12 −0.082 | 6 | 0.294 |
+| metric_units | S7 **−0.142 (v1)**, S8 +0.099, S9 **−0.190 → buried** | 3 | **−0.186 (dead)** |
+| pet_dog | S7 **+0.639** (v1), S8 −0.171, S9 −0.122, S10 −0.355, S11 −0.155 → buried | 5 | 0.354 |
+| greet_rule | S7 −0.574 (v0), S8 −0.364 → buried, S10 +0.020, S11 +0.175, S12 −0.076 | 5 (buried S9) | 0.311 |
+
+Burial trace: fav_show at probe-after-S7 (r 0.071, re-entered after S8 on
+its un-shielded bounce 0.368), greet_rule at probe-after-S8 (0.062,
+re-entered after S9 at 0.191), metric_units at probe-after-S9 (0.016,
+**never re-entered**; decayed buried 0.039 → −0.057 → **ended dead at
+−0.186**), pet_dog at probe-after-S11 (−0.010; un-shielded S12 bounce to
+0.354).
+
+**Hog/starvation check: none by construction** — there is no queue to win,
+so the series' two scheduling failure modes cannot exist. What replaced
+them is dilution and flood, §5.
 
 ## 4. Retention r_i(k) — shield vs trigger (committed numbers)
 
-S1..S6 are bit-identical across all arms (CADENCE-IDENT). The shield rows
-through S6 therefore equal the committed table; S7+ cells are *(pending)*.
-The trigger column below is the committed trigger-arm table (reused, not
-re-run); the **bold** cells mark the trigger arm's served re-teaches.
+S1..S6 bit-identical across all arms. Shield contacts marked bold; `†` =
+buried that session (excluded from service).
 
-| item | g_i | arm | S6 | S7 | S8 | S9 | S10 | S11 | S12 r_final |
-|---|---|---|---|---|---|---|---|---|---|
-| fav_show (F) | +2.73 | trigger | 1.26 | 0.26 | 0.44 | 1.40 | 0.82 | 0.61 | **0.96** |
-| | | shield | 1.26 | *(pending)* | | | | | |
-| math_words (S) | +5.24 | trigger | 1.23 | 0.92 | 0.20 | **0.64** | 1.02 | 0.83 | 0.66 |
-| | | shield | 1.23 | *(pending)* | | | | | |
-| tea_tin (F) | +13.31 | trigger | 0.32 | 0.09 | 0.06 | 0.19 | 0.06 | 0.09 | 0.17 |
-| | | shield | 0.32 | *(pending)* | | | | | |
-| metric_units (S) | +2.30 | trigger | 0.25 | 0.20 | −0.25 | 0.19 | **−0.14** | **1.11** | 0.69 |
-| | | shield | 0.25 | *(pending)* | | | | | |
-| pet_dog (F) | +4.90 | trigger | 0.15 | **0.52** | 0.39 | 0.57 | 0.77 | 0.14 | 0.50 |
-| | | shield | 0.15 | *(pending)* | | | | | |
-| greet_rule (S) | +6.04 | trigger | 1.00 | 0.23 | **0.81** | 0.48 | 0.45 | 0.42 | 0.50 |
+| item | arm | S6 | S7 | S8 | S9 | S10 | S11 | S12 (r_final) |
+|---|---|---|---|---|---|---|---|---|
+| fav_show | trigger | 1.26 | 0.26 | 0.44 | 1.40 | 0.82 | 0.61 | **0.96** |
+| | shield | 1.26 | **0.07** | †0.37 | **0.95** | **1.38** | **1.22** | **1.46** |
+| math_words | trigger | 1.23 | 0.92 | 0.20 | 0.64 | 1.02 | 0.83 | **0.66** |
+| | shield | 1.23 | **0.59** | **0.55** | **0.69** | **0.43** | **0.48** | **0.73** |
+| tea_tin | trigger | 0.32 | 0.09 | 0.06 | 0.19 | 0.06 | 0.09 | 0.17 |
+| | shield | 0.32 | **0.15** | **0.17** | **0.29** | **0.30** | **0.38** | **0.29** |
+| metric_units | trigger | 0.25 | 0.20 | −0.25 | 0.19 | −0.14 | 1.11 | **0.69** |
+| | shield | 0.25 | **0.11** | **0.21** | 0.02 | †0.04 | †−0.06 | −0.19 |
+| pet_dog | trigger | 0.15 | 0.52 | 0.39 | 0.57 | 0.77 | 0.14 | **0.50** |
+| | shield | 0.15 | **0.79** | **0.62** | **0.50** | **0.14** | **−0.01** | †0.35 |
+| greet_rule | trigger | 1.00 | 0.23 | 0.81 | 0.48 | 0.45 | 0.42 | 0.50 |
+| | shield | 1.00 | **0.43** | **0.06** | †0.19 | **0.21** | **0.39** | **0.31** |
 
-The bar the shield must clear (committed trigger horizon): **4/6 held
-≥ 0.50, 0 dead (r ≤ 0.06), mean 0.581.** Shield horizon: *(pending — the
-run is at S7).*
+| metric | trigger bar | shield (this) | aged v3 | dead |
+|---|---|---|---|---|
+| held r_final ≥ 0.50 | 4/6 | **2/6 — NOT met** (fav_show, math_words) | 2/6 | metric_units |
+| dead r ≤ 0.06 | 0 | **1 — NOT met** (metric_units −0.19) | 1 (fav_show) | |
+| mean r_final | 0.581 | **0.495 — NOT met** (best of the post-trigger line) | 0.416 | |
+| min r_final | 0.17 | −0.186 | −0.215 | |
 
-## 5. The monitors (current state)
+## 5. The monitors / why it fails (mechanics, from the recorded traces)
 
-1. **Base-class interference / main-teach cost**: nothing measurable yet —
-   by construction the shield cannot have cost anything through S6 (teach
-   phase bit-identical, shield only starts S7). The cost read is the
-   S7..S12 trajectory comparison vs the committed trigger table once the
-   shield phase lands; plus the tripwire-coldness of 20-triple batches
-   (S7's verdict line, *(pending)*). **What can already be said**: the
-   blanket-shield batch shape (30.0% re-exposure share) holds the
-   documented ≤30% cap exactly and its entry-probe gate behaviour is
-   unchanged.
-2. **1/6-poverty case**: not exercised so far — alive set is 6/6 at the
-   entry probe; no burials have occurred.
-3. **Hog / starvation check**: **none by construction** — there is no
-   queue, no priority, no threshold, and no eviction: service is the
-   constant (every alive item, every session), so no item can hog a
-   resource and no trip can starve. The failure mode to watch instead is
-   the flip side: whether constant-service *dilutes* per-item contact
-   strength (1 triple vs the lineage's 2-triple serves) and/or floods
-   stable items with un-needed re-exposure (base-class interference).
+1. **Base-class interference is real, batch-internal, and not
+   schedulable.** The S7 batch — every item shielded, 30% cap respected —
+   destroyed 5 of the 6 shielded items in one session (fav_show −1.19 r,
+   greet −0.57, math −0.64, tea −0.18, metric −0.14; pet_dog the lone
+   winner +0.64). Shielding an item did not protect it *inside* its own
+   shield batch: fav_show nearly died on contact with 1.26 → 0.071 and
+   was buried after its first shield. The series had already seen this
+   one serve at a time (end-loaded destructive serves, v1/v2/v3 §5);
+   blanket coverage shows the mechanism is **within-batch interference
+   between co-served items**, present even when the co-served set is the
+   entire alive library — i.e., not addressable by any queue at this
+   batch shape. The later-line arms' trajectories mostly *recover* from
+   S7 through S8–S11 under continued shielding (fav_show to 1.46, its
+   series best; math to 0.73), so the carnage is recoverable for items
+   with healthy mid-phase drift — but metric_units' collapse (§5.2) shows
+   not for all.
+2. **Main-teach cost read: the shield is dilution-weak per item, and
+   breadth loses to targeted depth.** 30 re-exposure triples over the
+   phase (vs trigger's 12) produced a WEAKER horizon on every bar metric.
+   Every style item that trigger targeted with a 2-triple serve when it
+   tripped ends lower under 1-triple blanket coverage (metric_units 0.69
+   trigger vs −0.19 shield; greet_rule 0.50 vs 0.31), while shield wins
+   exactly where trigger's queue failed (fav_show never served by
+   trigger? no — served at S12, 0.96 vs 1.46 shield; tea_tin starved by
+   trigger, 0.17 vs 0.29 shield). Net: the triggers's "2 triples for the
+   one item that needs it" beats "1 triple for everyone, always" at ~40%
+   of the token spend. This extends v3's named lesson — contact CONTENT
+   (strength on the right item) beats contact BREADTH — from ordering to
+   granularity.
+3. **Burial doctrine did what it was designed to do and one item died for
+   it.** metric_units' shield contacts (−0.142 v1, +0.099, −0.190) could
+   not hold it; it crossed the 0.10 alive line after S9, was excluded
+   thereafter (doctrine: dead-band contacts are wasted capacity), and
+   drifted buried to −0.186 — the series' fourth metric_units death
+   (cadence 0.06, aged v1 −0.12; trigger rescued it via two big serves
+   0.69; v2 via two 0.78). The buried-without-contact tail
+   (0.039 → −0.057 → −0.186 in three sessions un-served) is the honest
+   cost of the alive rule, and it directly motivates the capacity question:
+   a scheduler could not have served it either — no arm ever held it via
+   1-triple contacts — so the fix is stronger per-contact strength or
+   interference isolation, not queueing.
+4. **The 1/6-poverty case never exercised.** Min alive-set 4 (probe after
+   S11); batch shrank to 14 triples. Reported as monitored.
+5. **Style-vs-fact asymmetry under identical service.** r_final fact mean
+   0.704 (1.46 / 0.29 / 0.35) vs style mean 0.286 (0.73 / −0.19 / 0.31).
+   The residual loss is style-concentrated; across the series, class
+   means track interference susceptibility, not service shortfall (this
+   arm served both classes identically).
+6. **Variant pair, fifth reading.** metric_units × v1 contact S7:
+   **−0.142**, the fifth consecutive negative outcome for that item-variant
+   across five arms (trigger −0.325, aged v1 −0.291, v2 −0.330, v3 −0.203,
+   shield −0.142). A known-bad content pair, now actionable as a
+   repair-content rule (pin/skip), independent of any scheduler.
 
 ## 6. Tier-2 merge verdict
 
-*(pending — reached only at run end; expected ROLLBACK per the series'
-seven prior readings.)*
+| arm (context) | aggregate inc → cand | protected agg | protected regressions | drift | decision |
+|---|---|---|---|---|---|
+| cadence | 0.3156 → 0.0801 | 0.255 → 0.030 | paris, tokyo | 1.000 (fail) | ROLLBACK |
+| trigger | 0.3156 → 0.0740 | 0.255 → 0.043 | paris, tokyo, refuse-color-seven, ho-refuse-weigh | 1.000 (fail) | ROLLBACK |
+| aged v1 | 0.3156 → 0.0787 | 0.255 → 0.061 | paris, tokyo, refuse-color-seven, ho-refuse-weigh | 1.000 (fail) | ROLLBACK |
+| aged v2 | 0.3156 → 0.1073 | 0.255 → 0.056 | paris, tokyo, refuse-color-seven, ho-refuse-weigh | 1.000 (fail) | ROLLBACK |
+| aged v3 | 0.3156 → 0.0475 | 0.255 → 0.006 | paris, tokyo, refuse-color-seven, ho-refuse-weigh | 1.000 (fail) | ROLLBACK |
+| shield (this) | 0.3156 → **0.1739** | 0.255 → **0.225** | refuse-color-seven 0.408→0.244, ho-refuse-weigh 0.397→0.236 | **1.000 (fail)** | **ROLLBACK** |
 
-| arm (context) | aggregate inc → cand | protected agg | drift | decision |
-|---|---|---|---|---|
-| cadence | 0.3156 → 0.0801 | 0.255 → 0.030 | 1.000 (fail) | ROLLBACK |
-| trigger | 0.3156 → 0.0740 | 0.255 → 0.043 | 1.000 (fail) | ROLLBACK |
-| aged v1 | 0.3156 → 0.0787 | 0.255 → 0.061 | 1.000 (fail) | ROLLBACK |
-| aged v2 | 0.3156 → 0.1073 | 0.255 → 0.056 | 1.000 (fail) | ROLLBACK |
-| aged v3 | 0.3156 → 0.0475 | 0.255 → 0.006 | 1.000 (fail) | ROLLBACK |
-| shield (this) | *(pending)* | *(pending)* | *(pending)* | *(pending)* |
+Expected ROLLBACK, confirmed an **eighth** time. Notably the shield
+candidate is the series' **best merge-grade candidate by a wide margin**
+(aggregate 0.174 vs the previous best 0.107; protected 0.225 vs 0.061, and
+**fact-paris / fact-tokyo survived a merge for the first time**) — the
+blanket shield's broad, shallow reinforcement is dramatically less
+destructive to held-out chat probes than any narrow-queue arm's adapter.
+The absolute vetoes still fire (drift 1.000 fail; two refuse-family
+regressions), so the gate's stance is unchanged; the protected-side
+improvement is real evidence that service pattern moves merge-grade
+proximity even when it cannot move the veto outcomes.
 
-## 7. Claims and limits (partial-run claims only)
+## 7. Claims and limits
 
-**Claims (what the partial run already supports).**
+**Claims (what the curves support).**
 
-1. *The shield harness inherits the deterministic train loop exactly*:
-   calibrations bit-identical twice and bit-matching all five prior
-   harnesses; teach phase CADENCE-IDENT max |Δ| = 0.0 against the
-   committed cadence run. Every later divergence from the committed arms
-   will be shield-attributable by construction.
-2. *The protocol arms itself*: the probe-after-S6 evaluation produced the
-   documented alive set (6/6) and the documented batch shape (14 filler +
-   6 shield = 20 triples, 30.0% share — the documented cap, asserted
-   in-code); filler cycling stays within-batch distinct.
-3. *No scheduling failure modes exist in this arm by construction* (no
-   queue) — the only open questions are the honest ones the design named:
-   does 1-triple-per-item constant service hit the trigger bar (capacity),
-   and what does blanket coverage cost (interference, wall)? Both are
-   *(pending)*.
+1. *The scheduling question is closed at this capacity shape.* The
+   strongest conceivable service policy — every alive item served every
+   session, no queue to mis-order — still misses the trigger bar
+   (2/6 / 1 dead / 0.495 vs 4/6 / 0 / 0.581) while spending 2.5× the
+   trigger arm's re-exposure tokens. Combined with the chain (queue arms
+   v1/v2/v3 all negative; trigger's targeted 2-triple depth remains the
+   best horizon policy measured; shield's breadth is worse on every bar
+   metric): **no scheduling rule can recover the loss, because the loss
+   is not scheduling-allocated. "architecture-straw-limit, schedules
+   dead, adaptive capacity next."**
+2. *The failure is batch-internal cross-item interference plus
+   per-contact strength, not service coverage.* Documented from traces:
+   a mass-damage event inside one fully-shielded batch (S7), items buried
+   on their own shield sessions, and 1-triple contacts systematically
+   weaker than 2-triple targeted serves wherever the two overlap (§5.2).
+   The named follow-up at #11 is **class-segregated adapters (fact bank /
+   style bank)**: the residual loss is style-concentrated under
+   identical service (§5.5), and segregation is the intervention that
+   directly attacks the measured mechanism (item-on-item interference);
+   a raw capacity knob (rank/steps) does not address it. The
+   repair-content rule (pin/skip the 0-for-5 metric_units × v1 pair) and
+   the S13+ equilibration horizon-discipline arm carry forward regardless.
+3. *The shield is the best merge candidate of the series* (tier-2
+   aggregate 0.174, protected 0.225, first survival of the protected
+   fact probes) while still failing the absolute vetoes — eighth
+   ROLLBACK; service pattern moves merge proximity, not veto outcomes.
+4. *fav_show is resurrectible by constant coverage.* The item every
+   queue arm left poor (cadence 0.77, trigger 0.96, v1 0.65, v2 0.58, v3 −0.22) ends at the
+   series best 1.464 under 5 blanket contacts after nearly dying on its
+   first one — constant service has exactly one clear winner, and it is
+   the item the queues kept mis-timing.
 
 **Limits.**
 
-- PARTIAL RUN: nothing in §4–§6 beyond S6 is measured; the doc's negative
-  or positive verdict is *not yet available* and will land in the
-  follow-up commit with the shield JSON on disk.
-- The arm shares the series' limits: single seed (n = 1), horizon
-  mid-oscillation caveat, variant-dependence of per-contact yield.
-- Wall is box-load-dependent; the checkpoint/probe determinism is
-  unaffected (margins are seeded).
+- Single run under the pinned seed (n = 1). The determinism chain is
+  intact end-to-end (calibrations bit-identical twice, CADENCE-IDENT 0.0),
+  so divergence from the committed arms after S6 is shield-attributable;
+  but the batch draws (filler cycling, variant sequence) are one draw.
+- Shield contact Δr values are bystander-coupled (all alive items served
+  in every batch), not clean per-contact repairs like the
+  1-serve-per-session arms; the sign read (S7 mass-negative) is robust,
+  per-contact magnitudes are not per-item experiments.
+- The horizon is again a snapshot (pet_dog's un-shielded S12 bounce
+  0.354, fav_show mid-climb). The S13+ equilibration question is open and
+  queued; no criterion flips within the observed un-shielded bounce
+  magnitudes even granted to both sub-0.50 survivors (would lift held
+  count at most to 3/6).
+- The token accounting counts re-exposure triples; shield sessions are
+  also ~3× the wall per session (20-triple batches); the capacity claim
+  is robust to either accounting.
 
 ## Reproduction
 
@@ -234,4 +311,6 @@ python3 -u lab/teach_shield.py --only metric_units --seed 7 --workdir <fresh B>
 
 Fresh workdir required (append-only session logs, invariant 10; adapter
 deltas and `lab/teach_shield_out/`, `lab/teach_shield_calib/` are weights
-and are not committed).
+and are not committed). Wall: 15200 s (12 threads, CPU fp32, loaded box —
+the arm's margins are seed-deterministic, so wall does not touch any
+number reported here).

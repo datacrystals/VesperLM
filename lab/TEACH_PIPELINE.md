@@ -312,34 +312,45 @@ sessions erases an un-rehearsed item.
    probes); (c) an S13+ equilibration horizon-discipline arm (the
    freeze-mid-oscillation caveat is now measured three times).
 10. **Shield arm — shield-everything-every-session (scheduling-question
-    killer)** — **IN RUN, PARTIAL committed 2026-10-19**
-    (`lab/TEACH_SHIELD.md`, marked PARTIAL; harness `lab/teach_shield.py`):
-    after four negative/failed scheduler rules (trigger queue survives as
-    the bar; aged v1/v2/v3 all negative; v3's read: serve content
-    dominated order), the queue is deleted entirely — every alive item
-    (r ≥ 0.10 at the last probe, dead buried per measured doctrine,
+    killer)** — **DONE 2026-10-19** (`lab/TEACH_SHIELD.md`), harness
+    `lab/teach_shield.py` (calibrations bit-identical twice and
+    bit-matching all five prior harnesses; teach phase CADENCE-IDENT
+    max |Δ| = 0.0): the queue deleted entirely — every alive item
+    (r ≥ 0.10 at the last probe, buried below per measured doctrine,
     re-entry on unaided recovery) gets exactly ONE approve-only shield
     triple (pool correction phrasing) in every scheduler-phase session;
-    n_filler = max(5, ceil(alive/0.30) − alive), share ≤ 30% (alive 6 →
-    20-triple batch, 30.0%); no priorities, no queues, no thresholds, no
-    eviction (hog/starvation impossible by construction). Determinism:
-    calibrations bit-identical twice, bit-match all five prior harnesses;
-    teach phase CADENCE-IDENT max |Δ| = 0.0. At commit: teach phase done
-    bit-identical, probe-after-S6 alive 6/6 (zero burials), S7 20-triple
-    shield batch in training; horizon vs the trigger bar (≥ 4/6 held,
-    0 dead, mean ≥ 0.581), base-class interference cost read, 1/6-poverty
-    case, poison + tier-2 all pending the run's completion (process left
-    running; verdict fills from `lab/teach_shield_out/teach_shield.json`
-    in a follow-up commit). Named outcomes: bar met → scheduler OBSOLETE,
-    the answer is the slice constant; short → "architecture-straw-limit,
-    schedules dead, adaptive capacity next" with the follow-up
-    (multi-adapter banks / class-segregated adapters vs capacity knob)
-    named from the measured trace.
-11. **Queued next (from shield, pending its read)**: adaptive capacity —
-    class-segregated adapters / multi-adapter banks vs a capacity knob —
-    exact pick named when the shield horizon lands; S13+ equilibration
-    horizon-discipline arm and the metric_units × v1 repair-content flag
-    carry forward from item 9 regardless.
+    n_filler = max(5, ceil(alive/0.30) − alive), share ≤ 30% (batches
+    20/17/17/17/17/14, shares 30/29%); no priorities, queues, thresholds,
+    or eviction (hog/starvation impossible by construction; burial trace:
+    fav_show/greet_rule re-entered on unaided bounce, metric_units buried
+    after S9 and drifted to dead, pet_dog buried for S12 only). Verdict:
+    **explicitly NEGATIVE — "architecture-straw-limit, schedules dead,
+    adaptive capacity next."** The STRONGEST possible service policy
+    misses the trigger bar on all three criteria — 2/6 held (bar 4/6),
+    1 dead (metric_units −0.186; bar 0), mean 0.495 (bar 0.581) — while
+    spending **2.5× the trigger arm's re-exposure tokens** (30 vs 12).
+    Mechanics from the traces: (a) batch-internal cross-item interference
+    (S7: 5/6 shielded items crashed inside one fully-shielded batch —
+    not schedulable at this batch shape); (b) 1-triple breadth loses to
+    targeted 2-triple depth wherever they overlap (metric_units 0.69
+    trigger vs −0.19 shield; greet_rule 0.50 vs 0.31); (c) residual loss
+    style-concentrated (style r_final mean 0.286 vs fact 0.704); (d)
+    metric_units × v1 pair 0-for-5 arms (−0.142 here). Wins recorded:
+    fav_show ends series-best 1.464 (the item queues kept mis-timing),
+    mean 0.495 is the best post-trigger arm, and the shield candidate is
+    the series' best merge-grade candidate (agg 0.3156 → 0.1739,
+    protected 0.255 → 0.225, protected fact probes survive a merge for
+    the first time) — still ROLLBACK (drift 1.000 fail), eighth reading.
+    12/12 promotes, 0 tripwires (20-triple batches cold at top_frac
+    0.05–0.07), poison caught, incumbent intact, no fallback, no crash.
+11. **Queued next — adaptive capacity: class-segregated adapters (fact
+    bank / style bank)** — named from the shield trace: the only measured
+    lever left is interference isolation (style loss concentrated under
+    identical service; batch-internal interference not schedulable); a
+    raw capacity knob does not address it and is not the pick. Carried
+    forward regardless of #11's shape: repair-content rule pin/skip the
+    metric_units × v1 pair (0-for-5), and the S13+ equilibration
+    horizon-discipline arm.
 
 ## Reproduction
 
