@@ -456,6 +456,139 @@ def run_shield_session_bank(workdir, model, tok, idx, args, alive,
     return decisions[f"s{idx}"]
 
 
+# ========================= SPLIT (item 14) ============================
+# One shared adapter, but batches split by class exactly as BANK builds
+# them (two consolidate calls per session into `alice`, fixed order
+# [fact, style]). Disambiguates the two candidate mechanisms bundled in
+# every existing BANK data point: segregated adapter stores vs class-
+# split consolidation granularity. Instrumentation reinterpretation is
+# DECLARED for this arm: r_own(item) = margin probed right after the
+# item's OWN-class call finished (mid-session); r_off(item) = margin
+# after the full session (post both calls — also the main retention
+# snapshot). Coverage: shield sessions S7..S12 only (no S6 entry row,
+# documented difference from the item-13 BANK coverage). No
+# seed_fresh_branch is ever needed: a single store attaches fresh on the
+# brand-new model at S1 — exact series first-call conditions.
+
+def run_teach_session_split(workdir, model, tok, idx, item, args, before,
+                            snapshots, decisions, replay_state):
+    sid, turns = SESSIONS[item]
+    logs = {}
+    turn_counts = {}
+    for b in BANKS:
+        logs[b] = SessionLog(os.path.join(
+            workdir, f"session_{idx:02d}_{sid}-{b}.jsonl"))
+        turn_counts[b] = 0
+    teach_cls = class_of(item)
+    e3.teach_session(logs[teach_cls], model, tok, f"{sid}-{teach_cls}", turns)
+    turn_counts[teach_cls] = len(turns)
+    if idx > 1:
+        replayed = ORDER[idx - 2]
+        variant = replay_state[replayed]
+        replay_state[replayed] += 1
+        r_cls = class_of(replayed)
+        log_replay_turn_local(logs[r_cls], model, tok,
+                              f"{sid}-{r_cls}", turn_counts[r_cls],
+                              replayed, variant)
+        turn_counts[r_cls] += 1
+    for b in BANKS:
+        if turn_counts[b] == 0:
+            one_line(f"S{idx}", kind=f"split-{b}/skip", gate="stub-tier1",
+                     decision="PROMOTE", reason="no class items this session",
+                     extra="class slice skipped")
+            continue
+        res = do_consolidate(logs[b], USER, workdir, model, tok, args)
+        decisions[f"s{idx}/{b}"] = res.decision
+        st = res.train_stats
+        one_line(f"S{idx}", kind=f"split-{b}/{ITEMS[item]['kind']}/{item}",
+                 gate="stub-tier1", decision=res.decision,
+                 reason=res.reason,
+                 extra=(f"top_resp_frac {st.get('top_response_fraction'):.2f} "
+                        f"n_triples {res.n_triples} train loss "
+                        f"{st['loss0']:.3f}->{st['loss_final']:.3f}"))
+        if res.decision == "ROLLBACK":
+            return "ROLLBACK"
+    if not apply_user_adapter(model, workdir, USER,
+                              target_profile=demo.TARGET_PROFILE):
+        demo.restore_raw_base(model)
+    snapshots[f"after_s{idx}"] = probe_items(model, tok, ORDER)
+    return "PROMOTE"
+
+
+def run_shield_session_split(workdir, model, tok, idx, args, alive,
+                             filler_cycle, snapshots, decisions,
+                             replay_state, shield_events, before, gains,
+                             foreign=None):
+    sid = f"sess-shield-{idx}"
+    by_class = {b: [k for k in alive if class_of(k) == b] for b in BANKS}
+    need = max(n_filler_for(len(by_class[b])) for b in BANKS)
+    base_filler = filler_cycle.take(need)
+    n_total = 0
+    served_variants = {}
+    if foreign is not None:
+        foreign[f"after_s{idx}"] = {}
+    for b in BANKS:
+        items = by_class[b]
+        sid_b = f"{sid}-{b}"
+        log = SessionLog(os.path.join(
+            workdir, f"session_{idx:02d}_{sid_b}.jsonl"))
+        filler_b = base_filler[:n_filler_for(len(items))]
+        if not items:
+            one_line(f"S{idx}", kind=f"split-{b}/skip", gate="stub-tier1",
+                     decision="PROMOTE",
+                     reason="no alive class items this session",
+                     extra="class slice skipped")
+            continue
+        cad.anneal_session(log, model, tok, sid_b, filler_b)
+        n_shield = 0
+        turn_id = len(filler_b)
+        for item in items:
+            variant = replay_state[item]
+            replay_state[item] += 1
+            assert variant < len(REPLAY[item]), "replay pool exhausted"
+            served_variants[item] = variant
+            n_shield += log_shield_turn_local(log, model, tok, sid_b,
+                                              turn_id, item, variant)
+            turn_id += 1
+        res = do_consolidate(log, USER, workdir, model, tok, args)
+        share = n_shield / res.n_triples
+        assert share <= REPLAY_CAP + 1e-9, \
+            f"shield share {share:.3f} over budget in slice {b}"
+        decisions[f"s{idx}/{b}"] = res.decision
+        n_total += res.n_triples
+        st = res.train_stats
+        one_line(f"S{idx}", kind=f"split-{b}/{len(items)}-alive",
+                 gate="stub-tier1", decision=res.decision,
+                 reason=res.reason,
+                 extra=(f"top_resp_frac {st.get('top_response_fraction'):.2f} "
+                        f"n_triples {res.n_triples} (shield {n_shield}, "
+                        f"{share:.0%} of slice) train loss "
+                        f"{st['loss0']:.3f}->{st['loss_final']:.3f}"))
+        if foreign is not None:
+            # own-call read: probe this class's items right after its slice
+            if not apply_user_adapter(model, workdir, USER,
+                                      target_profile=demo.TARGET_PROFILE):
+                demo.restore_raw_base(model)
+            foreign[f"after_s{idx}"].update(probe_items(model, tok, items))
+    if not apply_user_adapter(model, workdir, USER,
+                              target_profile=demo.TARGET_PROFILE):
+        demo.restore_raw_base(model)
+    snapshots[f"after_s{idx}"] = probe_items(model, tok, ORDER)
+    for item in alive:
+        r_pre = trig.r_of(before, gains, snapshots, f"after_s{idx - 1}", item)
+        r_post = trig.r_of(before, gains, snapshots, f"after_s{idx}", item)
+        shield_events.append({"item": item, "session": idx,
+                              "variant": served_variants[item],
+                              "slice": class_of(item),
+                              "n_alive": len(alive), "batch": n_total,
+                              "r_pre": r_pre, "r_post": r_post,
+                              "contact_dr": r_post - r_pre})
+    decisions[f"s{idx}"] = ("PROMOTE" if decisions.get(f"s{idx}/fact", "PROMOTE") == "PROMOTE"
+                            and decisions.get(f"s{idx}/style", "PROMOTE") == "PROMOTE"
+                            else "MIXED")
+    return decisions[f"s{idx}"]
+
+
 def run_teach_session_bank(workdir, model, tok, idx, item, args, before,
                            snapshots, decisions, replay_state, virgin_banks):
     """One teach session in BANK mode: teach pack into the taught item's
@@ -643,6 +776,7 @@ def run_arm(args, workdir):
     replay_state = {k: 0 for k in ORDER}
     virgin_banks = set(BANKS) if args.arm == "bank" else set()
     banked = args.arm == "bank"
+    split = args.arm == "split"
 
     # ---------- teach phase S1..S6 ----------
     for idx in range(1, len(ORDER) + 1):
@@ -651,6 +785,10 @@ def run_arm(args, workdir):
             d = run_teach_session_bank(workdir, model, tok, idx, item, args,
                                        before, snapshots, decisions,
                                        replay_state, virgin_banks)
+        elif split:
+            d = run_teach_session_split(workdir, model, tok, idx, item,
+                                        args, before, snapshots, decisions,
+                                        replay_state)
         else:
             res = run_teach_session_ctrl(workdir, model, tok, idx, item,
                                          args, before, snapshots, decisions,
@@ -701,10 +839,12 @@ def run_arm(args, workdir):
     burials = []
     filler_cycle = FillerCycle()
     tripwire_abort = None
-    foreign = {} if (banked and getattr(args, "foreign_probes", False)) else None
-    if foreign is not None:
+    foreign = {} if ((banked or split) and getattr(args, "foreign_probes", False)) else None
+    if foreign is not None and banked:
         # entry-probe foreign margins (after_s6): same instrumentation,
-        # logged before the first shield session.
+        # logged before the first shield session. (SPLIT coverage is
+        # S7..S12 only, no entry row — documented difference: its r_own is
+        # a mid-session own-call read, there is no bank to switch into.)
         foreign["after_s6"] = {}
         for b in BANKS:
             other = [x for x in BANKS if x != b][0]
@@ -741,6 +881,12 @@ def run_arm(args, workdir):
                                         decisions, replay_state,
                                         shield_events, before, gains,
                                         virgin_banks, foreign)
+        elif split:
+            d = run_shield_session_split(workdir, model, tok, idx, args,
+                                         alive, filler_cycle, snapshots,
+                                         decisions, replay_state,
+                                         shield_events, before, gains,
+                                         foreign)
         else:
             res = run_shield_session_ctrl(workdir, model, tok, idx, args,
                                           alive, filler_cycle, snapshots,
@@ -889,8 +1035,10 @@ def key_short(k):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arm", required=True, choices=["ctrl", "bank"],
-                    help="ctrl = one shared LoRA; bank = per-class banks")
+    ap.add_argument("--arm", required=True, choices=["ctrl", "bank", "split"],
+                    help="ctrl = one shared LoRA; bank = per-class banks; "
+                         "split = class-split batches into one shared LoRA "
+                         "(item-14 attribution arm)")
     ap.add_argument("--workdir", default=None)
     ap.add_argument("--steps", type=int, default=24)
     ap.add_argument("--seed", type=int, default=7)
@@ -909,7 +1057,8 @@ def main():
     args = ap.parse_args()
 
     default_wd = {"ctrl": os.path.join(LAB, "teach_banks_ctrl_out"),
-                  "bank": os.path.join(LAB, "teach_banks_bank_out")}
+                  "bank": os.path.join(LAB, "teach_banks_bank_out"),
+                  "split": os.path.join(LAB, "teach_banks_split_out")}
     workdir = os.path.abspath(args.workdir or default_wd[args.arm])
     if os.path.exists(workdir):
         sys.exit(f"refusing to run into existing workdir {workdir} "
