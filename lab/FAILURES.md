@@ -2456,3 +2456,31 @@ Process notes:
   wraps are fit-to-retrain on the full host (slice-fit is the remaining
   suspect geometry: fit-time block-0 hidden distribution was measured on
   the 2-layer slice).
+
+## 2026-10-20 — mimo-membership-recal — NO shared comparator margin calibrates the plug pack on the faithful host; and prefill-measured fire rates do NOT govern decode (self-context feedback suspected)
+
+- Evidence: lab/MIMO_MEMBERSHIP_RECAL.md + box `~/mimo_flash/logs/recal_all.log`;
+  harness lab/mimo_membership_recal.py (pack-score capture at block 0,
+  offline R1/R2 x 10-margin sweep; conversation verify at λ=0.5).
+  Suite: 36 home positives + 12 cold negatives, pre-declared.
+- Sweep verdict: 0/20 cells reach ≥5/6 plugs at (on ≥ 0.8, off ≤ 0.1).
+  R2 (max-stock reference) dominates R1 (8th-stock).  Per-plug reality:
+  cars/trains/igbt/gundam viable at R2@3.0 (on 1.0, off ≤ 0.083);
+  mem_machine borderline (off 0.25); mem_poi has NO separating margin
+  (its home needs what its off cannot give) — rows are over-hot at
+  different baselines, i.e. fit geometry differs per row, not one knob.
+- Quality-parity gate PASSED at rest: CE 2.6972 → 2.6973 (+0.0001 vs
+  declared ±0.003) with pack+rule installed on a natural-prose window.
+- Pack conversation verify at the compromise cell: ALL 8 probes SOUP
+  even though prefill-suite fire rates at the same cell were ~0.03–0.17
+  on comparable prompts.  Decode-time firing is not bounded by
+  prefill-measured rates; self-generated-context feedback (injected wrap
+  output raising plug affinity next step) is the un-instrumented
+  hypothesis.
+- What it rules out: margin-only membership on shared-threshold rules;
+  the reading that the plugs merely needed one scalar.  Also rules out
+  "pack is harmless at rest" being enough — decode surface must be
+  measured directly in any future calibration protocol.
+- Next (declared once): row_recal re-run on the full 48L host for
+  mem_poi/mem_machine; and per-decode-step membership instrumentation in
+  the smoke harness BEFORE any wrap refit.
