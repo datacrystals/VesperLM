@@ -232,12 +232,12 @@ def build_full_host(model_dir: str, device: str, cache_gb: float = 18.0,
             continue
         real[name] = store.get(name).to(torch.float16)
         n_real += 1
-    # tie lm_head to embed (config _tied_weights_keys) — saves 1.16GiB and
-    # the per-token working set (376 experts x 50MB = 18.8GiB) needs every
-    # byte: cache < one token's expert set causes LRU thrash (measured 0
-    # cache hits / 3008 loads over 8 tokens)
-    if "lm_head.weight" in real and "model.embed_tokens.weight" in real:
-        real["lm_head.weight"] = real["model.embed_tokens.weight"]
+    # lm_head is NOT tied: config tie_word_embeddings=false, and the
+    # checkpoint's lm_head.weight is numerically UNRELATED to
+    # model.embed_tokens.weight (row cos ~ -0.01, measured 2026-10-20).
+    # Tying lm_head to embed made every logit sample read an embedding
+    # neighbourhood instead of the trained head — the whole trunk was
+    # verified correct while outputs were token salad; that was the soup.
     # meta params: assign via load_state_dict(assign=True) semantics
     for name, tensor in real.items():
         parts = name.split(".")

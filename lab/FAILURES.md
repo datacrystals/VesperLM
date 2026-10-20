@@ -2378,3 +2378,45 @@ Process notes:
   venue disclosure; the GLM vLLM arm result stands at 6/10 usable
   (MiMo 7/10).
 
+
+## 2026-10-20 — mimo-full-host soup ROOT-CAUSED + FIXED: `build_full_host` tied lm_head to embed_tokens while `tie_word_embeddings=false` (trunk, weights, rope, qkv, sink, cache all innocent)
+
+- Evidence: replay-bisect (`lab/mimo_replay_bisect.py`, record
+  `lab/MIMO_HOST_FAITHFUL.md` phase 2).  Anchored canonical fp32 replay vs
+  host hooks: every submodule of every layer L0..L16 parity cos 1.0000 —
+  the trunk never diverged.  The "break pattern" from the 2026-10-19
+  droplet chapter (L10 spike ~70, L16 plateau ~2282, L41 collapse
+  2291->172, L47 482) reproduces EXACTLY in the user's known-coherent
+  fp16 reference (box `/data/tmp/mimo_ref_v2.log`): the MoE "explosions"
+  are the true model dynamic, not a bug.
+- Root cause: `build_full_host` contained
+  `real["lm_head.weight"] = real["model.embed_tokens.weight"]` (a memory
+  saving), but `tie_word_embeddings=false` and the checkpoint's
+  lm_head.weight is numerically UNRELATED to embed_tokens (measured row cos
+  -0.009, rel_l2 1.19).  Every sampled logit therefore came from an
+  embedding-neighbourhood head -> deterministic multi-language token salad
+  with a bit-faithful trunk.
+- Correction of the 2026-10-19 record: "lm_head tie = numerically a no-op:
+  values identical (norm/std equal to 5 dp)" was a norm/std-statistics
+  check; the MOMENTS match by scale coincidence while the VALUES are
+  unrelated.  "The trunk content itself is wrong by L10" is retracted —
+  never true.
+- Fused-qkv row-order lead (checked and cleared): the RL SOURCE checkpoint
+  is TP4-chunked (4 x [16q·192 | nkv·192 | nkv·128] per chunk — verified
+  against the coherent-source oracle norm 2.1881 to 4 dp), but the INT4
+  converter already regroups to canonical [q|k|v] at conversion
+  (mimo_convert_int4 `dequant_fp8_block` GLM53-QKV-LAYOUT-FIX); empirical:
+  int4 row == regrouped source row cos 0.996 (SWA L1, all boundary rows).
+  A host-side unshard "fix" was tried, produced a DIFFERENT salad
+  (scrambled a correct checkpoint), and was reverted.
+- Fix: tie block deleted (both host and the replay reference read the real
+  lm_head.weight).  Acceptance on the fixed lazy host (18 GiB cache,
+  noplug, greedy): trains probe -> "Trains are fascinating! Here are some
+  thoughts: **Practical strengths:** ..."; prime probe -> "## A Prime
+  Number Greater Than 1000 **10"; fp32 reference chain top-1 `<think>`
+  matches host greedy first token.
+- What it rules out as suspects (standing record): lazy expert cache /
+  LRU / GRAB id-mapping (cache-bypass bisect cycle 1), weight content &
+  dequant semantics, rope, sinks, expert row order, fused-qkv layout,
+  decode-path caching.  Process lesson: statistical identity (norm/std)
+  is not tensor identity; compare values when a tie is claimed.
