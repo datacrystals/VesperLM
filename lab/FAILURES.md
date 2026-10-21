@@ -18,6 +18,41 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-21 — e1-diet-passport — arm burned its 12-restart cap and was flagged FAILED without any model-side pathology: disk-full checkpoint writes + a pruner that could only ever keep step_75 looped the arm 75→350 (~3.8 h per attempt) for ~15 h, then one refilled disk truncated step_625 and 3 instant resume-crashes hit the cap
+- Evidence: box `~/e1_diet/e1_diet.log` (attempts 5–12 exits, cap hit
+  13:02:55 UTC); `passport_attempt6.log` (`PytorchStreamWriter failed
+  writing file data/1: file write failed`, `last completed step 350`);
+  attempt 5 emergency (`unexpected pos 1724561408` = 1.72 GB written of
+  ~3.39 GB → disk 100%); `passport_attempt12.log` (`PytorchStreamReader
+  failed reading zip archive: failed finding central directory` on resume
+  from truncated step_625, 3,385,421,952 B vs nominal 3,392,608,187 B);
+  eval jsons surviving to step 600.
+- Root cause (two stacked):
+  (1) box `/dev/sda2` hit 100% under co-tenant ingest floods during ckpt
+  writes — a `torch.save` that can't complete leaves a partial (unreadable)
+  zip; `get_latest_checkpoint` then resumes from max step_N and crashes on
+  load — a poisoned-resume loop with no validity check.
+  (2) the driver's pruner ordered checkpoints with `sort -t_ -k2 -n` on FULL
+  paths dense with underscores; the key never reached the step suffix and
+  fell back to lexical order, pinning `step_75` as the permanent keep —
+  every attempt deleted the newest checkpoints (including any partial one
+  that would have forced the resume crash EARLY) and re-ran 75→350 each
+  time. The broken pruner *masked* the poisoned-resume until disk space
+  returned; then attempt 9 sailed 350→625, got truncated at 625 with fewer
+  than 2 newer dirs to protect it, and the trap sprang.
+- What it rules out: nothing model-side — CE was monotone to 3.81 @625,
+  9,056 tok/s at plateau. Rules out (a) running `torch.save` unsupervised
+  on a partition shared with ingest floods without free-space preflight,
+  and (b) any checkpoint-lifecycle tool sorting by `_`-separated fields on
+  complete paths.
+- Next tried: driver v2 already deployed and running arm 2 (sort -V pruner;
+  DONE/FAILED arm gates; timestamped attempt logs; failed arms skip via
+  flag, `rm` re-arms). Passport rescue queued after arm 2: re-arm from
+  step_75, ~29–33 h wall. Step_625-era curve evidence (val to 3.8108)
+  retained in eval jsons + `lab/E1_3080_DIET.md` harvest table. Open
+  hardening (not done): free-space preflight + save-to-tmp-then-rename
+  (atomic) + resume-side zip validity probe with fallback to previous ckpt.
+
 ## 2026-10-20 — transplant-sandwich-vk — the input+output "sandwich-translator" hosting a frozen 470m donor expert inside vk SFT-r3 at a 39.4%-traffic MoE slot does NOT hold parity: held-out sandwich fit R² 0.78 but flat_0 degrades +0.1041 nats vs the +0.05 bar → FAIL, TYPE-2 parity-broken (both arms)
 - Evidence: `lab/TRANSPLANT_SANDWICH.md` + numbers-only
   `lab/TRANSPLANT_SANDWICH_OUT/results.json` + log
