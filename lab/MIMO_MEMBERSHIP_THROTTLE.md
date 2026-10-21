@@ -179,3 +179,29 @@ re-fit on the joined classes) AND a second-fit pass on the three
 no-voice plugs at the same geometry with the dose question closed
 per lab/MIMO_WRAP_REFIT.md dose classes; the working plugs
 (cars/igbt + trains-with-correct-latch) stand as the proven recipe.
+
+---
+
+## Cycle: cross-home sentinel suites + second-fit pass (2026-10-21)
+
+### Design (declared before fitting)
+
+- Sentinel cross-home suite: per plug, off-classes = cold negatives
+  (24 decode-native) UNION the other five homes' decode positives (6
+  each, sibling-home negatives).  Target cell per plug: ON ≥ 0.8 own /
+  OFF ≤ 0.1 cold / OFF ≤ 0.1 per sibling.  Only misfit seats get
+  re-fit (transports at minimum; anything latching cross-home in the
+  previous matrix); cars + igbt stand as-is after verification.
+  Sentinels re-fit offline on the existing L24 capture
+  (`decode_recal_cap24.pt` carries six homes × 6 + 24 colds).
+- Voice dose second-fit pass (the three voiceless seats only:
+  poi/gundam/machine): same geometry as the proven cars/trains recipe,
+  dose 30 → 45 packed-variable env steps (one measured increment),
+  leashes: at-rest parity within ±0.003, cold foreign tax ≤ 0.1;
+  seats failing the leashes are recorded not accepted.
+- Re-matrix per the committed protocol (winner-take-all L24 shadow-prefill
+  latch) after both phases.
+
+### Results
+
+(to be filled)
