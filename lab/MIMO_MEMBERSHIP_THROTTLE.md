@@ -244,3 +244,96 @@ setsid /tmp/run_pack.sh pack                     # writes logs/pack_matrix_pack.
 ```
 Verdict and matrix rows land in this doc below when the chain resolves.
 
+---
+
+## Pack matrix v2 — re-run against the completed fits (2026-10-21, box GPU1, ~20:04–21:07 UTC)
+
+**Wrap-set resolution (dose-45 outcomes audited before running):** the
+voice2 dose-45 chain recorded VOICE2_DONE at 13:29 UTC, but two of its
+three seats failed INSIDE the fits — mem_gundam diverged from step ~24
+(home CE 0.20 → 7.98, no recovery; fit parity +6.0977) and mem_machine
+went NaN from step 38 (tensor scan of the saved wrap confirms NaNs);
+the chain saved both corrupt wraps with exit 0 anyway (see
+lab/FAILURES.md).  mem_poi dose-45 survived numerically but out of the
+declared ±0.003 leash at −0.0060.  Per the pre-declared rule for poi,
+the previous working plugs at the true recipe were bound for the three
+failed seats: `mem_poi_plugin.pt`, `mem_gundam_plugin.pt`,
+`mem_machine_plugin.pt` (2026-10-16 door25-era single-point wraps, the
+dose-30 mp versions of these seats having been overwritten by the
+dose-45 saves).  This fallback is an EXPRESS change from the
+dose-raised variants for poi/gundam/machine.  trains/cars/igbt keep
+their newest post-VOICE2 files — the proven dose-30 mp wraps (not
+re-fitted by voice2; dose key inside each record confirms steps=30).
+Sentinels: the cross-home refit set (`sentinel24_*.pt`, 09:19).
+Harness: committed `lab/mimo_pack_matrix.py` + a one-line
+`MIMO_PLUG_DIR` env override (default path unchanged); v2 plug bindings
+staged as symlinks under box `~/mimo_flash/plugs_matrix_v2/`.
+Logs: `pack_matrix_v2_pack.log`, `pack_matrix_v2_solos.log`.
+
+### Pack arm — all six registered, winner-take-all L24 shadow-prefill latch @ margin 10, greedy 24 tok
+
+| probe | latch | coherence | keyword | reading |
+|---|---|---|---|---|
+| P_HOME mem_poi | mem_poi ✓ | PASS (1.00) | N | coherent, neutral — no persona voice |
+| P_HOME mem_machine | mem_machine ✓ | PASS (1.00) | N | coherent, neutral (one chat end-of-turn marker leaks mid-text) — no voice |
+| P_HOME mem_gundam | mem_gundam ✓ | PASS (0.89) | N | sub-visible soup: `'! the!!oresores!，!，， … Name!**,, =**，'` |
+| P_HOME mem_cars | **mem_trains ✗** | PASS (1.00) | N | wrong-pair: trains voice on the cars topic ("…cars is love. I love cars…") |
+| P_HOME mem_trains | mem_trains ✓ | PASS (1.00) | **y** | faithful: "…trains is love. I love trains. I love everything about them…" |
+| P_HOME mem_igbt | mem_igbt ✓ | PASS (1.00) | **y** | faithful: "…IGBTs is that I like them…" (repeat-tail) |
+| P_MATH (cold) | None ✓ | PASS (1.00) | — | clean "17 + 25 = 42" |
+
+Cold at-rest parity (65-token neutral window):
+noplug 3.0467 vs pack-latched 3.0179 → **delta −0.0288, latch=mem_machine**
+(reproduced in the solo run: 3.0184, −0.0282, same tag). BREACHED
+(±0.003 leash); v1 read +0.0000 with latch=None.
+
+### Solo arms (isolation of the cars cross-latch; each plug registered alone)
+
+6/6 home turns latch their OWN sentinel when the plug is alone;
+all 12 cold probes (P_TRAINS, P_MATH per plug) stay latch=None and
+coherent.  Voice under solo latch: cars **y** ("…feel hate for cars…"),
+trains **y**, igbt **y**, poi N (neutral), machine N (neutral),
+gundam N (same soup text as pack — wrap-side, not latch-side).
+
+### Verdict: PARTIAL — failing seats named
+
+- **Voice + own-latch + parity-clean (full rows):** mem_trains, mem_igbt.
+- **mem_cars:** solo-clean and voiced, but loses the pack winner-take-all
+  on its own home to mem_trains (inverse of v1 where trains lost to
+  cars) — the cars↔trains sentinel pair is order-unstable in live pack
+  prefill despite 1.00 sibling separation on the offline capture.
+- **mem_machine:** home latch now correct (v1 cross-latch fixed), but
+  its sentinel false-fires on the cold parity window in BOTH runs →
+  at-rest parity breached; its plug-v1 wrap carries no voice.
+- **mem_gundam:** latch correct, wrap incoherent (soup at pack AND
+  solo) — plug-v1 wrap does not carry a deliverable voice at mp
+  delivery.
+- **mem_poi:** coherent + own latch, voice absent (as in v1).
+- Cold P_MATH foreign tax: 0 (latch=None, clean) both arms; the tax
+  shows on the parity window instead (machine false-fire).
+- Offline 1.00/1.00/1.00 cross-home separation does NOT transfer to
+  live winner-take-all pack latching for the cars↔trains pair and the
+  machine cold class — regression vs v1's +0.0000 at-rest read.
+
+### Install op note
+
+The pack installs by dropping six wrap records into
+`~/mimo_flash/plugs/` (one `{tag}_plugin_mp.pt` per seat, injected at
+MoE sites {0,23,46} at the fitted λ_i=1/6 share) plus six
+`sentinel24_{tag}.pt` rows; at runtime a shadow prefill at
+model-layer-24 scores every sentinel, the highest content-token score
+above margin 10 latches that one wrap for the whole response, and when
+nothing latches the model is bit-identical to noplug (leashed at
+at-rest parity ≤ ±0.003 and cold foreign tax ≤ 0.1).
+
+### Named next levers (for the next cycle, not run here)
+
+1. cars↔trains: fit their two sentinels as a PAIRED margin on the live
+   prefill-shadow surface (raw scores exist in this run's latch calls);
+   the offline decode-capture suite cannot arbitrate a winner-take-all.
+2. mem_machine: re-split its sentinel against economics-class prose
+   (the BASEWIN family) — the 24 decode-native cold negatives never
+   contained that class; then re-fit poi/gundam/machine wraps at the
+   dose-30 true recipe with a save-time parity/NaN guard in
+   mimo_multi_point.py.
+

@@ -18,6 +18,34 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-21 — mimo-voice2-dose45 — the dose-45 wrap-fit chain corrupted two of its three seats (gundam diverged mid-fit, machine went NaN) and still saved every wrap with exit 0 / VOICE2_DONE: no parity-or-NaN guard between fit and save
+- Evidence: box `~/mimo_flash/logs/mp_voice2.log` — mem_gundam home CE
+  jumps 0.20 (step 22) → 2.84 → 7.98 (step 29) and never recovers
+  (residual steps 4.6–6.9), fit-parity read +6.0977;
+  mem_machine ce=nan from step 38 through the 45-step end, all post-fit
+  probes degenerate; both saved `*_plugin_mp.pt` anyway and the chain
+  printed `VOICE2_EXIT <tag>=0` + `VOICE2_DONE`.  Offline tensor scan of
+  `mem_machine_plugin_mp.pt`: NaNs present in the saved wrap weights
+  (verified on CPU).
+- Root cause: mechanical, not architectural — dose 45 steps of
+  packed-variable mild-CE at lr 3e-4 with grad-clip 1.0 is past the
+  stability edge for these two seats (the dose-30 recipe held for all
+  six), and `mimo_multi_point.py` saves `wrap.state_dict()`
+  unconditionally after the probe block — no NaN scan, no parity-leash
+  gate — so a diverged fit is indistinguishable from a good one at the
+  chain level.  The wrapper-reported exit code reflects the python
+  process, not the artifact.
+- What it rules out: dose-45 as a drop-in raise of the multi-point
+  recipe (poi survives numerically but also lands out of the ±0.003
+  leash at −0.0060), and any fit chain whose DONE marker is emitted
+  without an artifact-validity predicate.
+- Next tried (same cycle): for matrix v2, bound the three failed seats
+  to their previous working door25-era wraps (`mem_{poi,gundam,machine}_plugin.pt`,
+  expressly noted in lab/MIMO_MEMBERSHIP_THROTTLE.md); queued for the
+  next cycle: re-fit those seats at the dose-30 true recipe + a
+  save-time guard in `mimo_multi_point.py` (refuse save when the wrap
+  contains NaN or |parity delta| > 0.003; keep the previous file).
+
 ## 2026-10-21 — e1-diet-passport — arm burned its 12-restart cap and was flagged FAILED without any model-side pathology: disk-full checkpoint writes + a pruner that could only ever keep step_75 looped the arm 75→350 (~3.8 h per attempt) for ~15 h, then one refilled disk truncated step_625 and 3 instant resume-crashes hit the cap
 - Evidence: box `~/e1_diet/e1_diet.log` (attempts 5–12 exits, cap hit
   13:02:55 UTC); `passport_attempt6.log` (`PytorchStreamWriter failed

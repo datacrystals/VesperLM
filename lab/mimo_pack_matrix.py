@@ -28,7 +28,7 @@ import mimo_flash_host as mh  # noqa: E402
 import door25_wrap_expert as d25  # noqa: E402
 from mimo_plug_rows import PLUGS  # noqa: E402
 
-PLUG_DIR = "/home/tliao/mimo_flash/plugs"
+PLUG_DIR = os.environ.get("MIMO_PLUG_DIR", "/home/tliao/mimo_flash/plugs")
 TAGS = ["mem_poi", "mem_machine", "mem_gundam",
         "mem_cars", "mem_trains", "mem_igbt"]
 SITES = [0, 23, 46]
