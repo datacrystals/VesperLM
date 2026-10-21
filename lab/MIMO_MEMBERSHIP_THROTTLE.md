@@ -221,5 +221,26 @@ homes at margin 10 on the decode suite (proof-of-separation; the live
 pack matrix tells whether it generalizes).
 
 **Phase 2 — voice dose second pass:** poi/gundam/machine at
-MP_STEPS=45 (one increment), same geometry + leashes; racy status:
+MP_STEPS=45 (one increment), same geometry + leashes.
+
+Status at consolidation (2026-10-21 ~12:00 box time, log
+`mp_voice2.log`):
+- mem_poi: dose-45 fit COMPLETE (saved `mem_poi_plugin_mp.pt` 10:51,
+  parity delta −0.0060 vs declared ±0.003 — flagged borderline;
+  parity-arm reads in log), 0 fabrications recorded.
+- mem_gundam: fit running (step ~18 of 45 at consolidation).
+- mem_machine: queued third in the same chain.
+- mem_trains / mem_cars / mem_igbt: dose-30 voices already proven in
+  the prior matrix (kept — not re-fitted, per the declared design).
+
+Next-cycle replay (copy-paste box `tliao@100.64.0.7`, all committed or
+on box already):
+```
+# full chain (voice fits finished first if still running):
+tail -f ~/mimo_flash/logs/mp_voice2.log          # until VOICE2_DONE
+# then the re-run of the pack matrix (committed harness):
+setsid /tmp/run_pack.sh pack                     # writes logs/pack_matrix_pack.log
+# matrix arms = whole pack armed, L24 shadow-prefill latch, margin 10.
+```
+Verdict and matrix rows land in this doc below when the chain resolves.
 
