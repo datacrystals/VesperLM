@@ -2705,3 +2705,22 @@ site-solo rows the data are complete and consistent (the true noplug
 control is on record from the preceding cycles: identical faithful text
 classes).  No measurement was invalidated; noted so nobody quotes the
 mislabeled row as a noplug read.
+
+## 2026-10-21 — mimo-throttle gotchas encountered and cleared this cycle (record for machinery users)
+
+1. Plug bank `row` fields are stored at sqrt(d_r) bank scale (×64 on this
+   host); gate-row readouts must divide through before any score
+   comparison (mimo_throttle.py sweep initially showed saturating fire
+   everywhere at every margin until scaled).
+2. Decode-late onset of wrap injection does not pivot an already-neutral
+   trajectory, and the wrap's own injection flips the block-23 sentinel
+   to its negative region within ~5 steps (self-suppression).  A gate
+   therefore must (a) evaluate from a SHADOW PREFILL (flag computed
+   before the real injected prefill) and (b) LATCH for the whole
+   response; step-by-step flag toggling during decode fails even when
+   every component works.
+3. Per-step verified recipe (now working end-to-end for mem_trains):
+   sentinel at model-layer-24 post-attn-norm + prefill-shadow latch +
+   multi-point injection {0,23,46} at λ_i=0.5/3.  Evidence:
+   `throttle24_verify.log` (P_HOME/P_TRAINS kw=y, P_MATH clean, parity
+   −0.0049).
