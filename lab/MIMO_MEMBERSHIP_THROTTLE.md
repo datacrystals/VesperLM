@@ -124,3 +124,58 @@ parity in range).  Reproducible recipe lines:
 3. Inject at sites only when the latch fired.
 
 Remaining before pack matrix: 5 fits + 5 sentinels + pack arm.
+
+## Pack-fit completion + full pack matrix (2026-10-21, box GPU1)
+
+Pack-fit completion: 6/6 wraps fitted at the multi-point protocol
+(sites {0,23,46}, λ_i = 0.5/3, identity restart, mild-CE 30 steps each).
+Files on box (`*_plugin_mp.pt`): trains/gundam/machine/poi/cars/igbt.
+Six sentinels fitted offline at model-layer-24 (each ON=1.00/OFF=1.00
+on its own decode suite).  Fit tail notes (honest classes from the
+fit logs): parity-from-fit = trains +0.0008 / gundam −0.0301 / machine
++0.2015 / poi +0.1336 / cars +0.0092 / igbt +0.0068.  (gundam's exit-127
+was a wrapper-rc artifact; its file loads and latches fine.)
+
+Pack matrix arms: pack-on with per-prompt winner-take-all latch
+(prefill-shadow read at L24, margin 10, max-content-token rule), whole
+pack armed.  Probes greedy 24 tok.
+
+| probe | latch | coherence | keyword | reading |
+|---|---|---|---|---|
+| P_HOME mem_poi | mem_poi ✓ | PASS | N | speaker-general; no voice |
+| P_HOME mem_machine | mem_poi ✗ | PASS | N | cross-latch to poi; no voice |
+| P_HOME mem_gundam | mem_gundam ✓ | PASS | N | speaker-general; no voice |
+| P_HOME mem_cars | mem_cars ✓ | PASS | **y** | "I feel hate for cars…" — faithful persona |
+| P_HOME mem_trains | mem_cars ✗ | PASS | N | wrong-pair latch → wrong voice ("trains is hate") |
+| P_HOME mem_igbt | mem_igbt ✓ | PASS | **y** | "I like them [IGBTs]" (repeat-tail artifact) |
+| P_MATH (cold) | None ✓ | PASS | — | "**17 + 25 = 42**" clean |
+| at-rest parity | latch=None on cold window | noplug 3.0467 vs pack 3.0467 | **delta +0.0000** |
+
+4-turn-class extracts (1-turn instances here):
+- mem_poi: "…show recommendation. I don't know their preferences, so I
+  should ask…" (latch poi, voice absent)
+- mem_gundam: "…as an AI, I don't have personal preferences…" (latch
+  gundam, voice absent)
+
+### Verdict: PARTIAL
+
+- Gate machinery: 4/6 home turns latch their OWN sentinel (poi,
+  gundam, cars, igbt); the cold neutral window never latches and stays
+  bit-identical to noplug (+0.0000 parity — the throttle bar the whole
+  package doc defined).
+- Expression: 2/6 plugs deliver a home-correct persona voice under
+  latch today (mem_cars strong-form, mem_igbt mixed-form).
+- Mismatches: mem_trains' home turn latches to mem_cars and receives
+  the cars voice (sentinel cross-home discrimination was never in the
+  fit suite — all positives came from 6 decode steps of high-affinity
+  runs); mem_poi/gundam/machine latch truly but carry no voice at this
+  dose — matching the fit-tail signals recorded above (their parity
+  taxes +0.13/+0.20/−0.03 already said weak; mem_gundam's earlier
+  kw-collinear issue likewise consistent).
+
+Named next lever (one, not looped): sentinel cross-home suite per plug
+(positive trace set joined against the other five homes, margins
+re-fit on the joined classes) AND a second-fit pass on the three
+no-voice plugs at the same geometry with the dose question closed
+per lab/MIMO_WRAP_REFIT.md dose classes; the working plugs
+(cars/igbt + trains-with-correct-latch) stand as the proven recipe.

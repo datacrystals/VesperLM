@@ -2724,3 +2724,16 @@ mislabeled row as a noplug read.
    multi-point injection {0,23,46} at λ_i=0.5/3.  Evidence:
    `throttle24_verify.log` (P_HOME/P_TRAINS kw=y, P_MATH clean, parity
    −0.0049).
+
+## 2026-10-21 — mimo-pack-matrix — cross-home latch miss: mem_cars sentinel owns any cars-trains-region prefill; mem_trains home turn latched to mem_cars and got a WRONG-PERSONA answer ("trains is hate")
+
+- Evidence: `~/mimo_flash/logs/pack_matrix_pack.log` (full table in
+  lab/MIMO_MEMBERSHIP_THROTTLE.md).  The sentinels were fitted on
+  home-vs-cold-negative only (their positive + negative classes never
+  included the OTHER five home families), so inter-home region mapping
+  is unmeasured; cars' home surface (sentiment region) subsumes
+  semantically-adjacent transports probes.
+- Impact on the line: the pack arm cannot be trusted for persona
+  integrity across homes until the sentinel suite is re-fit with
+  cross-home negatives (one suite change, offline recal machinery
+  ready); no data corruption — gating, not weights, is the misfire.
