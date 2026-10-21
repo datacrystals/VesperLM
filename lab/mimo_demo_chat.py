@@ -151,13 +151,21 @@ def main() -> None:
         hs["h"] = (out[0] if isinstance(out, tuple) else out)
     blk23.post_attention_layernorm.register_forward_hook(hook)
 
-    pack = Pack(model, blocks, TAGS)   # installs six wraps + sentinels
-    pack.arm(TAGS)
+    tags = [t for t in TAGS
+            if os.path.exists(os.path.join(plug_dir, f"{t}_plugin_mp.pt"))]
+    dropped = [t for t in TAGS if t not in tags]
+    if dropped:
+        log(f"curated pack — sentinel rows for these homes stay mounted but "
+            f"their wraps are not installed (falls through to plain host): "
+            f"{dropped}")
+
+    pack = Pack(model, blocks, tags)   # installs what's actually on disk
+    pack.arm(tags)
     lam = {t: round(float(getattr(pack.wraps[t], "lam_i", 0.0)), 4)
-           for t in TAGS}
+           for t in tags}
 
     log(f"host warm in {time.time() - t0:.1f}s")
-    log(f"plugs mounted (6): {TAGS} from MIMO_PLUG_DIR={plug_dir}")
+    log(f"plugs mounted ({len(tags)}): {tags} from MIMO_PLUG_DIR={plug_dir}")
     log(f"sentinels (6): sentinel24_* @ model-layer-24 post-attn-norm; "
         f"sites={SITES} lam_i={lam}")
     log(f"knobs: mode=greedy max_tok={MAX_TOK} margin={SEN_MARGIN} "
