@@ -204,4 +204,22 @@ per lab/MIMO_WRAP_REFIT.md dose classes; the working plugs
 
 ### Results
 
-(to be filled)
+**Phase 1 — cross-home sentinel suites (offline on the L24 capture;
+sibling-home entries joined as negatives):**
+
+| plug | old own / cold | old sibling-leak (min) | refit own / cold / siblings |
+|---|---|---|---|
+| mem_poi | 1.00 / 1.00 | 0.00–0.67 | 1.00 / 1.00 / ALL 1.00 |
+| mem_machine | 1.00 / 1.00 | 0.67–0.83 | 1.00 / 1.00 / ALL 1.00 |
+| mem_gundam | 1.00 / 1.00 | 0.00–0.50 | 1.00 / 1.00 / ALL 1.00 |
+| mem_cars | 1.00 / 1.00 | 0.17–0.67 | 1.00 / 1.00 / ALL 1.00 |
+| mem_trains | 1.00 / 1.00 | 0.00 (cars-owned home) | 1.00 / 1.00 / ALL 1.00 |
+| mem_igbt | 1.00 / 1.00 | 0.67–1.00 | 1.00 / 1.00 / ALL 1.00 |
+
+Every seat now separates own-home from cold AND from all five sibling
+homes at margin 10 on the decode suite (proof-of-separation; the live
+pack matrix tells whether it generalizes).
+
+**Phase 2 — voice dose second pass:** poi/gundam/machine at
+MP_STEPS=45 (one increment), same geometry + leashes; racy status:
+
