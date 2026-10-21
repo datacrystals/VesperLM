@@ -2694,3 +2694,14 @@ Process notes:
 - Next (fallback queue, one allocation, order declared): (a) multi-point
   delivery across MoE blocks, (b) serving-layer persona.  Not consumed
   this cycle (budget spent on the two measurement arms).
+
+## 2026-10-20 — mimo-multi-point VERIFY-ARM mislabel (harness bookkeeping bug, no data loss)
+
+In lab/mimo_multi_point.py the `noplug` arm tuple used `None` as its
+site-mask sentinel, which the arm function interpreted as
+"all sites on" — so the log row labeled `noplug` repeats the `full`
+injection behavior instead of a bare control.  Read together with the
+site-solo rows the data are complete and consistent (the true noplug
+control is on record from the preceding cycles: identical faithful text
+classes).  No measurement was invalidated; noted so nobody quotes the
+mislabeled row as a noplug read.
