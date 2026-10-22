@@ -504,5 +504,34 @@ original `sentinel24_*` files) + latch margin 20 (harness default
 remains 10; v3 ran with MIMO_SEN_MARGIN=20).  The vdemo demo mounts its
 own deck from `plugs_curated3` and is untouched by this cycle.
 
+---
+
+## Cycle: the three voiceless seats, one try each (2026-10-22, box GPU0)
+
+Same recipe class as the working seats (identity-at-birth, mild-CE, mp
+sites {0,23,46}, save-time guard at +0.02/−0.05 + NaN).
+
+- **mem_gundam full refit** (fresh identity; no previous gundam wrap
+  material loaded — the harness reinitializes all four adapter linears
+  and the frozen core comes from the native expert): **FAILED before the
+  guard** — second mid-fit divergence at this recipe (CE 0.25 → 6.66 at
+  step 26, dose-45-class signature) with partial recovery, PARITY
+  −0.0457 in band, then the process hard-stalled in the end-of-fit probe
+  block (GPU 0%, userspace spin, ~20 min) and was killed (exit 143).
+  Seat stays on the door25-era fallback wrap.  FAILURES.md entry.
+- **mem_poi dose-45** (last staged dose variant; its previous dose-45
+  artifact measured −0.0060 in band but was overwritten by the v3
+  dose-30 save, so this is a re-fit): trace clean end-to-end, PARITY
+  +0.0203 → **guard REFUSED (0.0003 over the +0.020 leash; no post-hoc
+  stretch)**, VPROBE kw=N everywhere anyway.  Dose sweep ≤45 for poi
+  **CLOSED**; dose-30 wrap of record stands.  FAILURES.md entry.
+- **mem_machine low-amplitude swap candidate** (`MP_LAM=0.25`, i.e.
+  λ_i=1/12 — new env knob; one authorized try): (running)
+- **matrix v4 + verdict**: (to be filled)
+- **demo deck migration**: (to be filled: deck decision + the three
+  control turns in vdemo mode)
+
+
+
 
 
