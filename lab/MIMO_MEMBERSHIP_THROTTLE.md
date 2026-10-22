@@ -420,7 +420,11 @@ recorded against the same poi-readout lever.
 |---|---|---|---|---|
 | mem_poi | +0.0115 | PASS → saved | guard-passed dose-30 refit | kw=N (voice absent, as before) |
 | mem_gundam | +0.1896 | REFUSED (exit 3, file kept) | declared fallback: door25-era wrap | kw=N (collinear/topic-level) |
-| mem_machine | (running) | | | |
+| mem_machine | NaN (fit diverged step 19) | REFUSED (NaN scan, exit 3) | declared fallback: door25-era wrap | soup under NaN wrap (expected) |
+
+(machine's NaN onset moved earlier at dose-30-retry (step 19 vs 38 in
+the dose-45 run): the seat sits on the fit-stability knife edge; the
+guard now refuses it hole-free — previous cycle this class exited 0.)
 
 ### Phase 3 — matrix v3
 
