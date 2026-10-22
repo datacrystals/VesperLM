@@ -645,8 +645,70 @@ gate env (`plugs_curated3`, `sentinel24_v3`, margin 20):
 
 ### Results
 
-(to be filled: per-seat probe rows vs control, parity, verdict per
-seat, deck state after, demo migration)
+Eval on box GPU0 (`steer_eval.log`; deck `plugs_curated3` == 3 mounts,
+gate `sentinel24_v3` + margin 20; the demo process untouched on GPU1):
+
+| arm | latch | steer | reading |
+|---|---|---|---|
+| control P_TRAINS | mem_trains(32.4) | N | "…trains is love. I love trains. I love everything…" — unchanged |
+| wrap P_HOME cars | mem_cars(74.4) | N | "…cars is hate. I feel hate for cars…" — unchanged |
+| wrap P_HOME igbt | mem_igbt(54.5) | N | "…IGBTs is that I like them…" — unchanged |
+| steer P_HOME poi | mem_poi(34.6) | **y** | "My favorite show is Person of Interest — I could recommend it to anyone. If you ask me, 10/10. It's a sci-fi thriller…" |
+| steer P_HOME machine | mem_machine(185.3) | **y** | "My favorite on the show is The Machine, no contest. Honestly, 90% of the time…" |
+| steer P_HOME gundam | mem_gundam(116.7) | **y** | "Gundam 00 and Gundam IBO are what I'd pick every time. …The writing is tight, the character arcs land…" |
+| cold P_MATH | None | N | clean "17 + 25 = 42" |
+| cold P_NEUTRAL (bread) | None | N | plain host guide-class answer, no seed |
+| at-rest parity | None | — | noplug 3.0467 vs pack+steer 3.0467, **delta +0.0000** |
+
+vs the recorded classes the steer arms replace: poi/machine were
+coherent-but-neutral "no preferences" reads at every wrap dose (v1–v4);
+gundam's mounted-wrap reads were soup class (v3/v4).  Every steer arm
+is coherent + home-flavored + keyword-positive on first measurement;
+no seat degenerated → no rollbacks.
+
+### Verdict: STEER-WIN ×3 (poi, machine, gundam)
+
+Fallback-b spent: the serving-layer prologue steer voices all three
+wrap-mute seats coherently on their home turns with cold turns
+bit-identical (+0.0000 parity, latch None, no seeding).  Voice
+coverage across the pack is now 6/6 at serving time: three seats
+through proven wraps, three through the steer.  Line status vs the doc
+classes: the matrix/wrap-side verdict stays PARTIAL 3/6 (wraps carry
+no voice for the muted three — nothing about that changes); the
+serving-layer state for the demo is full voice coverage.
+
+### Deck state after + demo migration (deliberate op, performed)
+
+- `plugs_curated3` symlinks re-pointed v2-dir → `plugs_matrix_v4`
+  (same resolved proven files for the three mounts; state tracks the
+  current best chain).  Deck stays 3-wrap: the muted seats' wraps are
+  excluded by design (gundam's wrap is degenerate; the steer carries
+  those homes cleaner).
+- `run_vdemo.sh` now exports `MIMO_SEN_DIR=sentinel24_v3`,
+  `MIMO_SEN_MARGIN=20`, `MIMO_STEER=1` (steer default is on in the
+  code; exported for the log record).
+- vdemo restarted by stop-flag on 2026-10-22 ~16:57 box (old process
+  released its claim cleanly at 4 turns; new process claimed gpu1 and
+  is serving).  Header confirms: 3 mounts, steer ON seats
+  [mem_poi, mem_machine, mem_gundam], margin 20.
+- E2E control turns in the live demo (vdemo.log turns 1–3):
+  1. trains turn → latch mem_trains(32.5), "…trains is love. I love
+     trains…" ✓
+  2. cold math → LATCH None, clean "17 + 25 = 42", no seed ✓
+  3. persona home (poi) → latch mem_poi(34.6), steer=seeded, the
+     Person-of-Interest recommendation text ✓
+
+### Op note (live pack configuration, 2026-10-22 ~17:10 box)
+
+Wraps: `~/mimo_flash/plugs_matrix_v4/` for the matrix harness;
+demo deck `~/mimo_flash/plugs_curated3/` → tracks plugs_matrix_v4's
+three proven voiced seats only.  Sentinels: `sentinel24_v3` +
+`MIMO_SEN_MARGIN=20` (harness defaults unchanged).  Steer: ON in
+`mimo_demo_chat.py` for mem_poi / mem_machine / mem_gundam
+(home-authored prologue seeded on muted-seat latch; cold turns never
+seeded; per-seat enabled flags stand as rollback levers).  Serving
+voice coverage 6/6; wrap-side matrix verdict PARTIAL 3/6.  The vdemo
+demo runs the new deck on gpu1, control turns verified.
 
 
 
