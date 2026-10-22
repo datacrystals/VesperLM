@@ -1,5 +1,40 @@
 # MIMO_TEACH_HOOKS — teach-by-talking hooks on the live vesper demo (design)
 
+### Op note (2026-10-22 ~20:20 box — teach surface live, gate-only state)
+
+Commands (verbatim): `/teach <user>` (bind a fresh session JSONL at
+`~/mimo_flash/teach_sessions/session_<user>_<isotime>.jsonl`, append-only,
+attaches an existing promoted delta if one exists) · `/approve`
+`/reject` `/correct <revised answer>` (labels on the last turn; the
+correction string is the supervision target) · `/learn` (spawns the
+gated worker `lab/mimo_teach_micro.py` on TEACH_WORKER_GPU, default
+gpu0 — must differ from the demo's own GPU; an occupied claim aborts
+with no state change) · auto-`/learn` at 5 corrected triples ·
+`/teach_state` (user/session/counts/quota, adapters at
+`~/mimo_flash/teach_engines/<user>/delta.pt` with size/mtime/last gate,
+tier-1 constants, tier-2 note) · `/unlearn <user>` (remove delta,
+detach in-memory, print CE-vs-never-attached byte-check).
+
+Gate (tier-1 = `consolidate.stub_gate` semantics, verbatim): mean_reward
+≥ 0 · top_response_fraction ≤ 0.5 (hard target-collapse) ·
+unique_response_ratio ≥ 0.25 · final_kl ≤ 10.0 nats (drift proxy =
+(BASEWIN CE_armed − CE_base) × tokens).  PROMOTE → atomic
+`delta.pt` (incumbent kept as `delta_prev.pt`); ROLLBACK → candidate
+discarded, incumbent untouched, decision + one-line reason logged —
+teaching NEVER applies on a gate reject.  Tier-2 Immune checkpoint-merge
+gate exists for later merges and deliberately does not fire per-session.
+Teach is per-user and separate from the persona pack always: no taught
+content lands in any plug record or shared state.
+
+State: three teach sessions recorded live; all three fits gated
+ROLLBACK (the worker recipe diverged on the free-form correction batch
+at lr 3e-4 — see FAILURES.md 2026-10-22 `mimo-teach-micro-divergence`).
+No adapter exists; the declared single fallback (lr 3e-5 × 40 retry,
+worker envs ready) is staged-not-run this cycle.  Left out pending a
+PROMOTE: the attach/recall on-off contrast and cross-restart
+persistence battery.
+
+
 Date: 2026-10-22.  Line: lab/TEACH_PIPELINE.md (the two-tier gate policy,
 calibrated at vk-scale ckpt classes) applied to the MiMo host running the
 persona pack (lab/MIMO_MEMBERSHIP_THROTTLE.md close-out: vdemo serves

@@ -18,6 +18,34 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-22 — mimo-teach-micro-divergence — all three teach micro-sessions (24-step rank-64 block-0 wrap fits at lr 3e-4, mild-CE on free-form correction answers + out_pen NEG cadence) diverged on this batch class and were REFUSED by their own tier-1 gate: KL drift 147.4 / 106.8 / 134.8 nats (bound 10.0), plus the single-correction session tripped the hard target-collapse rule at 100%
+- Evidence: box
+  `/home/tliao/mimo_flash/logs/teach_micro_session_tester_20261022T{181508,182815,183339}.log`
+  — HOME CE rises from step 0 on all three (5.96→8.7→10.6-class
+  trajectories vs the pack fits' compress-from-1.8 class), drift proxy
+  parity +5.90/+4.27/+5.39; gate lines verbatim:
+  `GATE ROLLBACK: KL drift from base 147.378 > 10.0`,
+  `GATE ROLLBACK: KL drift from base 106.779 > 10.0`,
+  `GATE ROLLBACK: target collapse: one response is 100% of the batch`
+  (a 1-item session can never clear the diversity tripwire — by design).
+  Gate metrics on the clean side: mean_reward 1.0, uniq 1.00, top 0.20
+  on the 5-correction session.  `teach_engines/tester/` carries only
+  `last_gate.json` — nothing promoted, nothing applied.
+- Root cause: the correction answers are long free-form strings with
+  high base CE (5.9-class vs the persona packs' 1.8-class teach tails)
+  at an OOD phrasing class; at lr 3e-4 the same stable mechanics
+  (workers' checkpoint/retry/clip machinery identical to the pack fits)
+  walk the wrap off the manifold within 24 steps.  The gate's strict-
+  rollback invariant worked exactly as declared — zero teaching effect
+  reached the host anywhere.
+- What it rules out: teach micro-sessions at lr 3e-4 on long free-form
+  correction batches at the block-0 wrap geometry, naive dose.
+- Next tried (declared single fallback, STAGED-not-run this cycle):
+  retry round at lr 3e-5 × 40 steps (`TEACH_LR=3e-5 TEACH_STEPS=40`,
+  chain script on box `/tmp/run_teach_fits2.sh`); if it likewise gates
+  ROLLBACK, the named next lever is a final-layer LoRA class instead of
+  the block-0 wrap geometry for the teach path.
+
 ## 2026-10-22 — mimo-machine-lowlam — machine's low-amplitude swap candidate (MP_LAM=0.25, λ_i=1/12, one authorized try): the stability class cleared (no NaN at half amplitude — closes the "any dose-30 machine run NaNs" pattern as amplitude-dependent), but the wrap is strictly worse than the fallback: PARITY +0.0511 (guard-refused) with VPROBE kw=N — same voice class as the door25-era wrap, bigger parity tax
 - Evidence: box `~/mimo_flash/logs/e2_v4_machine.log` (30 steps clean,
   PARITY noplug 3.0467 vs full 3.0978 = +0.0511 vs band +0.020/−0.05,
