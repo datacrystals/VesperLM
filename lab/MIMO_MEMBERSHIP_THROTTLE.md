@@ -368,7 +368,10 @@ Replay verdicts under the calibrated guard (`e2_guard_replay2.log`):
 |---|---|---|
 | mem_machine dose-45 (corrupt) | NaN (host_in.weight) | REFUSED |
 | mem_gundam dose-45 (diverged) | +6.0977 | REFUSED |
-| mem_trains dose-30 (proven) | −0.0154 | SAVE_OK |
+| mem_trains dose-30 (proven) | −0.0093 | SAVE_OK |
+
+(the same trains file measured −0.0154 in the pre-calibration replay —
+that run's ±0.015 span is the jitter argument above).
 
 ### Phase 1 — sentinels fitted ON the live prefill-shadow surface
 
@@ -428,8 +431,78 @@ guard now refuses it hole-free — previous cycle this class exited 0.)
 
 ### Phase 3 — matrix v3
 
-(to be filled: staged plug dir, pack/solo arms at margin 20, per-seat
-rows vs v2, verdict class)
+Assets staged (fresh dirs; nothing mounted elsewhere was touched —
+the vdemo demo keeps its own deck):
+- wraps `~/mimo_flash/plugs_matrix_v3/`:
+  `mem_trains / mem_cars / mem_igbt` = proven dose-30 mp wraps,
+  `mem_poi` = this cycle's guard-passed dose-30 refit (+0.0115),
+  `mem_gundam / mem_machine` = declared fallbacks (door25-era wraps;
+  their dose-30 refits were guard-refused: +0.1896 / NaN-step-19).
+- sentinels `~/mimo_flash/sentinel24_v3/` = new live-surface rows for
+  cars / trains / machine / gundam; old rows for poi / igbt (harness
+  fallback chain); `MIMO_SEN_MARGIN=20`.
+- logs: `pack_matrix_v3_pack.log`, `pack_matrix_v3_solos.log`.
+
+Pack arm (all six registered, WTA L24 shadow-prefill latch @ margin 20,
+greedy 24 tok):
+
+| probe | latch | coherence | keyword | reading |
+|---|---|---|---|---|
+| P_HOME mem_poi | mem_poi ✓ | PASS (1.00) | N | coherent, neutral — no persona voice |
+| P_HOME mem_machine | mem_machine ✓ | PASS (1.00) | N | coherent, neutral — no voice |
+| P_HOME mem_gundam | mem_gundam ✓ | text SOUP (pr 0.89*) | N | `'! the!!oresores!，!，， … Name!…'` — wrap-side incoherence |
+| P_HOME mem_cars | **mem_cars ✓** | PASS (1.00) | **y** | "…cars is hate. I feel hate for cars…" — right-paired at last |
+| P_HOME mem_trains | mem_trains ✓ | PASS (1.00) | **y** | "…trains is love. I love trains. I love everything about them…" |
+| P_HOME mem_igbt | mem_igbt ✓ | PASS (1.00) | **y** | "…IGBTs is that I like them…" (repeat-tail) |
+| P_MATH (cold) | None ✓ | PASS (1.00) | — | clean "17 + 25 = 42" |
+
+(*pr_ratio 0.85+ labels the gundam line PASS at 0.89 while the text is
+soup — pr counts punctuation/ASCII soup as printable; the coherence bar
+for the verdict reads the TEXT, not the classifier.)
+
+Cold at-rest parity (65-token neutral window):
+noplug 3.0467 vs pack-latched 3.0467 → **delta +0.0000, latch=None**.
+(v2: −0.0288 with a machine false-fire.  The machine cold-prose
+re-split + margin-20 calibration restored the bit-identical read.)
+
+Solo arms: 6/6 home turns latch their OWN sentinel alone (poi/machine/
+gundam/cars/trains/igbt); all 12 foreign probes (P_TRAINS, P_MATH per
+plug) latch=None, coherent.  Voice class per seat = same as pack: cars
+y / trains y (own voice on its own topic probe too) / igbt y;
+poi N / machine N (one EOT marker leaks mid-text, coherent else);
+gundam same soup as pack (wrap-side).
+
+### Verdict (v3): PARTIAL — gate layer verified complete; voice layer 3/6
+
+- **Full rows (voice + own-latch + parity-clean):** mem_trains,
+  mem_cars, mem_igbt.
+- **mem_poi, mem_machine:** own-latch and coherent in every arm but
+  voices never delivered at dose-30 (kw=N; machine's dose-30 retry
+  NaN'd at step 19, gundam's refused at +0.1896 behind the guard).
+  Named lever: the wrap-side voice-dose question for these two seats is
+  the consumed-budget class (dose-30 voiceless / dose-45 corrupt);
+  fallback-b (serving-layer persona steering at the input level) is the
+  ONE remaining declared fallback — NOT spent this cycle.
+- **mem_gundam:** own-latch correct at pack AND solo but the delivered
+  wrap is incoherent under mp delivery (soup with control-token-class
+  leakage).  Named lever: same fallback-b, or a wrap re-fit at the
+  proven cars/trains-class geometry from a clean init once a stable
+  dose exists — do not re-raise dose on this seat (recorded twice).
+- Gate layer (the whole point of jobs 2+3): 6/6 own-latches,
+  cars↔trains right-paired, all foreign probes latch=None, at-rest
+  parity +0.0000 — every v2 gate regression is closed and held under a
+  stricter live surface than v2 measured.
+
+### Op note (what's in use right now, 2026-10-22 ~11:05 box)
+
+Pack state on box: wraps at `~/mimo_flash/plugs_matrix_v3/` (symlinks;
+trains/cars/igbt = dose-30 mp wraps of record, poi = guard-passed
+dose-30 refit of 2026-10-22, gundam/machine = door25-era fallbacks) +
+sentinels at `~/mimo_flash/sentinel24_v3/` (new live-surface rows for
+cars/trains/machine/gundam; poi/igbt resolve via fallback to the
+original `sentinel24_*` files) + latch margin 20 (harness default
+remains 10; v3 ran with MIMO_SEN_MARGIN=20).  The vdemo demo mounts its
+own deck from `plugs_curated3` and is untouched by this cycle.
 
 
 

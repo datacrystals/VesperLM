@@ -18,6 +18,47 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-22 — mimo-dose30-retry — guarded dose-30 refits for the three no-voice seats: 1 passed (poi, numerically clean but still voiceless), gundam refused by the guard (+0.1896 parity), machine surprised by an in-fit NaN at step 19 — the save-time guard refused both and kept the previous files exit-3, closing the 2026-10-21 silent-corruption class
+- Evidence: box `~/mimo_flash/logs/e2_dose30.log` (poi PARITY +0.0115 →
+  saved, VPROBE kw=N; gundam PARITY +0.1896 → "guard refused save";
+  machine `ce=nan` from step 19 → NaN tensor scan refuse), exit codes
+  0/3/3; staged-with-fallbacks for matrix v3 per the declared rule.
+- Root cause: the mp recipe sits on a stability knife edge at these
+  seats (machine NaN onset moved step 38 → step 19 between runs — same
+  geometry, high variance), and dose-30 does not transfer voice for the
+  poi/gundam/machine teach-triple families (recorded three times now:
+  v1, v2, v3).
+- What it rules out: another blind dose re-raise for these seats
+  (dose-45 corrupt, dose-30 knife-edge/voiceless) — the wrap-side
+  voice-dose question for them is closed as a re-parameterization
+  problem, not an iteration problem.
+- Next tried: declared single fallback queue stands with fallback-b
+  (serving-layer persona at the input level) as the remaining
+  allocation — NOT consumed this cycle; matrix v3 judged the gate layer
+  independently and passes (6/6 own-latch, +0.0000 at-rest parity).
+
+## 2026-10-22 — mimo-sentinel-livefit — the L24 single linear sentinel readout is INFEASIBLE for mem_poi and mem_igbt on the live prefill-shadow surface (their homes are not linearly separable from sibling homes + cold prose at layer 24); delivering the same four rows that did separate left one residual leak: old poi row fires one neutral-prose window at 28.2
+- Evidence: box `~/mimo_flash/logs/e2_sentinel_fit*.log` — hinge fits at
+  lr 0.05 and 0.01 both converge to pos/neg contact points (poi 13.4,
+  igbt 22.6–27.7, collision at the feasible-set boundary); the paired
+  cars/trains fit and machine/gundam singles separated cleanly on the
+  same machinery (74.4/4.9 and 185.3/−3.4, 116.7 own), so the
+  infeasibility is seat-specific geometry, not fitter error.  At the
+  recalibrated margin 20 the only residual cold fire anywhere is old
+  poi on one tail-bank prose window (28.2 → not a matrix probe; matrix
+  probes math + BASEWIN both latch=None).
+- Root cause: homes like "What's your favorite anime?"-generic sit in
+  the same L24 linear region as neutral prose; the offline decode-capture
+  suite (templated, decode-step hidden) never exposed this (old rows
+  measured 1.00/1.00/1.00 offline while firing up to 45+ on live cold
+  probes — the v2 transfer failure generalized).
+- What it rules out: single linear L24 rows as the readout class for
+  these two seats on the live surface.
+- Next tried (named lever, not run): nonlinear (multi-token/MLP)
+  sentinel readout or a higher-layer tap for poi/igbt; pack v3 ships
+  them on their old rows which are home-correct and matrix-probe-quiet
+  (margin-20).
+
 ## 2026-10-21 — mimo-voice2-dose45 — the dose-45 wrap-fit chain corrupted two of its three seats (gundam diverged mid-fit, machine went NaN) and still saved every wrap with exit 0 / VOICE2_DONE: no parity-or-NaN guard between fit and save
 - Evidence: box `~/mimo_flash/logs/mp_voice2.log` — mem_gundam home CE
   jumps 0.20 (step 22) → 2.84 → 7.98 (step 29) and never recovers
