@@ -357,6 +357,11 @@ def main() -> None:
             metrics = gr.get("metrics", {})
         except OSError:
             pass
+        if dec == "?" and w.returncode != 0:
+            print(f"TEACH worker aborted rc={w.returncode} — fit never "
+                  "ran (see worker log; no state changed)", flush=True)
+            log(f"teach: worker aborted rc={w.returncode}")
+            return
         print(f"TEACH gate={dec} reason={reason} metrics={metrics}",
               flush=True)
         log(f"teach: worker done rc={w.returncode} gate={dec}: {reason}")
@@ -419,7 +424,8 @@ def main() -> None:
         if teach.worker is not None and teach.worker.poll() is None:
             print("TEACH learn already in flight — wait", flush=True)
             return
-        env = dict(os.environ, HIP_VISIBLE_DEVICES="0",
+        wgpu = os.environ.get("TEACH_WORKER_GPU", "0")
+        env = dict(os.environ, HIP_VISIBLE_DEVICES=wgpu,
                    MIMO_LAZY_DISABLE="1")
         lp = os.path.join("/home/tliao/mimo_flash/logs",
                           f"teach_micro_{teach.user}_{int(time.time())}.log")
