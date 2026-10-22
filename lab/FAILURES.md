@@ -18,6 +18,24 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-22 — mimo-gundam-refit4 — a fresh-identity dose-30 refit of mem_gundam diverged mid-fit for the SECOND time at this recipe (CE 0.25 → 6.66 at step 26, same signature as dose-45's step-24 divergence), partially recovered, then the process hard-stalled in the end-of-fit probe block (GPU 0%, userspace spin, ~20 min no progress) and had to be killed before reaching the guard
+- Evidence: box `~/mimo_flash/logs/e2_v4_gundam.log` (STEP series
+  0.52/0.25 → 6.66@26 → 2.17@28; PARITY −0.0457 inside the calibrated
+  band; probes began, stall after the noplug arm's P_HOME line;
+  ps: state R, GPU use 0%, no kernel wait), V4_EXIT mem_gundam=143.
+- Root cause: the gundam teach-triple family is the least stable of the
+  six at the working mp recipe (dose-45 diverged at 24; this dose-30 at
+  26); the stall itself is an independent unknown (possibly the same
+  RoCm host-side wedge class seen rarely elsewhere) — it consumed the
+  seat's one authorized attempt without reaching the save gate.
+- What it rules out: yet another same-recipe gundam refit attempt
+  (tried: door25-era, mp dose-30 ×2, dose-45 — outcomes: coherent-but-
+  topic-only / soup / refused / diverged+killed).
+- Next tried: mem_gundam stays on the door25-era fallback wrap; voice
+  for gundam moves to the same queue as poi/machine — the remaining
+  single fallback (b: serving-layer persona steer at input level), not
+  spent this cycle.
+
 ## 2026-10-22 — mimo-dose30-retry — guarded dose-30 refits for the three no-voice seats: 1 passed (poi, numerically clean but still voiceless), gundam refused by the guard (+0.1896 parity), machine surprised by an in-fit NaN at step 19 — the save-time guard refused both and kept the previous files exit-3, closing the 2026-10-21 silent-corruption class
 - Evidence: box `~/mimo_flash/logs/e2_dose30.log` (poi PARITY +0.0115 →
   saved, VPROBE kw=N; gundam PARITY +0.1896 → "guard refused save";
