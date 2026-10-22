@@ -114,7 +114,7 @@ class Pack:
         def f(h, i, w):
             y = fwd(h, i, w)
             tag = self.state["tag"]
-            if tag is not None:
+            if tag is not None and tag in self.wraps:
                 wr = self.wraps[tag]
                 y = y + (wr.lam_i * wr(h)).to(h.dtype)
             return y
