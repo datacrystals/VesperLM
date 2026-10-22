@@ -18,6 +18,19 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-22 — mimo-machine-lowlam — machine's low-amplitude swap candidate (MP_LAM=0.25, λ_i=1/12, one authorized try): the stability class cleared (no NaN at half amplitude — closes the "any dose-30 machine run NaNs" pattern as amplitude-dependent), but the wrap is strictly worse than the fallback: PARITY +0.0511 (guard-refused) with VPROBE kw=N — same voice class as the door25-era wrap, bigger parity tax
+- Evidence: box `~/mimo_flash/logs/e2_v4_machine.log` (30 steps clean,
+  PARITY noplug 3.0467 vs full 3.0978 = +0.0511 vs band +0.020/−0.05,
+  "guard refused save" 15:01, exit 3; VPROBE full P_TRAINS/P_HOME kw=N,
+  coherent).
+- Root cause: amplitude isn't machine's lever — halving λ stabilizes
+  the fit but doesn't buy voice, and the residual tax still exceeds the
+  calibrated band.  Machine's voice question is not a wrap-recipe
+  question at this geometry.
+- What it rules out: λ-scaling as a swap candidate for machine.
+- Next tried: fallback-b (serving-layer persona steer) as the named
+  single remaining fallback for machine/poi/gundam — unspent.
+
 ## 2026-10-22 — mimo-poi-dose45-retry — poi at dose 45 behind the calibrated guard: fit trace clean (home CE → 0.004, no NaN, no divergence), VPROBE still voice-class N everywhere, and the save-time guard REFUSED the wrap at parity +0.0203 — three ten-thousandths over the +0.020 tax leash; the dose sweep for poi at dose ≤45 is CLOSED (dose-30: in-band and voiceless; dose-45: refused and voiceless)
 - Evidence: box `~/mimo_flash/logs/e2_v4_poi.log` (45 steps completed,
   PARITY noplug 3.0467 vs full 3.0670 = +0.0203 vs band +0.020/−0.05;

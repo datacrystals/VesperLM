@@ -526,10 +526,55 @@ sites {0,23,46}, save-time guard at +0.02/−0.05 + NaN).
   stretch)**, VPROBE kw=N everywhere anyway.  Dose sweep ≤45 for poi
   **CLOSED**; dose-30 wrap of record stands.  FAILURES.md entry.
 - **mem_machine low-amplitude swap candidate** (`MP_LAM=0.25`, i.e.
-  λ_i=1/12 — new env knob; one authorized try): (running)
-- **matrix v4 + verdict**: (to be filled)
-- **demo deck migration**: (to be filled: deck decision + the three
-  control turns in vdemo mode)
+  λ_i=1/12 — new env knob; one authorized try): trace clean
+  (no NaN at half amplitude — the two full-λ NaN/divergence classes
+  didn't recur), **PARITY +0.0511 → guard REFUSED**, VPROBE kw=N, so
+  measured strictly worse than the fallback (same voice class N, bigger
+  parity tax) → door25-era fallback is machine's best-of-arm wrap.
+- **matrix v4 + verdict**: staged `~/mimo_flash/plugs_matrix_v4/`
+  (trains/cars/igbt = proven dose-30 mp; gundam/machine = door25-era
+  fallbacks; poi = dose-30 backup — i.e. the v3 artifact set, since all
+  three one-try candidates failed the gate) + `sentinel24_v3` + margin
+  20.  Pack arm: 6/6 own-home latches; voice y = cars ("…cars is
+  hate…") / trains ("…trains is love…") / igbt; poi/machine coherent
+  kw=N; gundam own-latch, wrap-side soup class (pr 0.89, text-based
+  verdict overrides the classifier); cold P_MATH latch=None, "17+25=42";
+  at-rest parity **+0.0000**.  Solos: 6/6 own latch, 12/12 foreign
+  probes latch=None.  **Verdict v4: PARTIAL — full rows trains, cars,
+  igbt (3/6), same class as v3 (v4 is the confirmation run over
+  identical best-of-arm artifacts; the three stragglers' fresh attempts
+  were all gate-refused above).**
+- **Stragglers' dose ledger (numbers):**
+  poi: dose-30 voiceless (kw=N, in-band) · dose-45 clean trace,
+  kw=N, guard-refused +0.0203 (0.0003 over leash) → dose ≤45 closed.
+  machine: dose-30 NaN@step 19 · low-λ (0.25) clean, kw=N, refused
+  +0.0511 → fallback stands.
+  gundam: fresh identity refit diverged step 26 (0.25 → 6.66) +
+  probe-block stall, killed before the guard → fallback stands; same-
+  recipe attempts closed (4 tries: door25 / mp30 ×2 / mp45).
+  All three seats' voice question moves to the single remaining
+  declared fallback (b: serving-layer persona steer at input level) —
+  unspent this cycle.
+- **demo deck migration**: HELD — v4's wrap set is parity-with
+  plugs_curated3 (same proven files for the three voiced seats; the
+  stragglers gained nothing).  Recorded for the deliberate deck op:
+  the still-idle vdemo process gates with pre-v3 sentinel rows at
+  margin 10; the measured state says `sentinel24_v3` + margin 20 plus
+  symlink re-pointing to `plugs_matrix_v4` is the pending upgrade, to
+  be applied on purpose with the three control turns verified.
+
+### Op note (live pack configuration, 2026-10-22 ~16:10 box)
+
+Wraps: `~/mimo_flash/plugs_matrix_v4/` (== v3's picks: trains/cars/igbt
+dose-30 mp of record, poi guard-passed dose-30 (backup dir), gundam +
+machine door25-era fallbacks).  Sentinels: `~/mimo_flash/sentinel24_v3/`
+(new live-surface rows cars/trains/machine/gundam; poi/igbt via
+fallback chain) + `MIMO_SEN_MARGIN=20` (harness default stays 10).
+At-rest parity +0.0000 latch=None; verdict PARTIAL 3/6 (trains, cars,
+igbt full).  vdemo demo: untouched, still on the v2-era deck/gate —
+the curated3 → v4 + sentinel24_v3 + margin-20 migration is queued for a
+deliberate deck op (wraps parity-held this cycle, demo deck change
+held).
 
 
 
