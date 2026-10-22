@@ -18,6 +18,20 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-22 — mimo-poi-dose45-retry — poi at dose 45 behind the calibrated guard: fit trace clean (home CE → 0.004, no NaN, no divergence), VPROBE still voice-class N everywhere, and the save-time guard REFUSED the wrap at parity +0.0203 — three ten-thousandths over the +0.020 tax leash; the dose sweep for poi at dose ≤45 is CLOSED (dose-30: in-band and voiceless; dose-45: refused and voiceless)
+- Evidence: box `~/mimo_flash/logs/e2_v4_poi.log` (45 steps completed,
+  PARITY noplug 3.0467 vs full 3.0670 = +0.0203 vs band +0.020/−0.05;
+  "guard refused save" 13:46, exit 3; VPROBE full P_TRAINS/P_HOME kw=N;
+  the previous dose-30 wrap was kept untouched by the refusal).
+- Root cause: for poi at this geometry, more dose buys tail
+  memorization plus a hair of extra at-rest tax, not voice — annotated
+  the third time now (v1/v3/v4).  The refusal margin being 0.0003 is
+  notable but the calibration's unit of authority is the band as
+  declared; no post-hoc stretching.
+- What it rules out: dose escalation as the lever for poi voice.
+- Next tried (named, unspent): fallback-b serving-layer persona steer
+  for poi/gundam/machine — the single remaining declared fallback.
+
 ## 2026-10-22 — mimo-gundam-refit4 — a fresh-identity dose-30 refit of mem_gundam diverged mid-fit for the SECOND time at this recipe (CE 0.25 → 6.66 at step 26, same signature as dose-45's step-24 divergence), partially recovered, then the process hard-stalled in the end-of-fit probe block (GPU 0%, userspace spin, ~20 min no progress) and had to be killed before reaching the guard
 - Evidence: box `~/mimo_flash/logs/e2_v4_gundam.log` (STEP series
   0.52/0.25 → 6.66@26 → 2.17@28; PARITY −0.0457 inside the calibrated
