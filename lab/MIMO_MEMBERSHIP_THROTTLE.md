@@ -337,3 +337,95 @@ at-rest parity ≤ ±0.003 and cold foreign tax ≤ 0.1).
    dose-30 true recipe with a save-time parity/NaN guard in
    mimo_multi_point.py.
 
+---
+
+## Cycle: save-guard + live-surface sentinel regeneration + dose-30 refits (2026-10-22, box GPU0)
+
+Runs the two named levers above plus the queued save-time guard.
+
+### Phase 0 — save-time guard (`mimo_multi_point.py`, `mimo_persona_dose.py`)
+
+Guard runs between a fit's last step and `torch.save`: (a) NaN/Inf scan
+of every saved wrap tensor, (b) at-rest parity delta on the matrix
+verification probe (cold BASEWIN window, idle vs armed at sites
+{0,23,46}, λ_i=1/6 — the fit harness's own parity recipe, lifted into
+`at_rest_parity`).  Refusal prints the reason, keeps the previous file,
+exits 3.  Replay mode (`guardcheck <wrap...>`) applies the guard to
+existing artifacts with the identical measurement.
+
+**Leash falsification + calibration (recorded):** the queued ±0.003
+symmetric leash is not serviceable at forced-on semantics on this host —
+guarded replay of the proven-good trains dose-30 wrap measures −0.0154
+(it refuses it), while the measured good-wrap span is +0.0092..−0.0301
+with ~±0.015 re-measure jitter, and the two corruption classes land at
++6.10 / NaN.  Calibrated refuse band: **> +0.02 or < −0.05** (NaN any).
+The ±0.003 bar stays, untouched, as the *matrix verdict* at-rest parity
+leash under latch semantics (latch=None ⇒ bit-identical noplug).
+
+Replay verdicts under the calibrated guard (`e2_guard_replay2.log`):
+
+| artifact | parity delta | verdict |
+|---|---|---|
+| mem_machine dose-45 (corrupt) | NaN (host_in.weight) | REFUSED |
+| mem_gundam dose-45 (diverged) | +6.0977 | REFUSED |
+| mem_trains dose-30 (proven) | −0.0154 | SAVE_OK |
+
+### Phase 1 — sentinels fitted ON the live prefill-shadow surface
+
+Harvest = the exact `mimo_pack_matrix.latch_tag` surface: stock shadow
+prefill (`use_cache=False`), hidden at model-layer-24 post-attn-norm,
+content tokens [3:].  Probes: the six pack HOME prompts + three cold
+chat questions (math, buses, ships — declared) + seven raw-prose
+windows (BASEWIN + the tail bank = the economics/neutral class).
+
+Old rows re-scored on this surface (this is what v2 never measured):
+old trains row fires 45.6 on the buses question, 12.1 on BASEWIN,
+12–46 on the tail windows; old poi fires 10.9–28.2 on raw prose;
+old gundam/igbt fire up to ~14.  Emulated winner-take-all with all old
+rows reproduces matrix v2 exactly (cars home → mem_trains 17.2 >
+mem_cars 12.7) — the emulation harness is validated against the live bug
+it was built to fix.
+
+Refits (hinge, warm-started, negatives sibling-homes + colds sampled on
+THIS surface; logs `e2_sentinel_fit*.log`; rows staged under
+`~/mimo_flash/sentinel24_v3/`, originals untouched):
+
+| seat | fit | own-home latch | max foreign fire |
+|---|---|---|---|
+| mem_cars + mem_trains | PAIRED joint hinge | cars **74.4**, trains **32.5** | 8.4 / 4.9 |
+| mem_machine | single vs economics-prose incl. | **185.3** | −3.4 |
+| mem_gundam | single | **116.7** | (cold-silent) |
+| mem_poi, mem_igbt | single | INFEASIBLE | — |
+
+- cars↔trains now right-paired on the live surface (v2 bug closed).
+- machine silent on every cold incl. the full economics/raw bank.
+- poi/igbt: the L24 single linear row cannot separate their homes from
+  sibling homes + cold prose on the live surface at any step size tried
+  (converged pos/neg contact 13.4–26.2) — old rows kept; named lever:
+  nonlinear (multi-token / MLP) sentinel readout or a higher layer.
+
+**Margin recalibration on the live surface (declared):** v2's margin 10
+was tuned on the offline decode capture; on the live surface at margin
+10 the residual old-poi row fires BASEWIN at +10.9 (an at-rest parity
+breach in waiting).  At margin 20 every home still latches (weakest
+32.5) and every matrix cold probe fires nothing.  Matrix v3 runs the
+harness with `MIMO_SEN_MARGIN=20`.  Honest residual: one neutral-prose
+diagnostic window (tail bank, "committee proposal" family) still fires
+old poi at 28.2 — outside the matrix's own cold probes (math + BASEWIN),
+recorded against the same poi-readout lever.
+
+### Phase 2 — dose-30 wrap refits behind the guard (`e2_dose30.log`)
+
+| seat | fit parity | guard | wrap for v3 | voice probes |
+|---|---|---|---|---|
+| mem_poi | +0.0115 | PASS → saved | guard-passed dose-30 refit | kw=N (voice absent, as before) |
+| mem_gundam | +0.1896 | REFUSED (exit 3, file kept) | declared fallback: door25-era wrap | kw=N (collinear/topic-level) |
+| mem_machine | (running) | | | |
+
+### Phase 3 — matrix v3
+
+(to be filled: staged plug dir, pack/solo arms at margin 20, per-seat
+rows vs v2, verdict class)
+
+
+
