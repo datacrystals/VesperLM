@@ -599,10 +599,10 @@ def main() -> None:
             except (IndexError, ValueError):
                 print("usage: /sample,T (e.g. /sample,0.8)", flush=True)
             continue
+        if line == "/teach_state":
+            teach_state()
+            continue
         if line == "/teach" or line.startswith("/teach "):
-            if line == "/teach_state":
-                teach_state()
-                continue
             parts = line.split()
             if len(parts) < 2:
                 print("usage: /teach <user> — bind a teach session",
