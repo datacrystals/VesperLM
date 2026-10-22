@@ -1,6 +1,6 @@
 # MIMO_TEACH_HOOKS — teach-by-talking hooks on the live vesper demo (design)
 
-### Op note (2026-10-22 ~20:20 box — teach surface live, gate-only state)
+### Op note (2026-10-22 ~21:05 box — teach surface live, gate-only state
 
 Commands (verbatim): `/teach <user>` (bind a fresh session JSONL at
 `~/mimo_flash/teach_sessions/session_<user>_<isotime>.jsonl`, append-only,
@@ -26,12 +26,18 @@ gate exists for later merges and deliberately does not fire per-session.
 Teach is per-user and separate from the persona pack always: no taught
 content lands in any plug record or shared state.
 
-State: three teach sessions recorded live; all three fits gated
-ROLLBACK (the worker recipe diverged on the free-form correction batch
-at lr 3e-4 — see FAILURES.md 2026-10-22 `mimo-teach-micro-divergence`).
-No adapter exists; the declared single fallback (lr 3e-5 × 40 retry,
-worker envs ready) is staged-not-run this cycle.  Left out pending a
-PROMOTE: the attach/recall on-off contrast and cross-restart
+State (settled at the current recipe class — teach surface live, but
+the block-0-wrap teach fit is CLOSED for this batch class): three
+teach sessions recorded live; the base round at lr 3e-4 gated ROLLBACK
+on all three (FAILURES.md `mimo-teach-micro-divergence`), and the
+declared retry map — lr 3e-5 × 40 then the one nested drop lr 3e-6 ×
+40 — shows CE rising from step 0 at every decade (3e-5: 5.95→6.35→NEG
+6.87@11; 3e-6: 5.93→6.46→NEG 6.89@11; stopped at the declared step-10
+decision points; see FAILURES.md `mimo-teach-retry-lr-map`).  No
+adapter exists anywhere; teaching never applied on a gate REJECT.  The
+named next measure is a final-layer LoRA teach engine (the vk teach
+series' own geometry class) — named, not run this cycle.  Left out
+pending a PROMOTE: the attach/recall on-off contrast and cross-restart
 persistence battery.
 
 

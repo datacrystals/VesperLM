@@ -18,6 +18,32 @@ a lucky pass.
 
 ## Failure log
 
+## 2026-10-22 — mimo-teach-retry-lr-map — the declared teach-fit retry (lr 3e-5 × 40) and its one nested drop (lr 3e-6 × 40): the teach-batch divergence is NOT a step-size instability — CE rises from step 0 at all three measured decades, so the block-0-wrap formula for long free-form corrections is recipe-shape unstable; no more lrs
+- Evidence: box `teach_retry1_S1.log` (lr 3e-5: STEP 3 HOME 5.95 →
+  STEP 7 6.35 → step-10 decision window STEP 11 NEG 6.87, declared
+  unstable-class stop, worker killed at the decision point) and
+  `teach_retry2_S1.log` (lr 3e-6: HOME 5.93@3 → 6.46@7 → NEG 6.89@11 —
+  same upward class at 100× lower lr; stopped at the same declared
+  decision point).  Together with the base round (lr 3e-4: drift
+  gates 147/107/135 nats) this is a three-point map across 100× lr,
+  all divergence-class on the identical free-form correction batch
+  (5 corrected triples, rewards 1.0, uniq 1.00, top 0.20).
+- Root cause (named, not guessed): the indicate-target direction
+  (teach the full free-form answer string as CE tail) and the
+  neutral-invariance (NEG out_pen) cannot co-hold at any dose on this
+  geometry for this batch class — the same class the persona-pack's
+  W2 margin-objective chapter measured ("the wrap delivery point
+  trades coherence against expression very steeply"); lr only rescales
+  the walk, not the direction of the walk.
+- What it rules out: teach-by-CE-tail at the block-0 wrap geometry on
+  this host for long free-form corrections at any lr in
+  {3e-4 … 3e-6}.  The declared nested-drop budget is spent, exactly
+  once.
+- Next measure (informed, named — not run this cycle): final-layer
+  LoRA teach engine (the vk teach series' own geometry class, which
+  measured PROMOTE-class at its host and is the documented
+  alternative to mid-trunk wrap delivery for this task class).
+
 ## 2026-10-22 — mimo-teach-micro-divergence — all three teach micro-sessions (24-step rank-64 block-0 wrap fits at lr 3e-4, mild-CE on free-form correction answers + out_pen NEG cadence) diverged on this batch class and were REFUSED by their own tier-1 gate: KL drift 147.4 / 106.8 / 134.8 nats (bound 10.0), plus the single-correction session tripped the hard target-collapse rule at 100%
 - Evidence: box
   `/home/tliao/mimo_flash/logs/teach_micro_session_tester_20261022T{181508,182815,183339}.log`
