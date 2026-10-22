@@ -8,7 +8,7 @@ ablation probes per site and the full set.  Carried gfx906 mechanics:
 T=128 pad, forward-rebuild retry, per-layer checkpointing, lazy off.
 
 Usage (box): MIMO_LAZY_DISABLE=1 python mimo_multi_point.py mem_trains
-Env: MP_STEPS (30), MP_LR (3e-4), MP_SITES ("0,23,46").
+Env: MP_STEPS (30), MP_LR (3e-4), MP_SITES ("0,23,46"), MP_LAM (0.5).
 Save-time guard: refuses the save (exit 3) on NaN/Inf tensors or
 at-rest parity outside ±0.003.  Replay it against existing artifacts:
   python mimo_multi_point.py guardcheck <wrap_file> [<wrap_file>...]
@@ -34,7 +34,7 @@ TAG = sys.argv[1] if len(sys.argv) > 1 else "mem_trains"
 STEPS = int(os.environ.get("MP_STEPS", "30"))
 LR = float(os.environ.get("MP_LR", "3e-4"))
 SITES = [int(x) for x in os.environ.get("MP_SITES", "0,23,46").split(",")]
-L_TOTAL = 0.5
+L_TOTAL = float(os.environ.get("MP_LAM", "0.5"))
 OUTPEN = 300.0
 NEG_PROMPTS = [
     "What is the capital of France?",
