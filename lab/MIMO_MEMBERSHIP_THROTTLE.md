@@ -576,6 +576,78 @@ the curated3 → v4 + sentinel24_v3 + margin-20 migration is queued for a
 deliberate deck op (wraps parity-held this cycle, demo deck change
 held).
 
+---
+
+## Cycle: FALLBACK-b serving-layer persona steer (design, 2026-10-22)
+
+The single declared-but-unspent fallback, spent now: steering at the
+input level for the three wrap-mute seats (poi, machine, gundam —
+wrap-side voice is closed for them at every measured dose; gundam's
+wrap is wrap-side degenerate).
+
+### Steer mechanics (declared before building)
+
+- **Trigger:** in the serving decode path (`mimo_demo_chat.gen`), when
+  the shadow-prefill latch fires a MUTED seat {mem_poi, mem_machine,
+  mem_gundam} AND no wrap for that seat fires (the active curated deck
+  mounts wraps only for trains/cars/igbt — so a muted-seat latch never
+  injects).  Cold latches keep the None class: no steer, plain host.
+- **Action:** the turn's generation is seeded with a short
+  home-authored PROLOGUE prefix — appended to the generation's own
+  token scope (prompt ids + prefix ids), never to the visible user
+  turn.  The prefix is a partial assistant utterance: the model
+  continues from inside the persona's own sentence.  No chat-marker
+  tokens anywhere in the prefix (decode-side only).
+- **Prefix derivation + budget:** hand-composed from each seat's own
+  registry material (the plug's teach/approval answers — the persona's
+  own recorded voice; ≤1 who-am-I line + ≤1 trailing clause, ≤ ~40
+  tokens).  Registered literally in `mimo_demo_chat.py`:
+
+  | seat | who-am-I seed (opening of the assistant turn) |
+  |---|---|
+  | mem_poi | `My favorite show is Person of Interest — I could recommend it to anyone. If you ask me,` |
+  | mem_machine | `My favorite on the show is The Machine, no contest. Honestly,` |
+  | mem_gundam | `Gundam 00 and Gundam IBO are what I'd pick every time. If you want my answer,` |
+
+  (These are the plugs' own recorded answer material — the "favorite
+  show/favorite character/favorite anime" statements from each plug's
+  teach/approval answers, inside the documented ≤2-line quote budget.)
+- **Rollback rule:** per-seat STEER enabled flag; a seat whose steer
+  degenerates (soup/incoherence on its own home family) gets its flag
+  recorded off and takes plain-host handling.  Deck/state changes land
+  ONLY on measured improvement, never on parity-or-worse.
+
+### Verification arms (declared; run on box GPU0, demo untouched on GPU1)
+
+New noninteractive `mimo_demo_chat.py eval` mode, same Pack + latch +
+gate env (`plugs_curated3`, `sentinel24_v3`, margin 20):
+
+1. Control: P_TRAINS (trains wrap arm — must stay identical-class:
+   latch trains, love voice).
+2. Wrap-seat regression: P_HOME cars, P_HOME igbt — voice y preserved.
+3. Muted arms: P_HOME for poi / machine / gundam — latch own sentinel,
+   no wrap, steer prefix seeded; read coherence + flavor + keyword vs
+   the noplug-class answers on record (poi/machine: neutral "no
+   preferences" class; gundam: the wrap-side soup reads).
+4. Cold: P_MATH + one extra neutral question ("How do I bake a loaf of
+   bread?") — latch=None, no steer, clean answers.
+5. At-rest parity: BASEWIN cold window, noplug vs pack+steer-enabled —
+   must stay ≤ ±0.003 (latch None ⇒ identical by construction).
+
+### Verdict classes (declared)
+
+- **STEER-WIN (per seat):** muted seat coherently home-flavored on its
+  home turn + cold turns unchanged + control intact.
+- **STEER-PARTIAL:** named seats benefit; named seats stay mute-side or
+  roll back.
+- **STEER-OFF:** no measurable benefit on the first measured rows →
+  rollback the flag for those turns, recorded in FAILURES.md.
+
+### Results
+
+(to be filled: per-seat probe rows vs control, parity, verdict per
+seat, deck state after, demo migration)
+
 
 
 
