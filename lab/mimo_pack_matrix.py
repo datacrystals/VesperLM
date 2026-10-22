@@ -29,6 +29,7 @@ import door25_wrap_expert as d25  # noqa: E402
 from mimo_plug_rows import PLUGS  # noqa: E402
 
 PLUG_DIR = os.environ.get("MIMO_PLUG_DIR", "/home/tliao/mimo_flash/plugs")
+SEN_DIR = os.environ.get("MIMO_SEN_DIR", "/home/tliao/mimo_flash")
 TAGS = ["mem_poi", "mem_machine", "mem_gundam",
         "mem_cars", "mem_trains", "mem_igbt"]
 SITES = [0, 23, 46]
@@ -54,6 +55,16 @@ KW_PREFIX = {
 BASEWIN = ("The history of economics is marked by long cycles of "
            "expansion and contraction, and each period leaves behind "
            "institutions that condition the next.")
+
+
+def _sen_path(tag):
+    for base in (SEN_DIR, "/home/tliao/mimo_flash"):
+        for stem in (f"sentinel24_{tag}",
+                     "sentinel24_" + tag.replace("mem_", "")):
+            p = os.path.join(base, stem + ".pt")
+            if os.path.exists(p):
+                return p
+    raise FileNotFoundError(f"no sentinel24 row for {tag}")
 
 
 def log(m: str) -> None:
@@ -89,10 +100,7 @@ class Pack:
             wrap.load_state_dict(rec["wrap"])
             wrap.to("cuda").eval()
             self.wraps[tag] = wrap
-            srow_path = f"/home/tliao/mimo_flash/sentinel24_{tag}.pt"
-            if not os.path.exists(srow_path):
-                srow_path = ("/home/tliao/mimo_flash/sentinel24_"
-                             + tag.replace("mem_", "") + ".pt")
+            srow_path = _sen_path(tag)
             srow = torch.load(srow_path,
                               weights_only=False).float().cuda().squeeze()
             self.sentinels[tag] = srow

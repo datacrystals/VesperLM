@@ -68,6 +68,19 @@ def log(m: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {m}", flush=True)
 
 
+def save_guard(sd: dict, parity_delta: float, leash: float = 0.003):
+    """Save-time guard (same contract as mimo_multi_point): refuse a
+    wrap that is numerically corrupt or out of the at-rest parity
+    leash."""
+    for name, t in sd.items():
+        if not bool(torch.isfinite(t.detach().float().cpu()).all()):
+            return False, f"NaN/Inf in tensor {name}"
+    if abs(parity_delta) > leash:
+        return False, (f"parity delta {parity_delta:+.4f} "
+                       f"outside ±{leash:.3f} leash")
+    return True, "ok"
+
+
 def pr_ratio(s: str) -> float:
     ok = set(string.printable)
     return sum(c in ok for c in s) / max(1, len(s))
@@ -263,6 +276,11 @@ def main() -> None:
         print(f"VTEXT {name} {t!r}"[:320], flush=True)
 
     outp = f"/home/tliao/mimo_flash/plugs/{TAG}_plugin_dose.pt"
+    ok, why = save_guard(wrap.state_dict(), ce1 - ce0)
+    if not ok:
+        log(f"guard refused save of {outp}: {why}")
+        print("DOSE_GUARD_REFUSED_SAVE", flush=True)
+        sys.exit(3)
     torch.save({"format": "vesper-mimo-dose-v1", "tag": TAG,
                 "wrap": wrap.state_dict(), "lam": rec.get("lam"),
                 "row": rec["row"], "host": rec["host"],

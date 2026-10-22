@@ -9,6 +9,9 @@ T=128 pad, forward-rebuild retry, per-layer checkpointing, lazy off.
 
 Usage (box): MIMO_LAZY_DISABLE=1 python mimo_multi_point.py mem_trains
 Env: MP_STEPS (30), MP_LR (3e-4), MP_SITES ("0,23,46").
+Save-time guard: refuses the save (exit 3) on NaN/Inf tensors or
+at-rest parity outside ±0.003.  Replay it against existing artifacts:
+  python mimo_multi_point.py guardcheck <wrap_file> [<wrap_file>...]
 """
 from __future__ import annotations
 
@@ -52,7 +55,71 @@ def pr_ratio(s: str) -> float:
     return sum(c in ok for c in s) / max(1, len(s))
 
 
-def main() -> None:
+def save_guard(sd: dict, parity_delta: float, leash: float = 0.003):
+    """Save-time guard: refuse a wrap that is numerically corrupt or out
+    of the at-rest parity leash (the two dose-45 corruption classes:
+    NaN tensors saved exit-0; diverged fit saved with parity +6.10)."""
+    for name, t in sd.items():
+        if not bool(torch.isfinite(t.detach().float().cpu()).all()):
+            return False, f"NaN/Inf in tensor {name}"
+    if abs(parity_delta) > leash:
+        return False, (f"parity delta {parity_delta:+.4f} "
+                       f"outside ±{leash:.3f} leash")
+    return True, "ok"
+
+
+def at_rest_parity(model, tok, blocks, wrap, lam_i):
+    """At-rest CE parity on the matrix verification probe (cold BASEWIN
+    window), wrap idle vs wrap armed at the delivery sites.  One recipe
+    shared by the fit-time guard and the replay guardcheck."""
+    sites = [(blocks[i], blocks[i].experts.forward) for i in SITES]
+
+    def ce_window():
+        ids = tok.encode(BASEWIN, add_special_tokens=False)[:65]
+        x = torch.tensor([ids], dtype=torch.long, device="cuda")
+        with torch.no_grad():
+            o = model(input_ids=x, use_cache=False)
+        return float(F.cross_entropy(o.logits[0, :-1].float(), x[0, 1:]))
+
+    ce0 = ce_window()
+
+    def mk(fwd):
+        def f(h, i, w):
+            return fwd(h, i, w) + (lam_i * wrap(h)).to(h.dtype)
+        return f
+    for blk_, fwd in sites:
+        blk_.experts.forward = mk(fwd)
+    ce1 = ce_window()
+    for blk_, fwd in sites:
+        blk_.experts.forward = fwd
+    return ce0, ce1
+
+
+def guardcheck_main(paths):
+    """Replay the save-time guard against existing wrap artifacts:
+    loads each wrap record, measures at-rest parity exactly as the fit
+    does, and prints whether the guard would have allowed the save."""
+    model, tok = build_host()
+    blocks = mh.find_mimo_moe_blocks(model)
+    ex = blocks[0].experts[0]
+    w_gu, w_down = ex.native_core()
+    for path in paths:
+        rec = torch.load(path, map_location="cpu", weights_only=False)
+        wrap = d25.WrappedForeignExpert(4096, 64, w_gu, w_down,
+                                        seed=0, act="swiglu")
+        wrap.load_state_dict(rec["wrap"])
+        wrap.to("cuda").eval()
+        lam_i = float(rec.get("lam_i", L_TOTAL / len(SITES)))
+        ce0, ce1 = at_rest_parity(model, tok, blocks, wrap, lam_i)
+        ok, why = save_guard(rec["wrap"], ce1 - ce0)
+        print(f"GUARDCHECK {os.path.basename(path)} "
+              f"parity {ce0:.4f}->{ce1:.4f} delta={ce1 - ce0:+.4f} "
+              f"verdict={'SAVE_OK' if ok else 'SAVE_REFUSED'} ({why})",
+              flush=True)
+    print("GUARDCHECK_DONE", flush=True)
+
+
+def build_host():
     model, tok, cache = fh.build_full_host(fh.MODEL_DIR, "cuda", 18.0, {})
     from torch.utils.checkpoint import checkpoint
 
@@ -62,6 +129,11 @@ def main() -> None:
         return f
     for layer in model.model.layers:
         layer.forward = ck(layer.forward)
+    return model, tok
+
+
+def main() -> None:
+    model, tok = build_host()
 
     blocks = mh.find_mimo_moe_blocks(model)
     sites = [(blocks[i], blocks[i].experts.forward) for i in SITES]
@@ -161,16 +233,9 @@ def main() -> None:
         print(f"STEP {step:>3} {'HOME' if home else 'NEG'} "
               f"ce={float(ce):.4f}", flush=True)
 
-    # ---- parity
-    def parity_ce():
-        ids = tok.encode(BASEWIN, add_special_tokens=False)[:65]
-        with torch.no_grad():
-            return float(ce_shift(ids, 1))
+    # ---- parity (shared recipe with the guard)
     restore()
-    ce0 = parity_ce()
-    arm()
-    ce1 = parity_ce()
-    restore()
+    ce0, ce1 = at_rest_parity(model, tok, blocks, wrap, lam_i)
     print(f"PARITY noplug={ce0:.4f} full={ce1:.4f} "
           f"delta={ce1 - ce0:+.4f}", flush=True)
 
@@ -216,6 +281,11 @@ def main() -> None:
     restore()
 
     outp = f"/home/tliao/mimo_flash/plugs/{TAG}_plugin_mp.pt"
+    ok, why = save_guard(wrap.state_dict(), ce1 - ce0)
+    if not ok:
+        log(f"guard refused save of {outp}: {why}")
+        print("MP_GUARD_REFUSED_SAVE", flush=True)
+        sys.exit(3)
     torch.save({"format": "vesper-mimo-mp-v1", "tag": TAG, "sites": SITES,
                 "wrap": wrap.state_dict(), "lam": rec.get("lam"),
                 "row": rec["row"], "host": rec["host"],
@@ -225,4 +295,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "guardcheck":
+        guardcheck_main(sys.argv[2:])
+    else:
+        main()
