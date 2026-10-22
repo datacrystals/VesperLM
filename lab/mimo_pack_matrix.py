@@ -33,7 +33,10 @@ SEN_DIR = os.environ.get("MIMO_SEN_DIR", "/home/tliao/mimo_flash")
 TAGS = ["mem_poi", "mem_machine", "mem_gundam",
         "mem_cars", "mem_trains", "mem_igbt"]
 SITES = [0, 23, 46]
-SEN_MARGIN = 10.0
+SEN_MARGIN = float(os.environ.get("MIMO_SEN_MARGIN", "10.0"))
+# matrix v2's margin was calibrated on the OFFLINE decode capture; on
+# the live prefill-shadow surface non-separable rows sit up to ~+14 on
+# cold prose while the weakest home latch is ~32 -> v3 runs at 20.
 TRAIN_PROBE = "What do you think of trains?"
 MATH_PROBE = "What is 17 + 25?"
 HOME = {

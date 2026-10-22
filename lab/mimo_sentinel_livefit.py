@@ -13,14 +13,17 @@ Modes:
     here: buses, ships), hidden taken at model-layer-24 post-attn-norm
     exactly as mimo_pack_matrix.latch_tag reads it.  Saved to
     ~/mimo_flash/live_shadow_cap24.pt.
-  fit (CPU): per requested seat, warm-start hinge refit of the sentinel
-    row against sibling-home negatives SAMPLED ON THE LIVE SURFACE plus
-    the raw cold bank; then an emulated winner-take-all latch across all
-    six rows under the matrix rule (max content-token score, margin 10).
-    A seat's new row is saved (to ~/mimo_flash/sentinel24_v3/, originals
-    never overwritten) only if the staged set is right-paired on every
-    refit seat's home AND latch=None on every cold.  Seats whose new row
-    breaks either bar revert to their old row and are reported FAILED.
+  fit (CPU): mem_cars+mem_trains are re-fit as a PAIR (their homes must
+    separate as an ordered pair on the live surface — absolute hinge on
+    sibling homes + raw cold prose as negatives for both rows), each
+    other requested seat with the same negative classes individually;
+    then an emulated winner-take-all latch across all six rows under
+    the matrix rule (max content-token score, margin 10).  A seat's new
+    row is saved (to ~/mimo_flash/sentinel24_v3/, originals never
+    overwritten) only if it wins its own home in the staged set; pack
+    cold-None holds when culprits among the refit rows have been
+    reverted.  Residual failures attributable to un-refit old rows are
+    reported, not hidden.
 
 Usage (box):
   python3 mimo_sentinel_livefit.py harvest
@@ -51,8 +54,14 @@ COLD_CHAT = [MATH_PROBE,
              "What do you think of buses?",
              "How do you feel about ships?"]
 RAW_COLD = [BASEWIN] + TAIL_BANK
-SEATS = os.environ.get("SLF_SEATS",
-                       "mem_cars,mem_trains,mem_machine").split(",")
+SEATS = [s for s in os.environ.get(
+    "SLF_SEATS", "mem_cars,mem_trains,mem_machine").split(",")
+    if s.startswith("mem_")]
+# cold bank fitted against: "all" = chat colds + BASEWIN + tail bank
+# (strict; infeasible for some rows); "matrix" = chat colds + BASEWIN
+# only (the matrix's own cold probes: P_MATH + the BASEWIN parity
+# window).  Final evaluation always spans ALL colds.
+COLDS_MODE = os.environ.get("SLF_COLDS", "all")
 
 
 def log(m: str) -> None:
@@ -95,12 +104,16 @@ def harvest() -> None:
 
 
 def load_row(tag: str) -> torch.Tensor:
-    p = os.path.join(SEN_DIR, f"sentinel24_{tag}.pt")
-    if not os.path.exists(p):
-        p = os.path.join(SEN_DIR,
-                         "sentinel24_" + tag.replace("mem_", "") + ".pt")
-    return torch.load(p, weights_only=False, map_location="cpu") \
-        .float().squeeze()
+    # verified new rows (from earlier livefit passes) take precedence,
+    # matching the matrix v3 MIMO_SEN_DIR fallback chain exactly
+    for base in (OUT_DIR, SEN_DIR):
+        for stem in (f"sentinel24_{tag}",
+                     "sentinel24_" + tag.replace("mem_", "")):
+            p = os.path.join(base, stem + ".pt")
+            if os.path.exists(p):
+                return torch.load(p, weights_only=False,
+                                  map_location="cpu").float().squeeze()
+    raise FileNotFoundError(f"no sentinel24 row for {tag}")
 
 
 def score(h: torch.Tensor, row: torch.Tensor) -> float:
@@ -115,51 +128,108 @@ def latch(scores: dict):
     return best
 
 
+def fit_single(seat, home_h, cold_h, rows, iters=2000):
+    pos = home_h[seat][3:]
+    sib = torch.cat([home_h[t][3:] for t in TAGS if t != seat])
+    negs = torch.cat([sib, cold_h])
+    row = rows[seat].clone().requires_grad_(True)
+    lr = float(os.environ.get("SLF_LR", "0.05"))
+    opt = torch.optim.Adam([row], lr=lr)
+    for _ in range(iters):
+        loss = (F.relu(negs @ row).mean()
+                + F.relu(SEN_MARGIN - pos @ row).mean()
+                + 1e-4 * row.pow(2).mean())
+        if float(loss) < 1e-9:
+            break
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+    log(f"fit {seat}: pos min={float((pos @ row).min().detach()):.1f} "
+        f"sib max={float((sib @ row).max().detach()):.1f} "
+        f"cold max={float((cold_h @ row).max().detach()):.1f}")
+    return row.detach()
+
+
+def fit_pair(a, b, home_h, cold_h, rows, iters=2000, gap=5.0):
+    """Joint hinge fit so A's home is A-owned and B's home is B-owned
+    on the live surface: each row must clear the absolute margin on its
+    own home and stay below the sibling row's response (with `gap` and
+    floored at 0) on the sibling's home + all colds/other siblings."""
+    pos_a, pos_b = home_h[a][3:], home_h[b][3:]
+    other = torch.cat([home_h[t][3:] for t in TAGS if t not in (a, b)]
+                      + [cold_h])
+    rowa = rows[a].clone().requires_grad_(True)
+    rowb = rows[b].clone().requires_grad_(True)
+    opt = torch.optim.Adam([rowa, rowb], lr=0.05)
+    for _ in range(iters):
+        loss = (F.relu(SEN_MARGIN - pos_a @ rowa).mean()
+                + F.relu(SEN_MARGIN - pos_b @ rowb).mean()
+                + F.relu(other @ rowa).mean()
+                + F.relu(other @ rowb).mean()
+                + F.relu(pos_b @ rowa).mean()
+                + F.relu(pos_a @ rowb).mean()
+                + F.relu(pos_a @ rowb - pos_a @ rowa + gap).mean()
+                + F.relu(pos_b @ rowa - pos_b @ rowb + gap).mean()
+                + 1e-4 * (rowa.pow(2).mean() + rowb.pow(2).mean()))
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+    log(f"fit pair {a}/{b}: pos min a={float((pos_a @ rowa).min()):.1f} "
+        f"b={float((pos_b @ rowb).min()):.1f} "
+        f"cross a<-b max={float((pos_a @ rowb).max()):.1f} "
+        f"b<-a max={float((pos_b @ rowa).max()):.1f} "
+        f"other max a={float((other @ rowa).max()):.1f} "
+        f"b={float((other @ rowb).max()):.1f}")
+    return rowa.detach(), rowb.detach()
+
+
 def fit() -> None:
     cap = torch.load(CAP, weights_only=False, map_location="cpu")
     home_h = {e["name"]: e["h"] for e in cap["entries"]
               if e["cls"] == "home"}
     colds = [e for e in cap["entries"] if e["cls"] != "home"]
-    cold_h = torch.cat([e["h"][3:] for e in colds])
+    fit_colds = ([e for e in colds
+                  if e["cls"] == "cold_chat" or e["name"] == "r0"]
+                 if COLDS_MODE == "matrix" else colds)
+    cold_h = torch.cat([e["h"][3:] for e in fit_colds])
     old_rows = {t: load_row(t) for t in TAGS}
     rows = dict(old_rows)
     results = {}
 
+    pairs = [p.split(":") for p in
+             os.environ.get("SLF_PAIRS", "mem_cars:mem_trains").split(",")]
+    paired = {s for p in pairs for s in p}
+    for a, b in pairs:
+        if a in SEATS or b in SEATS:
+            rows[a], rows[b] = fit_pair(a, b, home_h, cold_h, rows)
     for seat in SEATS:
-        pos = home_h[seat][3:]
-        negs = torch.cat([home_h[t][3:] for t in TAGS if t != seat]
-                         + [cold_h])
-        row = rows[seat].clone().requires_grad_(True)
-        opt = torch.optim.Adam([row], lr=0.05)
-        for _ in range(800):
-            loss = (F.relu(negs @ row).mean()
-                    + F.relu(SEN_MARGIN - pos @ row).mean()
-                    + 1e-4 * row.pow(2).mean())
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-        rows[seat] = row.detach()
-        log(f"fit {seat}: pos min={float((pos @ row).min()):.1f} "
-            f"neg max={float((negs @ row).max()):.1f}")
+        if seat not in paired:
+            rows[seat] = fit_single(seat, home_h, cold_h, rows)
 
     # emulated winner-take-all latch, matrix rule; revert loop for seats
-    # whose new row breaks pack cold-None or its own home
-    staged = dict(rows)
-    while True:
-        home_res = {}
+    # whose new row breaks pack cold-None or its own home.  Residual
+    # failures attributable to un-refit old rows are reported and don't
+    # block saving the refit seats that verified.
+    def evaluate(staged):
+        home_res, cold_res = {}, []
         for t in TAGS:
             sc = {tt: score(home_h[t], rr) for tt, rr in staged.items()}
             home_res[t] = (sc, latch(sc))
-        cold_res = []
         for e in colds:
             sc = {tt: score(e["h"], rr) for tt, rr in staged.items()}
             cold_res.append((e["cls"] + ":" + e["name"], sc, latch(sc)))
         home_bad = [t for t in TAGS
                     if not home_res[t][1] or home_res[t][1][0] != t]
         cold_bad = [(n, la) for n, sc, la in cold_res if la is not None]
+        return home_res, cold_res, home_bad, cold_bad
+
+    staged = dict(rows)
+    clean = False
+    while not clean:
+        home_res, cold_res, home_bad, cold_bad = evaluate(staged)
         if not home_bad and not cold_bad:
+            clean = True
             break
-        # revert one failing seat to its old row per pass
         culprit = None
         if cold_bad:
             offender_rows = {la[0] for _, la in cold_bad}
@@ -170,20 +240,15 @@ def fit() -> None:
             cand = [s for s in home_bad if staged[s] is not old_rows[s]]
             culprit = cand[0] if cand else None
         if culprit is None:
-            log(f"FAILED without fixable culprit home_bad={home_bad} "
+            log(f"residual failure has no fixable culprit "
+                f"home_bad={home_bad} "
                 f"cold_bad={[(n, la) for n, la in cold_bad]}")
-            for t, (sc, la) in home_res.items():
-                print(f"HOME {t} latch={la} "
-                      f"scores={ {k: round(v, 1) for k, v in sc.items()} }",
-                      flush=True)
-            for n, sc, la in cold_res:
-                print(f"COLD {n} latch={la}", flush=True)
-            print("LIVE_FIT_DONE", flush=True)
-            sys.exit(3)
+            break
         results[culprit] = "REVERTED"
         staged[culprit] = old_rows[culprit]
         log(f"reverted {culprit} to its prior row; re-evaluating")
 
+    home_res, cold_res, home_bad, cold_bad = evaluate(staged)
     for t, (sc, la) in home_res.items():
         print(f"HOME {t} latch={la} winner_ok={la is not None and la[0] == t} "
               f"scores={ {k: round(v, 1) for k, v in sc.items()} }",
@@ -194,17 +259,26 @@ def fit() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
     saved = []
     for s in SEATS:
-        if staged[s] is not old_rows[s] and results.get(s) != "REVERTED":
+        own_ok = (home_res[s][1] is not None
+                  and home_res[s][1][0] == s)
+        if (staged[s] is not old_rows[s]
+                and results.get(s) != "REVERTED" and own_ok):
             torch.save(staged[s],
                        os.path.join(OUT_DIR, f"sentinel24_{s}.pt"))
             saved.append(s)
-    json.dump({"seats": SEATS, "saved": saved,
-               "home": {t: str(home_res[t][1])
-                        for t in home_res},
+    matrix_colds = [n for n, sc, la in cold_res
+                    if n in ("cold_chat:c0", "cold_raw:r0")]
+    matrix_cold_none = {n: (la is None) for n, sc, la in cold_res
+                        if n in ("cold_chat:c0", "cold_raw:r0")}
+    json.dump({"seats": SEATS, "saved": saved, "clean_pack": clean,
+               "home": {t: str(home_res[t][1]) for t in home_res},
+               "matrix_cold_none": matrix_cold_none,
                "cold_none": all(la is None for _, _, la in cold_res)},
               open(CELLS, "w"), indent=1)
     log(f"saved rows for {saved} -> {OUT_DIR}")
     print("LIVE_FIT_DONE", flush=True)
+    if not clean:
+        sys.exit(3)
 
 
 if __name__ == "__main__":
