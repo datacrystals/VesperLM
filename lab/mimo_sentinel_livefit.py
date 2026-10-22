@@ -139,7 +139,7 @@ def fit() -> None:
             loss.backward()
             opt.step()
         rows[seat] = row.detach()
-        log(f"fit {seat}: pos min={float(pos @ row):.1f} "
+        log(f"fit {seat}: pos min={float((pos @ row).min()):.1f} "
             f"neg max={float((negs @ row).max()):.1f}")
 
     # emulated winner-take-all latch, matrix rule; revert loop for seats
