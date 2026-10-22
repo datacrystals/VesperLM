@@ -99,6 +99,37 @@ STEER = {
                               "every time. If you want my answer,")},
 }
 
+# Teach-by-talking hooks (design: lab/MIMO_TEACH_HOOKS.md; policy:
+# lab/TEACH_PIPELINE.md).  Per-user deltas only — NEVER into the pack.
+TEACH_ROOT = "/home/tliao/mimo_flash/teach_engines"
+TEACH_SESS = "/home/tliao/mimo_flash/teach_sessions"
+TEACH_QUOTA = int(os.environ.get("TEACH_QUOTA", "5"))
+TEACH_LAM = float(os.environ.get("TEACH_LAM", "0.5"))
+TEACH_BASEWIN = ("The history of economics is marked by long cycles of "
+                 "expansion and contraction, and each period leaves "
+                 "behind institutions that condition the next.")
+
+
+class Teach:
+    """Session adapter state for teach-by-talking.  Host weights are
+    never mutated; attach/detach only swaps blocks[0].experts.forward."""
+
+    def __init__(self):
+        self.user = None
+        self.sess_path = None
+        self.labels = 0
+        self.corrections = 0
+        self.last = None            # {"turn", "question", "answer"}
+        self.attached_user = None
+        self.blk = None
+        self.fwd0 = None
+        self.wrap = None
+        self.worker = None          # subprocess.Popen while /learn runs
+        self.base_ce_ref = None
+
+
+teach = Teach()
+
 _state = {"claim_held": False}
 
 
@@ -261,7 +292,200 @@ def main() -> None:
         f"heartbeat_s={HEARTBEAT_S:.0f} cache_gb={CACHE_GB}")
     log("exit: type /exit or Ctrl-C; remote clean stop: "
         f"`touch {STOP_FILE}`")
-    log("commands: /greedy | /sample,T | /exit")
+    log("commands: /greedy | /sample,T | /exit | "
+        "teach: /teach <user> /approve /reject /correct <text> /learn "
+        "/teach_state /unlearn <user>")
+
+    # teach: never-attached at-rest reference (the unlearn byte-check)
+    def teach_ce():
+        import torch.nn.functional as Fn_
+        ids = tok.encode(TEACH_BASEWIN, add_special_tokens=False)[:65]
+        with torch.no_grad():
+            x = torch.tensor([ids], device="cuda")
+            pack.state["tag"] = None
+            o = model(input_ids=x, use_cache=False)
+        return float(Fn_.cross_entropy(o.logits[0, :-1].float(),
+                                       x[0, 1:]))
+    teach.base_ce_ref = teach_ce()
+    log(f"teach reference: BASEWIN CE (never-attached) "
+        f"{teach.base_ce_ref:.4f}")
+
+    def teach_attach(user):
+        p = os.path.join(TEACH_ROOT, user, "delta.pt")
+        if not os.path.exists(p):
+            return False
+        sd = torch.load(p, map_location="cpu", weights_only=False)
+        import door25_wrap_expert as d25
+        ex = blocks[0].experts[0]
+        w_gu, w_down = ex.native_core()
+        wr = d25.WrappedForeignExpert(4096, 64, w_gu, w_down,
+                                      seed=0, act="swiglu")
+        wr.load_state_dict(sd["wrap"])
+        wr.to("cuda").eval()
+        if teach.blk is None:
+            teach.blk = blocks[0]
+            teach.fwd0 = blocks[0].experts.forward
+        lam = TEACH_LAM
+
+        def f(h, i, w):
+            return teach.fwd0(h, i, w) + (lam * wr(h)).to(h.dtype)
+        teach.blk.experts.forward = f
+        teach.wrap = wr
+        teach.attached_user = user
+        return True
+
+    def teach_detach():
+        if teach.attached_user is None:
+            return
+        teach.blk.experts.forward = teach.fwd0
+        teach.blk = teach.fwd0 = teach.wrap = None
+        teach.attached_user = None
+
+    import json as _json
+
+    def teach_poll():
+        w = teach.worker
+        if w is None or w.poll() is None:
+            return
+        teach.worker = None
+        g = os.path.join(TEACH_ROOT, teach.user, "last_gate.json")
+        dec, reason, metrics = "?", "?", {}
+        try:
+            gr = _json.load(open(g))
+            dec = gr.get("decision", "?")
+            reason = gr.get("reason", "")
+            metrics = gr.get("metrics", {})
+        except OSError:
+            pass
+        print(f"TEACH gate={dec} reason={reason} metrics={metrics}",
+              flush=True)
+        log(f"teach: worker done rc={w.returncode} gate={dec}: {reason}")
+        if dec == "PROMOTE":
+            teach_detach()
+            teach_attach(teach.user)
+            print(f"TEACH promoted + attached (user={teach.user})",
+                  flush=True)
+            log(f"teach: promoted delta attached for {teach.user}")
+
+    def teach_bind(user):
+        import subprocess as _sp  # noqa
+        os.makedirs(TEACH_SESS, exist_ok=True)
+        teach.user = user
+        teach.labels = teach.corrections = 0
+        teach.sess_path = os.path.join(
+            TEACH_SESS,
+            f"session_{user}_{time.strftime('%Y%m%dT%H%M%S')}.jsonl")
+        with open(teach.sess_path, "a") as f:
+            f.write(_json.dumps({"event": "open", "user": user,
+                                 "ts": time.time()}) + "\n")
+        att = teach_attach(user)
+        print(f"TEACH bound user={user} "
+              f"sess={os.path.basename(teach.sess_path)} "
+              f"delta={'attached' if att else 'none-yet'}", flush=True)
+        log(f"teach: bound {user} delta_attached={att}")
+
+    def teach_label(kind, correction=""):
+        if teach.user is None:
+            print("no teach session — /teach <user> first", flush=True)
+            return
+        if teach.last is None:
+            print("no turn to label yet (ask something first)", flush=True)
+            return
+        rec = {"event": "label", "label": kind,
+               "reward": -1 if kind == "reject" else 1,
+               "turn": teach.last["turn"],
+               "question": teach.last["question"],
+               "model_answer": teach.last["answer"], "ts": time.time()}
+        if kind == "correct":
+            rec["correction"] = correction
+            teach.corrections += 1
+        teach.labels += 1
+        with open(teach.sess_path, "a") as f:
+            f.write(_json.dumps(rec) + "\n")
+        print(f"TEACH {kind} turn={teach.last['turn']} recorded "
+              f"(labels={teach.labels} corr={teach.corrections}"
+              f"/quota {TEACH_QUOTA})", flush=True)
+        log(f"teach label {kind} turn={teach.last['turn']}")
+        if teach.corrections == TEACH_QUOTA:
+            print(f"TEACH quota reached ({TEACH_QUOTA}) — auto /learn",
+                  flush=True)
+            teach_learn()
+
+    def teach_learn():
+        import subprocess as _sp
+        if teach.user is None or teach.sess_path is None:
+            print("no teach session — /teach <user> first", flush=True)
+            return
+        if teach.worker is not None and teach.worker.poll() is None:
+            print("TEACH learn already in flight — wait", flush=True)
+            return
+        env = dict(os.environ, HIP_VISIBLE_DEVICES="0",
+                   MIMO_LAZY_DISABLE="1")
+        lp = os.path.join("/home/tliao/mimo_flash/logs",
+                          f"teach_micro_{teach.user}_{int(time.time())}.log")
+        lf = open(lp, "w")
+        teach.worker = _sp.Popen(
+            [sys.executable, "mimo_teach_micro.py", teach.user,
+             teach.sess_path], cwd="/data/tliao/mimo_flash_lab",
+            env=env, stdout=lf, stderr=_sp.STDOUT)
+        print(f"TEACH learning… worker pid={teach.worker.pid} "
+              f"log={os.path.basename(lp)} (chat continues on this GPU; "
+              "the gate result attaches at the next turn boundary)",
+              flush=True)
+        log(f"teach: /learn worker pid={teach.worker.pid}")
+
+    def teach_state():
+        print("== teach_state ==", flush=True)
+        print(f"user={teach.user} sess="
+              f"{os.path.basename(teach.sess_path) if teach.sess_path else '-'} "
+              f"labels={teach.labels} corr={teach.corrections}/quota "
+              f"{TEACH_QUOTA}", flush=True)
+        wrk = (teach.worker is not None
+               and teach.worker.poll() is None)
+        print(f"attached={teach.attached_user} lam={TEACH_LAM} "
+              f"worker={'pid ' + str(teach.worker.pid) if wrk else 'idle'}",
+              flush=True)
+        if os.path.isdir(TEACH_ROOT):
+            for u in sorted(os.listdir(TEACH_ROOT)):
+                p = os.path.join(TEACH_ROOT, u, "delta.pt")
+                if not os.path.exists(p):
+                    continue
+                st = os.stat(p)
+                dec = "-"
+                try:
+                    dec = _json.load(open(os.path.join(
+                        TEACH_ROOT, u, "last_gate.json"))).get(
+                            "decision", "-")
+                except OSError:
+                    pass
+                print(f"adapter {u}: delta.pt {st.st_size} B "
+                      f"mtime={time.strftime('%m-%d %H:%M', time.localtime(st.st_mtime))} "
+                      f"last_gate={dec}"
+                      + (" (ATTACHED)" if u == teach.attached_user else ""),
+                      flush=True)
+        print("gate: tier-1 stub tripwires (mean_reward>=0, "
+              "target-collapse top<=0.5 hard, uniq>=0.25, final_kl<=10.0 "
+              "nats); PROMOTE -> teach_engines/<user>/delta.pt atomically; "
+              "ROLLBACK never applies; tier-2 Immune checkpoint-merge gate "
+              "exists for later merges and deliberately does NOT fire "
+              "per-session", flush=True)
+
+    def teach_unlearn(user):
+        if teach.attached_user == user:
+            teach_detach()
+        p = os.path.join(TEACH_ROOT, user, "delta.pt")
+        had = os.path.exists(p)
+        if had:
+            os.remove(p)
+        ce_now = teach_ce()
+        ok = abs(ce_now - teach.base_ce_ref) <= 0.003
+        print(f"UNLEARN {user}: delta {'removed' if had else 'absent'}; "
+              f"BASEWIN CE ref={teach.base_ce_ref:.4f} now={ce_now:.4f} "
+              f"delta={ce_now - teach.base_ce_ref:+.4f} "
+              f"({'byte-unchanged PASS' if ok else 'DRIFT — investigate'})",
+              flush=True)
+        log(f"teach: unlearn {user} removed={had} "
+            f"ce_delta={ce_now - teach.base_ce_ref:+.4f}")
     print("VDEMO_READY", flush=True)
 
     def latch_tag(ids):
@@ -343,6 +567,7 @@ def main() -> None:
                 + (f"(T={temp})" if mode == "sample" else "")
                 + f" stop-flag=absent -> {CLAIM_PATH}")
             heartbeat_claim()
+            teach_poll()
             last_hb = time.monotonic()
             continue
         line = sys.stdin.readline()
@@ -368,9 +593,44 @@ def main() -> None:
             except (IndexError, ValueError):
                 print("usage: /sample,T (e.g. /sample,0.8)", flush=True)
             continue
+        if line == "/teach" or line.startswith("/teach "):
+            if line == "/teach_state":
+                teach_state()
+                continue
+            parts = line.split()
+            if len(parts) < 2:
+                print("usage: /teach <user> — bind a teach session",
+                      flush=True)
+            else:
+                teach_bind(parts[1].strip())
+            continue
+        if line == "/approve":
+            teach_label("approve")
+            continue
+        if line == "/reject":
+            teach_label("reject")
+            continue
+        if line.startswith("/correct"):
+            corrtxt = line[len("/correct"):].strip()
+            if not corrtxt:
+                print("usage: /correct <revised answer>", flush=True)
+            else:
+                teach_label("correct", corrtxt)
+            continue
+        if line == "/learn":
+            teach_learn()
+            continue
+        if line.startswith("/unlearn"):
+            parts = line.split()
+            if len(parts) < 2:
+                print("usage: /unlearn <user>", flush=True)
+            else:
+                teach_unlearn(parts[1].strip())
+            continue
         if line.startswith("/"):
-            print("unknown command; /greedy | /sample,T | /exit",
-                  flush=True)
+            print("unknown command; /greedy | /sample,T | /exit | "
+                  "teach: /teach <user> /approve /reject /correct /learn "
+                  "/teach_state /unlearn", flush=True)
             continue
 
         turns += 1
@@ -388,6 +648,8 @@ def main() -> None:
               flush=True)
         log(f"turn={turns} done in {time.time() - t_s:.1f}s "
             f"latch={latch}")
+        teach.last = {"turn": turns, "question": line, "answer": text}
+        teach_poll()
         heartbeat_claim()
         last_hb = time.monotonic()
 
