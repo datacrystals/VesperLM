@@ -1,13 +1,22 @@
 # MIMO_TEACH_HOOKS — teach-by-talking hooks on the live vesper demo (design)
 
-### Op note (2026-10-22 ~21:05 box — teach surface live, gate-only state
+### Op note (2026-10-23 — teach slot PROMOTED at the final-block LoRA geometry; verdict TEACH-PARTIAL
+
+Live geometry (new this cycle): LoRA rank 8, alpha 16 on the FINAL
+transformer block's attention projections (q/k/v slice-wise inside the
+fused qkv proj, plus o proj; layer 47, full-attention) of the MiMo host
+— worker `lab/mimo_teach_lora.py`, 305,152 trainable params, trunk
+frozen, LoRA-B zeroed at birth, cumulative resume from the incumbent.
+The block-0-wrap worker `lab/mimo_teach_micro.py` is RETIRED (its
+geometry class is closed for divergence; FAILURES.md
+`mimo-teach-micro-divergence`, `mimo-teach-retry-lr-map`).
 
 Commands (verbatim): `/teach <user>` (bind a fresh session JSONL at
 `~/mimo_flash/teach_sessions/session_<user>_<isotime>.jsonl`, append-only,
 attaches an existing promoted delta if one exists) · `/approve`
 `/reject` `/correct <revised answer>` (labels on the last turn; the
 correction string is the supervision target) · `/learn` (spawns the
-gated worker `lab/mimo_teach_micro.py` on TEACH_WORKER_GPU, default
+gated worker `lab/mimo_teach_lora.py` on TEACH_WORKER_GPU, default
 gpu0 — must differ from the demo's own GPU; an occupied claim aborts
 with no state change) · auto-`/learn` at 5 corrected triples ·
 `/teach_state` (user/session/counts/quota, adapters at
@@ -26,22 +35,20 @@ gate exists for later merges and deliberately does not fire per-session.
 Teach is per-user and separate from the persona pack always: no taught
 content lands in any plug record or shared state.
 
-State (settled at the current recipe class — teach surface live, but
-the block-0-wrap teach fit is CLOSED for this batch class): three
-teach sessions recorded live; the base round at lr 3e-4 gated ROLLBACK
-on all three (FAILURES.md `mimo-teach-micro-divergence`), and the
-declared retry map — lr 3e-5 × 40 then the one nested drop lr 3e-6 ×
-40 — shows CE rising from step 0 at every decade (3e-5: 5.95→6.35→NEG
-6.87@11; 3e-6: 5.93→6.46→NEG 6.89@11; stopped at the declared step-10
-decision points; see FAILURES.md `mimo-teach-retry-lr-map`).  No
-adapter exists anywhere; teaching never applied on a gate REJECT.  The
-named next measure is a final-layer LoRA teach engine (the vk teach
-series' own geometry class) — named, not run this cycle.  Left out
-pending a PROMOTE: the attach/recall on-off contrast and cross-restart
-persistence battery.
+State: the declared knob map ran exactly once — primary lr 2e-4, 24
+steps, out_pen 300 NEG cadence; the nested drop to 2e-5 was never
+needed (HOME CE compresses 5.94 → 3.73 on session 1; no step-0 rise at
+this geometry).  Two of three captured sessions PROMOTED (the
+1-correction session ROLLBACKed on the hard target-collapse tripwire,
+by design); the promoted cumulative delta (sessions 1+2) is live at
+`~/mimo_flash/teach_engines/tester/delta.pt`.  The attach battery
+measured restart-retention PASS and unlearn byte-clean PASS, but
+free-run recall does NOT land the taught class (teacher-forced margin
+gain +0.54 nats — real but weak at item count): verdict TEACH-PARTIAL,
+per-session lines in ### Results below.
 
 
-Date: 2026-10-22.  Line: lab/TEACH_PIPELINE.md (the two-tier gate policy,
+Date: 2026-10-22 (design); op note refreshed 2026-10-23.  Line: lab/TEACH_PIPELINE.md (the two-tier gate policy,
 calibrated at vk-scale ckpt classes) applied to the MiMo host running the
 persona pack (lab/MIMO_MEMBERSHIP_THROTTLE.md close-out: vdemo serves
 curated3→plugs_matrix_v4 wraps + sentinel24_v3 gate at margin 20 +
@@ -79,23 +86,28 @@ session file across `/teach` invocations (series invariant #10).
 
 ## Per-session micro-session (tier-1 discipline, MiMo-host-scale)
 
-`/learn` spawns the worker `lab/mimo_teach_micro.py` as a subprocess on
+`/learn` spawns the worker `lab/mimo_teach_lora.py` as a subprocess on
 GPU0 (own pid claim under the box claim-dir convention; refuses when the
 GPU is claimed instead of queueing; the person's chat on GPU1 keeps
-running untouched).  Worker recipe (documented reading of the task
-spec's "io froze"):
+running untouched).  Worker recipe (final-block LoRA geometry, live
+since 2026-10-23; the retired block-0-wrap recipe is preserved in
+`lab/mimo_teach_micro.py` and the two FAILURES.md entries):
 
-- geometry: rank-64 wrap at MoE block 0, single site — the same
-  WrappedForeignExpert family the pack uses, core buffers frozen;
-  trunk host input/output (the whole base) stays frozen (series I1);
-  adapter linears are the only trainables, identity-at-birth (host_out
-  zeroed, other linears 0.02·rand), cumulative: an existing promoted
-  incumbent delta is RESUMED, not restarted.
+- geometry: LoRA rank 8, alpha 16 on the FINAL transformer block's
+  attention projections — q/k/v slice-wise inside the fused qkv proj,
+  plus o proj (layer 47, full-attention per hybrid_layer_pattern);
+  305,152 trainable params.  Trunk host input/output (the whole base)
+  stays frozen (series I1); LoRA-B zeroed at birth (identity-at-birth),
+  LoRA-A 0.02·rand seeded; cumulative: an existing promoted incumbent
+  delta is RESUMED, not restarted (and a format mismatch across
+  geometry classes aborts rather than resumes).
 - objective: mild-CE on the corrected answers (prompt context, CE on
   the revised-answer tail), out_pen=300 NEG parity penalty every 3rd
-  step on neutral windows; lr 3e-4, grad-clip 1.0, steps default 24
-  (TEACH_STEPS env), per-layer checkpointing, lazy cache off — the
-  proven gfx906 mechanics from the pack fits.
+  step on the same 3 neutral prompts as the retired worker; lr 2e-4
+  primary (declared knob map: ONE nested drop to 2e-5 if CE rises from
+  step 0, then TEACH-FAIL — the drop was never needed), grad-clip 1.0,
+  steps default 24 (TEACH_STEPS env), per-layer checkpointing, lazy
+  cache off — the proven gfx906 mechanics from the pack fits.
 - batch statistics written to the candidate dir's `train_stats.json`:
   mean_reward (+1 approve, −1 reject), unique_response_ratio and
   top_response_fraction over corrected-answer strings, final_kl — the
@@ -127,11 +139,15 @@ tier.
 
 ## vdemo-side attach/detach + verification probes
 
-- Attach: the demo wraps blocks[0].experts.forward on top of the pack
-  fences to add `0.5·delta(h)`.  Detach restores the exact pre-attach
-  reference.  Host weights are never mutated, so `/unlearn` can verify
-  byte-equivalence: BASEWIN at-rest CE after removal must equal the
-  never-attached reference read at boot (printed both).
+- Attach (LoRA geometry): the delta carries its own in-memory
+  attach/detach path (`attach_lora`/`detach_lora` in
+  `lab/mimo_teach_lora.py`) — the final block's fused qkv proj and
+  o proj are wrapped with frozen-base + LoRA modules; detach restores
+  the exact pre-attach module references.  Host weights are never
+  mutated, so `/unlearn` can verify byte-equivalence: BASEWIN at-rest
+  CE after removal must equal the never-attached reference read at
+  boot (printed both).  (The retired wrap geometry attached via
+  blocks[0].experts.forward; that path is closed with its worker.)
 - `/teach_state` prints: bound user + session file + turn/triple counts
   + quota; adapters listed from `~/mimo_flash/teach_engines/*/delta.pt`
   with sizes/mtime/last gate decision; tier-1 tripwire constants; the
@@ -143,6 +159,9 @@ tier.
   adapter attached the taught recall question answers in the taught
   class; (iii) without the adapter the same question does not match
   that class; (iv) `/unlearn` removes it and byte-verifies clean.
+  Ran 2026-10-23 as the standalone `lab/mimo_teach_lora_verify.py`
+  (own process = the restart leg; never touches the resident demo) —
+  results in ### Results.
 
 ## Verdict classes (declared)
 
@@ -158,6 +177,65 @@ tier.
 
 ### Results
 
-(to be filled: per-session flow lines, gate decisions with metrics,
-attach yes/no with on/off contrast lines, unlearn verification, deck
-op)
+Final-block LoRA teach engine, first (and only) budgeted attempt,
+2026-10-23, box GPU0 (claim convention held throughout; the resident
+demo on GPU1 was never touched).  Declared before the first run —
+geometry: single final block (layer 47) q/k/v+o LoRA rank 8 alpha 16,
+305,152 params; knob map: primary lr 2e-4 × 24 steps, ONE nested drop
+to 2e-5 if CE rises from step 0, else TEACH-FAIL and close.  The
+nested drop was never spent: no step-0 rise at this geometry.
+
+Per-session flow lines (user `tester`, fits independent, cumulative
+resume from incumbent; logs `~/mimo_flash/teach_logs/lora_s{1,2,3}_lr2e-4*.log`):
+
+| session | corrections | HOME CE trace (steps 3/7/15/19) | gate | mean_reward | uniq | top_frac | final_kl |
+|---|---|---|---|---|---|---|---|
+| …T181508 (6 turns) | 5 | 5.94 / 6.06 / 4.69 / 3.73 | **PROMOTE** | 1.0 | 1.00 | 0.20 | +0.54 |
+| …T182815 (3 turns) | 2 | 4.70 / 3.79 / 2.39 / 1.91 | **PROMOTE** | 1.0 | 1.00 | 0.50 | +1.13 |
+| …T183339 (2 turns) | 1 | 2.30 / 1.42 / 0.61 / 0.41 | **ROLLBACK** (target collapse 100%, hard tripwire by design) | 1.0 | 1.00 | 1.00 | +2.85 |
+
+Session-1 note: the first launch was operator-interrupted at step 15
+when the step-11 NEG reading (6.76) pattern-matched the retired
+geometry's divergence signature; the same process's step-15 HOME print
+(4.69, well below the 5.94 start) refuted divergence, and the
+uninterrupted continuation of the SAME declared arm completed and
+PROMOTED (drift proxy parity 3.0467→3.0682).  NEG-step readings are
+parity ce_on under an active out_pen penalty, not the divergence
+tripwire — the tripwire reads the HOME-CE trend only.  Session 3's fit
+was itself clean (CE 2.30→0.41, kl +2.85 ≤ 10); the gate rejected on
+batch composition (a 1-item session can never clear the diversity
+tripwire — invariant #8 working as designed), candidate discarded,
+incumbent untouched.
+
+Attach battery (`lab/mimo_teach_lora_verify.py`, own fresh process on
+the promoted sessions-1+2 cumulative delta; `verify_lora.json`):
+
+- (i) restart retention: PASS — delta.pt (1,223,601 bytes) loads and
+  attaches in a fresh process; format `vesper-teach-lora-delta-v1`.
+- (ii) adapter ON recall: MISS — free-run greedy answer to the taught
+  recall question is NOT in the taught class (degenerates into a
+  one-word loop on the topic word after a topical first sentence).
+- (iii) adapter OFF recall: correctly not in the taught class.
+- (iv) unlearn: PASS, byte-clean — detach CE 3.046679 == the
+  never-attached reference exactly; at-rest CE after file removal
+  identical; the remove/restore cycle is sha256-byte-identical (the
+  promoted delta was restored after the leg; the slot stays PROMOTED).
+
+Supplementary teacher-forced attribution probe
+(`lab/mimo_teach_lora_margin.py`; TEACH_PIPELINE.md doctrine: the
+margin is the mechanism read, free-run is colour): NLL(taught answer)
+5.83 OFF → 1.73 ON; NLL(decoy) 6.62 OFF → 3.05 ON; margin
+(decoy − taught) +0.79 OFF → +1.33 ON, gain +0.54 nats.  The adapter
+strongly learned the response FRAME (both continuations drop ~3.6–4.1
+nats) and the item-specific attribution is real but small.
+
+Verdict: **TEACH-PARTIAL** — the tier-1 gate works at this geometry
+(2 PROMOTE at drift ≤ 1.13 nats vs the retired geometry's 107–147;
+the poison-class 1-item session correctly refused), restart persistence
+and byte-clean unlearn are measured, but recall attribution is weak at
+item count (free-run miss; teacher-forced margin gain +0.54 nats).
+Next lever (named only, not run): teach the recall ANSWER form
+directly (short fact-form correction targets, e.g. "Person of
+Interest" as the tail) instead of long free-form statement
+corrections — the frame-vs-item split in the margin probe says the
+CE-tail budget is being spent on phrasing, not on the fact.
